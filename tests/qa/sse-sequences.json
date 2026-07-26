@@ -1,0 +1,20 @@
+{
+  "source": "docs/contracts/openapi-v1.yaml + docs/contracts/api-semantics.md",
+  "event_types": ["meta", "status", "tool_start", "tool_end", "delta", "citation", "review_required", "done", "error"],
+  "global_assertions": [
+    "every frame uses id: sequence, event: event_type, and single-line JSON data",
+    "sequence begins at 1 for a Run and is strictly increasing without duplicates",
+    "each event contains event_type,sequence,request_id,session_id,run_id,timestamp,payload",
+    "exactly one terminal event occurs: done or error",
+    "no event occurs after a terminal event",
+    "a normal tool_start has one later tool_end with the same tool_call_id",
+    "client deduplicates by (run_id,sequence)"
+  ],
+  "cases": [
+    {"id":"SSE-001","name":"normal completion","sequence":["meta","status:accepted","status|tool_start>tool_end|citation","status:generating","delta+","status:completed","done:completed"],"assertions":["citations precede done","final message citations equal citation event set"]},
+    {"id":"SSE-002","name":"review withholding","sequence":["meta","status:accepted","status|tool_start>tool_end|citation","status:checking_policy","status:awaiting_review","review_required:draft_withheld=true","done:needs_review"],"assertions":["no delta candidate content","review_required reason_codes nonempty and confidence in [0,1]"]},
+    {"id":"SSE-003","name":"recoverable stream failure","sequence":["meta","optional nonterminal events","error"],"assertions":["error has safe code,message,retryable","done is absent"]},
+    {"id":"SSE-004","name":"server cancellation","sequence":["meta","optional events","status:cancelling","optional tool_end:cancelled","done:cancelled"],"assertions":["no event after done","late results never publish"]},
+    {"id":"SSE-005","name":"replay","sequence":["original persisted events","POST same body/key with Last-Event-ID","only sequence greater than supplied ID","live follow"],"assertions":["replay creates no run or event ID","first replayed TCP frame need not be meta"]}
+  ]
+}
