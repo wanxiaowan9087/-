@@ -1,1 +1,1 @@
-"""Infrastructure adapters owned by the platform."""
+"""Infrastructure adapters behind explicit platform and AI/RAG interfaces."""

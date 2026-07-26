@@ -1,1 +1,1 @@
-"""Backend platform tests."""
+"""Backend platform and AI/RAG tests."""
