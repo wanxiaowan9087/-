@@ -1,0 +1,1782 @@
+openapi: 3.1.0
+info:
+  title: Agent Vue FastAPI Contract
+  version: 1.0.0-draft
+  description: |
+    本文件当前是等待用户审批的 Draft。批准并绑定提交 SHA 后，它将成为 `/api/v1`
+    唯一机器可读契约；实现、前端类型、契约测试和文档必须与批准版本一致。
+    项目采用单租户简化身份，业务角色仅有 `user` 与 `reviewer`；对象级授权仍由服务端执行。
+servers:
+  - url: /api/v1
+tags:
+  - name: Health
+  - name: Sessions
+  - name: Chat
+  - name: Runs
+  - name: Memories
+  - name: Reviews
+security:
+  - bearerAuth: []
+paths:
+  /health/live:
+    get:
+      tags: [Health]
+      operationId: getLiveness
+      summary: 进程存活探针
+      security: []
+      x-required-role: anonymous
+      responses:
+        "200":
+          description: 进程可响应
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiveEnvelope"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /health/ready:
+    get:
+      tags: [Health]
+      operationId: getReadiness
+      summary: 服务就绪探针
+      description: PostgreSQL 是必需依赖；Redis、向量库和模型只返回脱敏后的可用性，不暴露连接信息。
+      security: []
+      x-required-role: anonymous
+      responses:
+        "200":
+          description: 必需依赖已就绪
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadyEnvelope"
+        "503":
+          description: 必需依赖未就绪
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /sessions:
+    get:
+      tags: [Sessions]
+      operationId: listSessions
+      summary: 分页列出当前用户的会话
+      x-required-role: user
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: 会话页
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionPageEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/StorageUnavailable"
+    post:
+      tags: [Sessions]
+      operationId: createSession
+      summary: 创建会话
+      x-required-role: user
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSessionRequest"
+      responses:
+        "201":
+          description: 会话已创建；幂等重放返回相同状态码和响应体
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/StorageUnavailable"
+  /sessions/{session_id}:
+    get:
+      tags: [Sessions]
+      operationId: getSession
+      summary: 获取当前用户的会话详情
+      x-required-role: user
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: 会话详情
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/StorageUnavailable"
+  /sessions/{session_id}/messages:
+    get:
+      tags: [Sessions]
+      operationId: listSessionMessages
+      summary: 按创建时间升序分页读取会话消息
+      description: cursor 是服务端生成的不可解释游标；翻页期间新消息只会出现在后续页，不重复已返回消息。
+      x-required-role: user
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: 消息页
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessagePageEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/StorageUnavailable"
+  /chat/stream:
+    post:
+      tags: [Chat]
+      operationId: streamChat
+      summary: 发起新消息或基于原用户消息重试，并返回 SSE
+      description: |
+        `mode=new` 创建一条用户消息和一次 Run；`mode=retry` 以已有 `original_user_message_id`
+        创建新 Run，但不复制原用户消息。两种模式共享同一深接口，避免重复的新建/重试路由。
+
+        连接断开不会取消 Run。客户端须使用相同 Idempotency-Key、完全相同请求体以及
+        `Last-Event-ID` 重新 POST，服务端先重放后续已持久化事件，再继续实时跟随。
+        主动停止必须调用 `POST /runs/{run_id}/cancel`。
+      x-required-role: user
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/LastEventId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatRequest"
+      responses:
+        "200":
+          description: |
+            SSE 帧格式为 `id: <sequence>`、`event: <event_type>`、`data: <JSON>`。
+            每个 data 必须匹配 SseEvent 判别联合；响应开始后所有失败只通过终止 `error` 事件表达。
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            X-Session-ID:
+              $ref: "#/components/headers/SessionId"
+            X-Run-ID:
+              $ref: "#/components/headers/RunId"
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          content:
+            text/event-stream:
+              schema:
+                $ref: "#/components/schemas/SseEvent"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "410":
+          description: SSE 重放窗口已过期；客户端应读取消息和 Run trace 恢复最终状态
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+  /chat/{message_id}/feedback:
+    post:
+      tags: [Chat]
+      operationId: createMessageFeedback
+      summary: 对自己的已发布助手消息提交一次反馈
+      x-required-role: user
+      parameters:
+        - $ref: "#/components/parameters/MessageId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFeedbackRequest"
+      responses:
+        "201":
+          description: 反馈已创建；同一用户与消息只允许一条反馈
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedbackEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/StorageUnavailable"
+  /runs/{run_id}/cancel:
+    post:
+      tags: [Runs]
+      operationId: cancelRun
+      summary: 请求服务端取消 Run
+      description: 关闭浏览器连接不等于取消；此接口设置持久取消标记并尽力中断模型与工具。
+      x-required-role: user
+      parameters:
+        - $ref: "#/components/parameters/RunId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelRunRequest"
+      responses:
+        "202":
+          description: 取消请求已接受
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CancelRunEnvelope"
+        "200":
+          description: Run 已处于终止状态，无需再次取消
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CancelRunEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/StorageUnavailable"
+  /runs/{run_id}/trace:
+    get:
+      tags: [Runs]
+      operationId: getRunTrace
+      summary: 获取脱敏后的 Run 追踪
+      description: user 只能访问自己的 Run；reviewer 只能额外访问其审核任务关联的 Run。
+      x-required-role: user-or-linked-reviewer
+      parameters:
+        - $ref: "#/components/parameters/RunId"
+      responses:
+        "200":
+          description: Run 追踪
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunTraceEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/StorageUnavailable"
+  /memories:
+    get:
+      tags: [Memories]
+      operationId: listMemories
+      summary: 分页列出当前用户的长期记忆
+      x-required-role: user
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/MemoryStatus"
+        - name: memory_type
+          in: query
+          schema:
+            $ref: "#/components/schemas/MemoryType"
+      responses:
+        "200":
+          description: 记忆页
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryPageEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/StorageUnavailable"
+  /memories/{memory_id}:
+    patch:
+      tags: [Memories]
+      operationId: updateMemory
+      summary: 纠正或停用当前用户的一条长期记忆
+      x-required-role: user
+      parameters:
+        - $ref: "#/components/parameters/MemoryId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMemoryRequest"
+      responses:
+        "200":
+          description: 记忆已更新
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/StorageUnavailable"
+    delete:
+      tags: [Memories]
+      operationId: deleteMemory
+      summary: 逻辑删除当前用户的一条长期记忆
+      description: 在线数据立即不可用并记录审计；备份副本按备份保留周期自然过期。
+      x-required-role: user
+      parameters:
+        - $ref: "#/components/parameters/MemoryId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: If-Match
+          in: header
+          required: true
+          description: 当前整数版本，例如 `"3"`，用于防止误删已被修改的记忆。
+          schema:
+            type: string
+            pattern: '^[1-9][0-9]*$'
+      responses:
+        "200":
+          description: 删除结果
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteMemoryEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/StorageUnavailable"
+  /reviews:
+    get:
+      tags: [Reviews]
+      operationId: listReviews
+      summary: 分页列出人工审核队列
+      x-required-role: reviewer
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/ReviewStatus"
+      responses:
+        "200":
+          description: 审核任务页
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewPageEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/StorageUnavailable"
+  /reviews/{review_id}/decision:
+    post:
+      tags: [Reviews]
+      operationId: decideReview
+      summary: 批准、驳回或编辑后发布审核候选
+      description: 决定只能成功一次；expected_version 提供乐观并发控制，全部尝试写入审计。
+      x-required-role: reviewer
+      parameters:
+        - $ref: "#/components/parameters/ReviewId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewDecisionRequest"
+      responses:
+        "200":
+          description: 审核决定已应用
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewDecisionEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/StorageUnavailable"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        可替换认证 Adapter 验证令牌并提供 `sub` 与 `role`；role 只能是 `user` 或 `reviewer`。
+        reviewer 具备普通 user 能力，但不得绕过对象级授权读取无关用户资源。
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: 服务端签名或不透明游标；不得由客户端拼接。
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 512
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        16–128 个可打印 ASCII 字符，由客户端为一次业务意图生成。作用域为已认证 subject、
+        operationId 和规范化请求；保存至少 24 小时。相同 key 与相同请求重放原始状态码和结果；
+        相同 key 不同请求返回 409 IDEMPOTENCY_KEY_REUSED；原请求仍执行时返回
+        409 IDEMPOTENCY_IN_PROGRESS。不得把 key 写入日志原文。
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 128
+        pattern: '^[\x21-\x7E]+$'
+    LastEventId:
+      name: Last-Event-ID
+      in: header
+      required: false
+      description: 最后完整处理的 SSE sequence；恢复时只重放 sequence 更大的事件。
+      schema:
+        type: integer
+        minimum: 0
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/Uuid"
+    MessageId:
+      name: message_id
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/Uuid"
+    RunId:
+      name: run_id
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/Uuid"
+    MemoryId:
+      name: memory_id
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/Uuid"
+    ReviewId:
+      name: review_id
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/Uuid"
+  headers:
+    RequestId:
+      description: 本次 HTTP 请求标识
+      schema:
+        $ref: "#/components/schemas/RequestId"
+    SessionId:
+      description: 会话 UUID
+      schema:
+        $ref: "#/components/schemas/Uuid"
+    RunId:
+      description: Run UUID
+      schema:
+        $ref: "#/components/schemas/Uuid"
+    IdempotencyReplayed:
+      description: `true` 表示响应来自幂等记录重放，否则为 `false`
+      schema:
+        type: boolean
+  responses:
+    BadRequest:
+      description: 请求语义、游标或状态不合法
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Unauthorized:
+      description: 缺少或无效身份
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Forbidden:
+      description: 角色或对象级权限不足
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    NotFound:
+      description: 资源不存在；可用于隐藏其他用户资源
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Conflict:
+      description: 幂等键、版本、唯一性、并发 Run 或资源状态冲突
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    ValidationError:
+      description: 请求结构校验失败
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    RateLimited:
+      description: 请求超过限流
+      headers:
+        Retry-After:
+          description: 建议重试等待秒数
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    InternalError:
+      description: 未分类内部错误
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    StorageUnavailable:
+      description: 永久存储不可用
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    DependencyUnavailable:
+      description: 模型、工具、检索或存储依赖在流建立前不可用
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+  schemas:
+    Uuid:
+      type: string
+      format: uuid
+    RequestId:
+      type: string
+      minLength: 8
+      maxLength: 128
+      pattern: '^[A-Za-z0-9_-]+$'
+    Timestamp:
+      type: string
+      format: date-time
+      description: 带时区的 ISO 8601 UTC 时间
+    ApiEnvelopeBase:
+      type: object
+      required: [code, message, request_id]
+      properties:
+        code:
+          type: string
+          const: OK
+        message:
+          type: string
+          const: success
+        request_id:
+          $ref: "#/components/schemas/RequestId"
+    ErrorCode:
+      type: string
+      enum:
+        - VALIDATION_ERROR
+        - BAD_REQUEST
+        - UNAUTHORIZED
+        - FORBIDDEN
+        - NOT_FOUND
+        - CONFLICT
+        - IDEMPOTENCY_KEY_REUSED
+        - IDEMPOTENCY_IN_PROGRESS
+        - STREAM_REPLAY_EXPIRED
+        - RATE_LIMITED
+        - MODEL_TIMEOUT
+        - MODEL_UNAVAILABLE
+        - TOOL_TIMEOUT
+        - TOOL_FAILED
+        - RETRIEVAL_FAILED
+        - STORAGE_UNAVAILABLE
+        - REVIEW_REQUIRED
+        - CANCELLED
+        - INTERNAL_ERROR
+    ValidationIssue:
+      type: object
+      additionalProperties: false
+      required: [field, reason]
+      properties:
+        field:
+          type: string
+          maxLength: 256
+        reason:
+          type: string
+          maxLength: 512
+    ErrorData:
+      type: object
+      additionalProperties: false
+      properties:
+        retryable:
+          type: boolean
+          default: false
+        retry_after_seconds:
+          type: integer
+          minimum: 1
+        issues:
+          type: array
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/ValidationIssue"
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [code, message, data, request_id]
+      properties:
+        code:
+          $ref: "#/components/schemas/ErrorCode"
+        message:
+          type: string
+          minLength: 1
+          maxLength: 512
+        data:
+          anyOf:
+            - $ref: "#/components/schemas/ErrorData"
+            - type: "null"
+        request_id:
+          $ref: "#/components/schemas/RequestId"
+    PageInfo:
+      type: object
+      additionalProperties: false
+      required: [next_cursor, has_more]
+      properties:
+        next_cursor:
+          type: [string, "null"]
+          maxLength: 512
+        has_more:
+          type: boolean
+    DependencyState:
+      type: string
+      enum: [available, degraded, unavailable, not_checked]
+    LiveStatus:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          const: alive
+    ReadyStatus:
+      type: object
+      additionalProperties: false
+      required: [status, dependencies]
+      properties:
+        status:
+          type: string
+          enum: [ready, not_ready]
+        dependencies:
+          type: object
+          additionalProperties: false
+          required: [postgresql, redis, vector_store, model]
+          properties:
+            postgresql:
+              $ref: "#/components/schemas/DependencyState"
+            redis:
+              $ref: "#/components/schemas/DependencyState"
+            vector_store:
+              $ref: "#/components/schemas/DependencyState"
+            model:
+              $ref: "#/components/schemas/DependencyState"
+    LiveEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/ApiEnvelopeBase"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: "#/components/schemas/LiveStatus"
+    ReadyEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/ApiEnvelopeBase"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: "#/components/schemas/ReadyStatus"
+    CreateSessionRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        title:
+          type: [string, "null"]
+          minLength: 1
+          maxLength: 120
+          default: null
+    Session:
+      type: object
+      additionalProperties: false
+      required: [id, title, created_at, updated_at, last_message_at]
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        title:
+          type: string
+          minLength: 1
+          maxLength: 120
+        created_at:
+          $ref: "#/components/schemas/Timestamp"
+        updated_at:
+          $ref: "#/components/schemas/Timestamp"
+        last_message_at:
+          anyOf:
+            - $ref: "#/components/schemas/Timestamp"
+            - type: "null"
+    SessionEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/ApiEnvelopeBase"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: "#/components/schemas/Session"
+    SessionPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Session"
+        page:
+          $ref: "#/components/schemas/PageInfo"
+    SessionPageEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/ApiEnvelopeBase"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: "#/components/schemas/SessionPage"
+    Citation:
+      type: object
+      additionalProperties: false
+      required: [citation_id, document_id, document_version, chunk_id, title, source, score]
+      properties:
+        citation_id:
+          $ref: "#/components/schemas/Uuid"
+        document_id:
+          $ref: "#/components/schemas/Uuid"
+        document_version:
+          type: string
+          minLength: 1
+          maxLength: 128
+        chunk_id:
+          type: string
+          minLength: 1
+          maxLength: 256
+        title:
+          type: string
+          minLength: 1
+          maxLength: 300
+        source:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        page:
+          type: [integer, "null"]
+          minimum: 1
+          default: null
+        score:
+          type: number
+          minimum: 0
+          maximum: 1
+        excerpt:
+          type: [string, "null"]
+          maxLength: 1000
+          default: null
+    MessageRole:
+      type: string
+      enum: [user, assistant]
+    MessageStatus:
+      type: string
+      enum: [accepted, generating, completed, needs_review, cancelled, failed, rejected]
+    Message:
+      type: object
+      additionalProperties: false
+      required:
+        [id, session_id, role, status, content, reply_to_message_id, run_id, citations, created_at, updated_at]
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        session_id:
+          $ref: "#/components/schemas/Uuid"
+        role:
+          $ref: "#/components/schemas/MessageRole"
+        status:
+          $ref: "#/components/schemas/MessageStatus"
+        content:
+          type: string
+          maxLength: 100000
+          description: needs_review/rejected 时普通 user 不会获得未发布候选内容
+        reply_to_message_id:
+          anyOf:
+            - $ref: "#/components/schemas/Uuid"
+            - type: "null"
+        run_id:
+          anyOf:
+            - $ref: "#/components/schemas/Uuid"
+            - type: "null"
+        citations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Citation"
+        created_at:
+          $ref: "#/components/schemas/Timestamp"
+        updated_at:
+          $ref: "#/components/schemas/Timestamp"
+    MessagePage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+        page:
+          $ref: "#/components/schemas/PageInfo"
+    MessagePageEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/ApiEnvelopeBase"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: "#/components/schemas/MessagePage"
+    ChatRequest:
+      oneOf:
+        - $ref: "#/components/schemas/NewChatRequest"
+        - $ref: "#/components/schemas/RetryChatRequest"
+      discriminator:
+        propertyName: mode
+        mapping:
+          new: "#/components/schemas/NewChatRequest"
+          retry: "#/components/schemas/RetryChatRequest"
+    NewChatRequest:
+      type: object
+      additionalProperties: false
+      required: [mode, session_id, content]
+      properties:
+        mode:
+          type: string
+          const: new
+        session_id:
+          $ref: "#/components/schemas/Uuid"
+        content:
+          type: string
+          minLength: 1
+          maxLength: 20000
+    RetryChatRequest:
+      type: object
+      additionalProperties: false
+      required: [mode, session_id, original_user_message_id]
+      properties:
+        mode:
+          type: string
+          const: retry
+        session_id:
+          $ref: "#/components/schemas/Uuid"
+        original_user_message_id:
+          $ref: "#/components/schemas/Uuid"
+    SseEvent:
+      oneOf:
+        - $ref: "#/components/schemas/MetaEvent"
+        - $ref: "#/components/schemas/StatusEvent"
+        - $ref: "#/components/schemas/ToolStartEvent"
+        - $ref: "#/components/schemas/ToolEndEvent"
+        - $ref: "#/components/schemas/DeltaEvent"
+        - $ref: "#/components/schemas/CitationEvent"
+        - $ref: "#/components/schemas/ReviewRequiredEvent"
+        - $ref: "#/components/schemas/DoneEvent"
+        - $ref: "#/components/schemas/ErrorEvent"
+      discriminator:
+        propertyName: event_type
+        mapping:
+          meta: "#/components/schemas/MetaEvent"
+          status: "#/components/schemas/StatusEvent"
+          tool_start: "#/components/schemas/ToolStartEvent"
+          tool_end: "#/components/schemas/ToolEndEvent"
+          delta: "#/components/schemas/DeltaEvent"
+          citation: "#/components/schemas/CitationEvent"
+          review_required: "#/components/schemas/ReviewRequiredEvent"
+          done: "#/components/schemas/DoneEvent"
+          error: "#/components/schemas/ErrorEvent"
+    SseEventBase:
+      type: object
+      required: [event_type, sequence, request_id, session_id, run_id, timestamp, payload]
+      properties:
+        event_type:
+          type: string
+        sequence:
+          type: integer
+          minimum: 1
+          description: 在单个 Run 内严格递增且不重复
+        request_id:
+          $ref: "#/components/schemas/RequestId"
+        session_id:
+          $ref: "#/components/schemas/Uuid"
+        run_id:
+          $ref: "#/components/schemas/Uuid"
+        timestamp:
+          $ref: "#/components/schemas/Timestamp"
+        payload:
+          type: object
+    MetaEvent:
+      allOf:
+        - $ref: "#/components/schemas/SseEventBase"
+        - type: object
+          properties:
+            event_type:
+              type: string
+              const: meta
+            payload:
+              $ref: "#/components/schemas/MetaPayload"
+    MetaPayload:
+      type: object
+      additionalProperties: false
+      required:
+        [user_message_id, assistant_message_id, attempt, retry_of_user_message_id, replayed]
+      properties:
+        user_message_id:
+          $ref: "#/components/schemas/Uuid"
+        assistant_message_id:
+          $ref: "#/components/schemas/Uuid"
+        attempt:
+          type: integer
+          minimum: 1
+        retry_of_user_message_id:
+          anyOf:
+            - $ref: "#/components/schemas/Uuid"
+            - type: "null"
+        replayed:
+          type: boolean
+    StatusEvent:
+      allOf:
+        - $ref: "#/components/schemas/SseEventBase"
+        - type: object
+          properties:
+            event_type:
+              type: string
+              const: status
+            payload:
+              $ref: "#/components/schemas/StatusPayload"
+    StatusPayload:
+      type: object
+      additionalProperties: false
+      required: [phase]
+      properties:
+        phase:
+          type: string
+          enum:
+            [accepted, preparing_context, retrieving, reasoning, calling_tool, generating,
+             checking_policy, cancelling, awaiting_review, completed]
+        detail:
+          type: [string, "null"]
+          maxLength: 300
+          default: null
+    ToolStartEvent:
+      allOf:
+        - $ref: "#/components/schemas/SseEventBase"
+        - type: object
+          properties:
+            event_type:
+              type: string
+              const: tool_start
+            payload:
+              $ref: "#/components/schemas/ToolStartPayload"
+    ToolStartPayload:
+      type: object
+      additionalProperties: false
+      required: [tool_call_id, tool_name, critical]
+      properties:
+        tool_call_id:
+          $ref: "#/components/schemas/Uuid"
+        tool_name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        critical:
+          type: boolean
+        arguments_preview:
+          type: [object, "null"]
+          description: 仅包含允许向当前调用者展示且已脱敏的参数
+          default: null
+    ToolEndEvent:
+      allOf:
+        - $ref: "#/components/schemas/SseEventBase"
+        - type: object
+          properties:
+            event_type:
+              type: string
+              const: tool_end
+            payload:
+              $ref: "#/components/schemas/ToolEndPayload"
+    ToolEndPayload:
+      type: object
+      additionalProperties: false
+      required: [tool_call_id, tool_name, outcome, duration_ms, result_preview, error_code]
+      properties:
+        tool_call_id:
+          $ref: "#/components/schemas/Uuid"
+        tool_name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        outcome:
+          type: string
+          enum: [succeeded, failed, timeout, cancelled]
+        duration_ms:
+          type: integer
+          minimum: 0
+        result_preview:
+          type: [string, "null"]
+          maxLength: 1000
+        error_code:
+          anyOf:
+            - $ref: "#/components/schemas/ErrorCode"
+            - type: "null"
+    DeltaEvent:
+      allOf:
+        - $ref: "#/components/schemas/SseEventBase"
+        - type: object
+          properties:
+            event_type:
+              type: string
+              const: delta
+            payload:
+              $ref: "#/components/schemas/DeltaPayload"
+    DeltaPayload:
+      type: object
+      additionalProperties: false
+      required: [index, content]
+      properties:
+        index:
+          type: integer
+          minimum: 0
+        content:
+          type: string
+          minLength: 1
+          maxLength: 20000
+    CitationEvent:
+      allOf:
+        - $ref: "#/components/schemas/SseEventBase"
+        - type: object
+          properties:
+            event_type:
+              type: string
+              const: citation
+            payload:
+              $ref: "#/components/schemas/Citation"
+    ReviewRequiredEvent:
+      allOf:
+        - $ref: "#/components/schemas/SseEventBase"
+        - type: object
+          properties:
+            event_type:
+              type: string
+              const: review_required
+            payload:
+              $ref: "#/components/schemas/ReviewRequiredPayload"
+    ReviewRequiredPayload:
+      type: object
+      additionalProperties: false
+      required: [review_id, reason_codes, confidence, draft_withheld]
+      properties:
+        review_id:
+          $ref: "#/components/schemas/Uuid"
+        reason_codes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              [low_confidence, high_risk, prompt_injection, critical_tool_failure,
+               conflicting_sources, policy_rule]
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        draft_withheld:
+          type: boolean
+          const: true
+    DoneEvent:
+      allOf:
+        - $ref: "#/components/schemas/SseEventBase"
+        - type: object
+          properties:
+            event_type:
+              type: string
+              const: done
+            payload:
+              $ref: "#/components/schemas/DonePayload"
+    DonePayload:
+      type: object
+      additionalProperties: false
+      required: [outcome, assistant_message_id, finish_reason, usage]
+      properties:
+        outcome:
+          type: string
+          enum: [completed, needs_review, cancelled]
+        assistant_message_id:
+          anyOf:
+            - $ref: "#/components/schemas/Uuid"
+            - type: "null"
+        finish_reason:
+          type: string
+          enum: [stop, needs_review, user_cancelled]
+        usage:
+          anyOf:
+            - $ref: "#/components/schemas/TokenUsage"
+            - type: "null"
+    TokenUsage:
+      type: object
+      additionalProperties: false
+      required: [input_tokens, output_tokens, total_tokens]
+      properties:
+        input_tokens:
+          type: integer
+          minimum: 0
+        output_tokens:
+          type: integer
+          minimum: 0
+        total_tokens:
+          type: integer
+          minimum: 0
+    ErrorEvent:
+      allOf:
+        - $ref: "#/components/schemas/SseEventBase"
+        - type: object
+          properties:
+            event_type:
+              type: string
+              const: error
+            payload:
+              $ref: "#/components/schemas/StreamErrorPayload"
+    StreamErrorPayload:
+      type: object
+      additionalProperties: false
+      required: [code, message, retryable]
+      properties:
+        code:
+          $ref: "#/components/schemas/ErrorCode"
+        message:
+          type: string
+          minLength: 1
+          maxLength: 512
+        retryable:
+          type: boolean
+        retry_after_seconds:
+          type: [integer, "null"]
+          minimum: 1
+          default: null
+    CreateFeedbackRequest:
+      type: object
+      additionalProperties: false
+      required: [rating]
+      properties:
+        rating:
+          type: string
+          enum: [positive, negative]
+        reason:
+          type: [string, "null"]
+          enum: [helpful, accurate, inaccurate, unsupported, unsafe, irrelevant, other, null]
+          default: null
+        comment:
+          type: [string, "null"]
+          maxLength: 1000
+          default: null
+    Feedback:
+      type: object
+      additionalProperties: false
+      required: [id, message_id, rating, reason, comment, created_at]
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        message_id:
+          $ref: "#/components/schemas/Uuid"
+        rating:
+          type: string
+          enum: [positive, negative]
+        reason:
+          type: [string, "null"]
+        comment:
+          type: [string, "null"]
+        created_at:
+          $ref: "#/components/schemas/Timestamp"
+    FeedbackEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/ApiEnvelopeBase"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: "#/components/schemas/Feedback"
+    CancelRunRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        reason:
+          type: [string, "null"]
+          maxLength: 300
+          default: null
+    CancelRunResult:
+      type: object
+      additionalProperties: false
+      required: [run_id, status, requested_at]
+      properties:
+        run_id:
+          $ref: "#/components/schemas/Uuid"
+        status:
+          type: string
+          enum: [cancellation_requested, already_terminal]
+        requested_at:
+          $ref: "#/components/schemas/Timestamp"
+    CancelRunEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/ApiEnvelopeBase"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: "#/components/schemas/CancelRunResult"
+    RunStatus:
+      type: string
+      enum: [queued, running, needs_review, completed, cancelled, failed, rejected]
+    TraceStep:
+      type: object
+      additionalProperties: false
+      required: [sequence, step_type, status, started_at, ended_at, duration_ms, summary, error_code]
+      properties:
+        sequence:
+          type: integer
+          minimum: 1
+        step_type:
+          type: string
+          enum: [context, retrieval, reasoning, tool, policy, generation, review]
+        status:
+          type: string
+          enum: [started, succeeded, failed, timeout, cancelled, waiting]
+        started_at:
+          $ref: "#/components/schemas/Timestamp"
+        ended_at:
+          anyOf:
+            - $ref: "#/components/schemas/Timestamp"
+            - type: "null"
+        duration_ms:
+          type: [integer, "null"]
+          minimum: 0
+        summary:
+          type: string
+          maxLength: 1000
+          description: 脱敏摘要，不包含内部 Prompt、思维链、密钥或原始隐私数据
+        error_code:
+          anyOf:
+            - $ref: "#/components/schemas/ErrorCode"
+            - type: "null"
+    RunTrace:
+      type: object
+      additionalProperties: false
+      required:
+        [run_id, session_id, user_message_id, assistant_message_id, status, model,
+         retrieval_strategy, confidence_threshold, steps, citations, started_at, ended_at]
+      properties:
+        run_id:
+          $ref: "#/components/schemas/Uuid"
+        session_id:
+          $ref: "#/components/schemas/Uuid"
+        user_message_id:
+          $ref: "#/components/schemas/Uuid"
+        assistant_message_id:
+          anyOf:
+            - $ref: "#/components/schemas/Uuid"
+            - type: "null"
+        status:
+          $ref: "#/components/schemas/RunStatus"
+        model:
+          type: string
+          maxLength: 128
+        retrieval_strategy:
+          type: string
+          maxLength: 128
+        confidence_threshold:
+          type: number
+          minimum: 0
+          maximum: 1
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/TraceStep"
+        citations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Citation"
+        started_at:
+          $ref: "#/components/schemas/Timestamp"
+        ended_at:
+          anyOf:
+            - $ref: "#/components/schemas/Timestamp"
+            - type: "null"
+    RunTraceEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/ApiEnvelopeBase"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: "#/components/schemas/RunTrace"
+    MemoryType:
+      type: string
+      enum: [user_fact, preference, task_summary]
+    MemoryStatus:
+      type: string
+      enum: [active, inactive]
+    Memory:
+      type: object
+      additionalProperties: false
+      required:
+        [id, memory_type, content, status, confidence, source_message_id, version, created_at, updated_at]
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        memory_type:
+          $ref: "#/components/schemas/MemoryType"
+        content:
+          type: string
+          minLength: 1
+          maxLength: 5000
+        status:
+          $ref: "#/components/schemas/MemoryStatus"
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        source_message_id:
+          $ref: "#/components/schemas/Uuid"
+        corrected_from_version:
+          type: [integer, "null"]
+          minimum: 1
+          default: null
+        version:
+          type: integer
+          minimum: 1
+        created_at:
+          $ref: "#/components/schemas/Timestamp"
+        updated_at:
+          $ref: "#/components/schemas/Timestamp"
+    MemoryPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Memory"
+        page:
+          $ref: "#/components/schemas/PageInfo"
+    MemoryPageEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/ApiEnvelopeBase"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: "#/components/schemas/MemoryPage"
+    UpdateMemoryRequest:
+      oneOf:
+        - $ref: "#/components/schemas/CorrectMemoryRequest"
+        - $ref: "#/components/schemas/DeactivateMemoryRequest"
+      discriminator:
+        propertyName: action
+        mapping:
+          correct: "#/components/schemas/CorrectMemoryRequest"
+          deactivate: "#/components/schemas/DeactivateMemoryRequest"
+    CorrectMemoryRequest:
+      type: object
+      additionalProperties: false
+      required: [action, content, expected_version]
+      properties:
+        action:
+          type: string
+          const: correct
+        content:
+          type: string
+          minLength: 1
+          maxLength: 5000
+        expected_version:
+          type: integer
+          minimum: 1
+    DeactivateMemoryRequest:
+      type: object
+      additionalProperties: false
+      required: [action, expected_version]
+      properties:
+        action:
+          type: string
+          const: deactivate
+        expected_version:
+          type: integer
+          minimum: 1
+        reason:
+          type: [string, "null"]
+          maxLength: 300
+          default: null
+    MemoryEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/ApiEnvelopeBase"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: "#/components/schemas/Memory"
+    DeleteMemoryResult:
+      type: object
+      additionalProperties: false
+      required: [memory_id, deleted_at, backup_expiry_note]
+      properties:
+        memory_id:
+          $ref: "#/components/schemas/Uuid"
+        deleted_at:
+          $ref: "#/components/schemas/Timestamp"
+        backup_expiry_note:
+          type: string
+          maxLength: 300
+    DeleteMemoryEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/ApiEnvelopeBase"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: "#/components/schemas/DeleteMemoryResult"
+    ReviewStatus:
+      type: string
+      enum: [pending, approved, rejected, edited_and_published]
+    ReviewTask:
+      type: object
+      additionalProperties: false
+      required:
+        [id, run_id, session_id, user_message_id, candidate_content, reason_codes,
+         confidence, status, version, created_at, decided_at]
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        run_id:
+          $ref: "#/components/schemas/Uuid"
+        session_id:
+          $ref: "#/components/schemas/Uuid"
+        user_message_id:
+          $ref: "#/components/schemas/Uuid"
+        candidate_content:
+          type: string
+          maxLength: 100000
+          description: 仅 reviewer 可见的未发布候选
+        reason_codes:
+          type: array
+          minItems: 1
+          items:
+            type: string
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        status:
+          $ref: "#/components/schemas/ReviewStatus"
+        version:
+          type: integer
+          minimum: 1
+        created_at:
+          $ref: "#/components/schemas/Timestamp"
+        decided_at:
+          anyOf:
+            - $ref: "#/components/schemas/Timestamp"
+            - type: "null"
+    ReviewPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReviewTask"
+        page:
+          $ref: "#/components/schemas/PageInfo"
+    ReviewPageEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/ApiEnvelopeBase"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: "#/components/schemas/ReviewPage"
+    ReviewDecisionRequest:
+      oneOf:
+        - $ref: "#/components/schemas/ApproveReviewRequest"
+        - $ref: "#/components/schemas/RejectReviewRequest"
+        - $ref: "#/components/schemas/EditReviewRequest"
+      discriminator:
+        propertyName: decision
+        mapping:
+          approve: "#/components/schemas/ApproveReviewRequest"
+          reject: "#/components/schemas/RejectReviewRequest"
+          edit_and_publish: "#/components/schemas/EditReviewRequest"
+    ApproveReviewRequest:
+      type: object
+      additionalProperties: false
+      required: [decision, expected_version]
+      properties:
+        decision:
+          type: string
+          const: approve
+        expected_version:
+          type: integer
+          minimum: 1
+        note:
+          type: [string, "null"]
+          maxLength: 1000
+          default: null
+    RejectReviewRequest:
+      type: object
+      additionalProperties: false
+      required: [decision, expected_version, note]
+      properties:
+        decision:
+          type: string
+          const: reject
+        expected_version:
+          type: integer
+          minimum: 1
+        note:
+          type: string
+          minLength: 1
+          maxLength: 1000
+    EditReviewRequest:
+      type: object
+      additionalProperties: false
+      required: [decision, expected_version, edited_content]
+      properties:
+        decision:
+          type: string
+          const: edit_and_publish
+        expected_version:
+          type: integer
+          minimum: 1
+        edited_content:
+          type: string
+          minLength: 1
+          maxLength: 100000
+        note:
+          type: [string, "null"]
+          maxLength: 1000
+          default: null
+    ReviewDecisionResult:
+      type: object
+      additionalProperties: false
+      required: [review_id, status, published_message_id, decided_at, version]
+      properties:
+        review_id:
+          $ref: "#/components/schemas/Uuid"
+        status:
+          type: string
+          enum: [approved, rejected, edited_and_published]
+        published_message_id:
+          anyOf:
+            - $ref: "#/components/schemas/Uuid"
+            - type: "null"
+        decided_at:
+          $ref: "#/components/schemas/Timestamp"
+        version:
+          type: integer
+          minimum: 2
+    ReviewDecisionEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/ApiEnvelopeBase"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: "#/components/schemas/ReviewDecisionResult"
