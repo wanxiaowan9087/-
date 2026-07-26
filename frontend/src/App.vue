@@ -34,10 +34,15 @@ const isOverlay = computed(() => ['empty', 'loading', 'error', 'disabled'].inclu
         <div class="thread-head"><div><p class="eyebrow">CASE · {{ mockPreview.caseId }}</p><h1>{{ mockPreview.title }}</h1><p>{{ mockPreview.summary }}</p></div><button class="trace-link" type="button"><span>◌</span>运行追踪 <b>run_01HZX…</b><i>→</i></button></div>
         <div class="thread-rule"></div>
         <article class="message customer"><div class="message-meta"><span class="message-avatar user">唐</span><b>唐世均</b><time>10:58</time></div><p>{{ mockPreview.question }}</p></article>
-        <article class="message agent"><div class="message-meta"><span class="message-avatar bot">稽</span><b>规程台助手</b><span class="model-chip">知识库已检索</span><time>10:58</time></div><div class="answer"><p v-for="paragraph in mockPreview.answer" :key="paragraph">{{ paragraph }}</p></div>
+        <article class="message agent withheld"><div class="message-meta"><span class="message-avatar bot">稽</span><b>规程台助手</b><span class="model-chip">内容已扣留</span><time>10:58</time></div>
+          <section class="withheld-card" aria-label="候选答案已扣留，等待人工审核">
+            <div class="withheld-seal" aria-hidden="true"><span></span><span></span><span></span></div>
+            <div><p class="eyebrow">DRAFT WITHHELD</p><h2>候选答案等待人工审核</h2><p>{{ mockPreview.reviewReason }}</p></div>
+            <span class="withheld-code">POLICY · R-04</span>
+          </section>
           <section class="tool-card"><div class="tool-top"><span class="tool-icon">⌁</span><div><b>知识库检索</b><small>hybrid_search · 842 ms</small></div><span class="tool-ok">已完成</span></div><div class="tool-detail"><span>召回 12 个片段</span><span>重排 Top 3</span><span>置信度 0.86</span></div></section>
           <section class="sources"><div class="sources-head"><span>依据资料</span><small>2 条可定位引用</small></div><div class="source-grid"><button class="source-card" type="button"><span class="source-index">01</span><div><b>扫拖一体机器人 100 问</b><p>第 41 节 · 回充失败排查</p></div><i>↗</i></button><button class="source-card" type="button"><span class="source-index">02</span><div><b>维护保养指南</b><p>第 3.2 节 · 传感器与触点</p></div><i>↗</i></button></div></section>
-          <section class="review-card"><div class="review-mark">!</div><div><p class="eyebrow">HUMAN REVIEW</p><b>包含售后升级建议，等待人工确认</b><small>候选答案已暂存；未向最终用户自动发布。</small></div><span class="review-status">待审核</span></section>
+          <section class="review-card"><div class="review-mark">◇</div><div><p class="eyebrow">HUMAN REVIEW</p><b>审核队列已接收</b><small>候选正文不会向普通用户渲染；批准后再发布。</small></div><span class="review-status">待审核</span></section>
         </article>
         <section v-if="isOverlay" class="state-panel" :class="chat.previewState" aria-live="polite">
           <span class="state-glyph">{{ chat.previewState === 'loading' ? '◌' : chat.previewState === 'error' ? '!' : chat.previewState === 'disabled' ? '⌧' : '—' }}</span>
