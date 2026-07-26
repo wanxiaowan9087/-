@@ -22,6 +22,7 @@
 | `frontend/**` 内测试文件 | 前端工程师写首轮 | QA | 同上 |
 | `evals/datasets/**` | AI/RAG 工程师提议 | QA 冻结 | 基线后不得为迎合实现改答案 |
 | `evals/results/**` | QA | QA | 记录提交 SHA 与环境 |
+| `tests/apifox/**` | QA | QA | 场景、套件导出文件与非敏感测试数据 |
 | `docs/prompts/**` | AI/RAG 工程师提议 | 主决策者审批 | Prompt 变化必须带评测 |
 | `docs/contracts/**` | 主决策者 | QA 审查 | 变更需要用户批准 |
 | `docker-compose.yml`、容器文件 | 后端平台工程师 | QA | 前端工程师负责前端 Dockerfile |

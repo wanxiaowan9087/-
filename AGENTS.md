@@ -11,6 +11,7 @@
 5. `docs/governance/ownership-and-approvals.md`
 6. `docs/quality/acceptance-gates.md`
 7. `docs/security/minimum-production-baseline.md`
+8. `docs/testing/apifox-cli.md`
 
 若文件尚未生成或内容冲突，停止实现并向主决策者报告；不得自行猜测契约。
 若设计规范仍标记为 Draft，所有角色只能审阅或制作获准的静态视觉稿，不得开始生产实现。
@@ -19,6 +20,7 @@
 
 - 生产实现只能修改角色拥有的目录；跨目录变更先交给主决策者协调。
 - OpenAPI 是 HTTP 与 SSE 契约的唯一事实来源；前后端不得各自定义同义类型。
+- Apifox CLI 用于黑盒 API 场景回归和报告生成，不得取代 OpenAPI、pytest 或最终真实联调。
 - 不新增重复 API，不绕过分层直接访问数据库、Redis、向量库或模型。
 - 不提交密钥、个人数据、日志、数据库文件、向量库产物或构建产物。
 - 视觉审批前，前端只交付企业级静态稿和 Mock 状态；审批后必须完成真实联调。

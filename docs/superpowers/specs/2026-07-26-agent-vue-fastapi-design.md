@@ -185,6 +185,7 @@ docs/                 # 架构、契约、角色约束、Prompt
 
 - Pydantic 校验与错误格式测试；
 - API 契约测试；
+- Apifox CLI 黑盒场景测试与 JSON/JUnit 报告；
 - Fake Model 流式事件测试；
 - Agent 工具成功、失败、超时和重试测试；
 - Repository 集成测试；
@@ -232,6 +233,7 @@ main
 - `docs/governance/ownership-and-approvals.md`：唯一 owner、分支集成与审批证据；
 - `docs/quality/acceptance-gates.md`：唯一验收入口、测试矩阵、RAG 阈值和术语定义；
 - `docs/security/minimum-production-baseline.md`：单租户身份、隐私、恢复、观测和供应链底线；
+- `docs/testing/apifox-cli.md`：Apifox 场景测试、报告、同步与密钥边界；
 - `docs/agents/*.md`：四个子 Agent 各自的文件边界与交付格式。
 
 若文字说明与 OpenAPI 的请求、响应或事件 schema 冲突，以 OpenAPI 为准；若实现便利与质量、安全或审批门冲突，以门禁为准并报告主决策者。任何附属规范变更都必须由其 owner 审查，不能由实现 Agent 为通过测试而自行放宽。

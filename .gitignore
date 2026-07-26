@@ -11,6 +11,10 @@ __pycache__/
 .coverage
 htmlcov/
 logs/
+apifox-reports/
+artifacts/apifox/
+.apifox/*.private.*
+tests/apifox/**/*.private.*
 *.log
 chroma_db/
 **/chroma_db/
@@ -19,4 +23,3 @@ build/
 node_modules/
 .idea/
 .vscode/
-

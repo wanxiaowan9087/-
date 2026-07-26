@@ -26,6 +26,7 @@ python scripts/quality_gate.py all --integration-sha <40位Git提交SHA>
 
 ```bash
 python scripts/quality_gate.py contract
+python scripts/quality_gate.py apifox
 python scripts/quality_gate.py backend
 python scripts/quality_gate.py agent
 python scripts/quality_gate.py rag
@@ -56,6 +57,7 @@ CI 中所有质量作业必须检出同一个提交 SHA，并使用锁定依赖�
 | CI job | 调用 | 阻断条件 |
 |---|---|---|
 | `quality-contract` | `quality_gate.py contract` | OpenAPI、Pydantic、普通响应或流式事件契约不一致 |
+| `quality-api-scenarios` | `quality_gate.py apifox` | Apifox CLI 场景、断言、数据驱动用例或报告生成失败 |
 | `quality-backend` | `quality_gate.py backend` | lint、类型检查、单元、Repository、事务或迁移测试失败 |
 | `quality-agent` | `quality_gate.py agent` | 工具、重试、超时、取消、降级、审核触发或记忆测试失败 |
 | `quality-rag` | `quality_gate.py rag` | 固定评测集缺失、硬阈值未达标或发生禁止回归 |
@@ -76,6 +78,7 @@ CI 必须保存验收报告、JUnit 报告、前端覆盖率、Playwright trace/
 | 域 | 必过场景 | 主要层级 | 默认依赖 |
 |---|---|---|---|
 | API 契约 | 每个冻结接口的请求、成功响应、错误响应、HTTP 状态码和 `request_id` | 契约/集成 | FastAPI 测试客户端 |
+| API 黑盒场景 | Apifox CLI 覆盖会话生命周期、分页、幂等重放/冲突、取消、反馈、记忆和审核权限；生成 JSON 与 JUnit 报告 | 场景/集成 | 真实 FastAPI + Apifox CLI |
 | 流式契约 | `meta`、`status`、工具、`delta`、引用、审核、`done`、`error` 的 payload、顺序与终止规则 | 契约/集成 | Fake Model |
 | 会话 | 创建、读取、消息历史、恢复、空会话、未知 ID、并发更新 | 集成/E2E | PostgreSQL |
 | Agent 工具 | 成功、参数错误、失败、超时、有上限重试、取消、降级和结果脱敏 | 单元/集成 | Fake Tool Adapter |
@@ -92,6 +95,8 @@ CI 必须保存验收报告、JUnit 报告、前端覆盖率、Playwright trace/
 | 安全 | 提交历史外的当前树密钥扫描、日志/响应泄露、Prompt 注入、越权审核和依赖高危项 | 静态/集成 | 固定规则库 |
 
 不得仅用 Mock HTTP 响应替代“真实联调”。真实联调要求浏览器发出真实网络请求，并由运行中的 FastAPI 和真实基础设施 Adapter 处理；Fake Model 与固定 Embedding 不影响这一判定。
+
+Apifox CLI 是 `all` 的阻断组成，不是第二套完整验收入口。其场景和非敏感数据保存在 `tests/apifox/`；CI 报告写入 `artifacts/apifox/` 并汇总到总验收报告。具体边界、运行模式和密钥规则见 `docs/testing/apifox-cli.md`。
 
 ## 5. RAG 验收阈值
 
