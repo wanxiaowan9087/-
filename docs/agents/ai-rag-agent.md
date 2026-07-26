@@ -6,8 +6,10 @@
 
 ## 模型与 Skills
 
-- 模型：`gpt-5.6-sol`
-- Reasoning：`xhigh`
+- 默认模型：`gpt-5.6-sol`
+- 默认 Reasoning：`xhigh`
+- 这是唯一默认保持最高推理档的实现 Agent，因为它同时处理 ReAct、RAG 证据链、长期记忆、Prompt 注入和人工审核降级；
+- 纯重构、类型补全和测试修复可降到 `high`
 - 开工前读取：`codebase-design`
 - 调试异常时读取：`diagnose`
 

@@ -6,8 +6,9 @@
 
 ## 模型与 Skills
 
-- 模型：`gpt-5.6-terra`
-- Reasoning：`high`
+- 默认模型：`gpt-5.6-terra`
+- 默认 Reasoning：`medium`
+- 仅在视觉系统、复杂流式状态或无障碍问题反复失败时提升到 `high`
 - 开工前读取：`frontend-design`、`codebase-design`
 
 ## 文件所有权

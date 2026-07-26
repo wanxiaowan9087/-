@@ -6,8 +6,9 @@
 
 ## 模型与 Skills
 
-- 模型：`gpt-5.6-sol`
-- Reasoning：`xhigh`
+- 默认模型：`gpt-5.6-sol`
+- 默认 Reasoning：`high`
+- 仅在异步事务、迁移回滚、并发幂等或安全边界无法定位时提升到 `xhigh`
 - 开工前读取：`codebase-design`
 - 诊断失败时读取：`diagnose`
 

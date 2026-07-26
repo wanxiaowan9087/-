@@ -6,8 +6,9 @@
 
 ## 模型与 Skills
 
-- 模型：`gpt-5.6-sol`
-- Reasoning：`high`
+- 默认模型：`gpt-5.6-terra`
+- 默认 Reasoning：`high`
+- 仅在跨服务根因定位、复杂并发缺陷或最终集成回归失败时临时提升到 `gpt-5.6-sol` + `high`
 - 开工前读取：`code-review`
 - 定位缺陷时读取：`diagnose`
 
