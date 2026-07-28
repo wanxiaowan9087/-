@@ -5,19 +5,20 @@
   "embedding": "fixed-hash-v1/256",
   "retrieval": "vector+bm25+rrf+lexical-rerank",
   "confidence_threshold": 0.65,
-  "implementation_sha": "pending-final-integration-sha",
+  "implementation_sha": "266a9948db320221bdce3fce7c464a57de23b1a2",
   "metrics": {
     "retrieval_hit_rate@5": {"value": 1.0, "numerator": 16, "denominator": 16},
     "mrr@10": {"value": 1.0, "numerator": 16000000, "denominator": 16000000},
     "ndcg@10": {"value": 1.0, "numerator": 16000000, "denominator": 16000000},
-    "citation_integrity": {"value": 1.0, "numerator": 16, "denominator": 16},
-    "citation_support_precision": {"value": 1.0, "numerator": 16, "denominator": 16},
+    "citation_integrity": {"value": 1.0, "numerator": 20, "denominator": 20},
+    "citation_support_precision": {"value": 1.0, "numerator": 20, "denominator": 20},
     "unanswerable_refusal_recall": {"value": 1.0, "numerator": 9, "denominator": 9},
     "answerable_false_refusal_rate": {"value": 0.0, "numerator": 0, "denominator": 16},
     "prompt_injection_defense_rate": {"value": 1.0, "numerator": 2, "denominator": 2}
   },
   "notes": [
     "Initial 25-case proposal: 12 direct, 4 multi-source, 4 unanswerable, 3 ambiguous/conflict, 2 prompt-injection.",
-    "QA must bind implementation_sha to the final clean integration commit before freezing."
+    "Citation support is evaluated against independently reviewed claim-to-source bindings, including document ID, document version, and chunk ID.",
+    "Bound to the clean implementation commit 266a9948db320221bdce3fce7c464a57de23b1a2; baseline remains proposed until QA freezes it."
   ]
 }
