@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
-from backend.app.adapters.vector.chroma import ChromaVectorStore
 from backend.app.adapters.vector.dashscope import DashScopeEmbeddingAdapter
+from backend.app.adapters.vector.json_store import JsonVectorStore
 from backend.app.core.config import Settings
 from backend.app.rag.chunking import DocumentChunker
 from backend.app.rag.ingestion import KnowledgeIndexer
@@ -92,18 +92,12 @@ def _string_tuple(value: Any, line_number: int, field: str) -> tuple[str, ...]:
 
 async def ingest(manifest: Path, settings: Settings) -> int:
     try:
-        import chromadb
         from langchain_community.embeddings import DashScopeEmbeddings
     except ImportError as error:
         raise RuntimeError("install the project [ai] extra before ingesting knowledge") from error
 
     documents = parse_manifest(manifest.read_text(encoding="utf-8"))
-    client = chromadb.PersistentClient(path=settings.agent_vector_store_path)
-    collection = client.get_or_create_collection(
-        name=settings.agent_vector_collection_name,
-        metadata={"hnsw:space": "cosine"},
-    )
-    vector_store = ChromaVectorStore(collection)
+    vector_store = JsonVectorStore(settings.agent_vector_store_path)
     indexer = KnowledgeIndexer(
         DocumentChunker(),
         DashScopeEmbeddingAdapter(DashScopeEmbeddings(model=settings.agent_embedding_model_name)),
@@ -123,7 +117,7 @@ async def ingest(manifest: Path, settings: Settings) -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Ingest a versioned JSONL knowledge manifest into Chroma."
+        description="Ingest a versioned JSONL knowledge manifest into the local vector store."
     )
     parser.add_argument(
         "--manifest", required=True, type=Path, help="UTF-8 JSONL knowledge manifest"

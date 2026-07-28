@@ -89,7 +89,7 @@ CI 必须保存验收报告、JUnit 报告、前端覆盖率、Playwright trace/
 | 人工审核 | 全部触发规则、批准、驳回、编辑后发布、重复决定、并发冲突和审计记录 | 单元/集成/E2E | Fake Model |
 | 前端 | 会话、流式拼接、取消、重试、工具状态、引用、审核、加载/空/错误/禁用状态 | 组件/集成 | Mock 协议层 |
 | 无障碍 | 键盘完成核心流程、可见焦点、语义名称、对比度和常用视口响应式 | 组件/E2E | 自动扫描加关键手工清单 |
-| 真实联调 | 浏览器连接真实 FastAPI、PostgreSQL、Redis 和 Chroma；只允许模型与 Embedding 为 Fake | Playwright E2E | Docker Compose |
+| 真实联调 | 浏览器连接真实 FastAPI、PostgreSQL、Redis 和本地持久化向量适配器；只允许模型与 Embedding 为 Fake | Playwright E2E | Docker Compose |
 | 失败路径 | 模型、工具、检索、存储不可用，SSE 中断，重复请求及服务重启 | 集成/E2E | 可控故障注入 |
 | Compose | `docker compose up --build`、就绪检查、迁移、基本对话、优雅关闭 | 冒烟 | 全新 Docker 环境 |
 | 安全 | 提交历史外的当前树密钥扫描、日志/响应泄露、Prompt 注入、越权审核和依赖高危项 | 静态/集成 | 固定规则库 |
@@ -238,7 +238,7 @@ QA 必须在该 SHA 的干净检出上执行唯一验收命令。测试过程中
 | 术语 | 本项目中的可验收定义 |
 |---|---|
 | 企业级界面 | 核心流程具备加载、空、错误、禁用状态；常用桌面和移动视口可用；键盘可完成核心流程；自动无障碍扫描无严重/致命问题；视觉基线已获用户批准 |
-| 真实前后端联调 | 浏览器通过真实网络连接运行中的 FastAPI，后端使用真实 PostgreSQL、Redis、Chroma Adapter；仅模型与 Embedding 可使用确定性 Fake |
+| 真实前后端联调 | 浏览器通过真实网络连接运行中的 FastAPI，后端使用真实 PostgreSQL、Redis、本地持久化 VectorStore Adapter；仅模型与 Embedding 可使用确定性 Fake |
 | 正确 HTTP 状态码 | 与冻结 API 契约逐接口列出的状态码完全一致；未写入契约的状态码不能靠实现自行解释 |
 | 核心测试 | 第 4 节必过测试矩阵中的全部阻断项 |
 | 全量回归 | 对最终集成 SHA 执行 `quality_gate.py all`，全部阻断项通过且无跳过 |

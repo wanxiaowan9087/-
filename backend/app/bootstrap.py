@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from typing import Any
-
 from backend.app.adapters.llm.deterministic_executor import DeterministicRunExecutor
 from backend.app.adapters.llm.langchain_react import LangChainReActEngine
 from backend.app.adapters.llm.platform_executor import RuntimeRunExecutor
 from backend.app.adapters.memory.platform_runtime import PlatformMemoryRuntime
-from backend.app.adapters.vector.chroma import ChromaVectorStore
 from backend.app.adapters.vector.dashscope import DashScopeEmbeddingAdapter
+from backend.app.adapters.vector.json_store import JsonVectorStore
 from backend.app.agent.runtime import AgentRuntime
 from backend.app.agent.tooling import ToolExecutor, ToolRegistry
 from backend.app.application.ports import RunExecutorPort, UnavailableRunExecutor
@@ -24,7 +22,7 @@ class AgentRuntimeBootstrapError(RuntimeError):
 def build_run_executor(
     settings: Settings, repository: PlatformRepository | None = None
 ) -> RunExecutorPort:
-    """Build the real LangChain/Chroma/DashScope runtime only when enabled.
+    """Build the real LangChain/file-vector-store/DashScope runtime when enabled.
 
     Keeping this opt-in makes local API and contract work deterministic. A live
     deployment must set APP_AGENT_RUNTIME_ENABLED=true and supply the
@@ -36,7 +34,6 @@ def build_run_executor(
     if not settings.agent_runtime_enabled:
         return UnavailableRunExecutor()
     try:
-        import chromadb
         from langchain_community.chat_models import ChatTongyi
         from langchain_community.embeddings import DashScopeEmbeddings
     except ImportError as error:
@@ -45,15 +42,10 @@ def build_run_executor(
         ) from error
 
     try:
-        client: Any = chromadb.PersistentClient(path=settings.agent_vector_store_path)
-        collection = client.get_or_create_collection(
-            name=settings.agent_vector_collection_name,
-            metadata={"hnsw:space": "cosine"},
-        )
         embeddings = DashScopeEmbeddingAdapter(
             DashScopeEmbeddings(model=settings.agent_embedding_model_name)
         )
-        vector_store = ChromaVectorStore(collection)
+        vector_store = JsonVectorStore(settings.agent_vector_store_path)
         retriever = HybridRetriever(
             embeddings,
             vector_store,

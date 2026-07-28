@@ -42,11 +42,11 @@ services:
       APP_REDIS_URL: redis://redis:6379/0
       APP_DEMO_AUTH_ENABLED: "false"
       APP_CORS_ORIGINS: '["http://localhost:5173"]'
-      APP_AGENT_VECTOR_STORE_PATH: /app/data/chroma
+      APP_AGENT_VECTOR_STORE_PATH: /app/data/vector-store.json
     ports:
       - "8000:8000"
     volumes:
-      - agent-chroma:/app/data/chroma
+      - agent-vector-data:/app/data
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -66,5 +66,5 @@ services:
 
 volumes:
   postgres-data:
-  agent-chroma:
+  agent-vector-data:
 

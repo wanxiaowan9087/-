@@ -13,7 +13,7 @@
 | `backend/app/adapters/sql/**` | 后端平台工程师 | QA | PostgreSQL |
 | `backend/app/adapters/redis/**` | 后端平台工程师 | QA | Redis |
 | `backend/app/adapters/llm/**` | AI/RAG 工程师 | QA | 模型与 Fake Model |
-| `backend/app/adapters/vector/**` | AI/RAG 工程师 | QA | Chroma/VectorStore |
+| `backend/app/adapters/vector/**` | AI/RAG 工程师 | QA | VectorStore |
 | `backend/app/agent/**` | AI/RAG 工程师 | QA | ReAct、工具、安全 |
 | `backend/app/rag/**` | AI/RAG 工程师 | QA | 摄取、检索、重排、引用 |
 | `backend/app/core/**` | 后端平台工程师 | QA | 配置、日志、异常、生命周期 |

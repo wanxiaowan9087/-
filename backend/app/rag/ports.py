@@ -17,7 +17,7 @@ class EmbeddingPort(Protocol):
 
 
 class VectorStorePort(Protocol):
-    """Chroma and in-memory adapters satisfy this seam."""
+    """Durable local and in-memory adapters satisfy this seam."""
 
     async def replace_document(
         self,
