@@ -129,7 +129,8 @@ def run_contract(_: str) -> list[CommandResult]:
 
 def run_apifox(_: str) -> list[CommandResult]:
     candidate = os.environ.get("APIFOX_CLI")
-    executable = Path(candidate) if candidate else ROOT / "tools" / "apifox" / "apifox.exe"
+    discovered = shutil.which("apifox.cmd") or shutil.which("apifox")
+    executable = Path(candidate) if candidate else Path(discovered or "")
     suite = ROOT / "tests" / "apifox" / "scenarios" / "offline-suite.json"
     if not executable.is_file():
         return [_missing("apifox", "APIFOX_CLI is not configured to an executable")]
