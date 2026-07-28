@@ -1,28 +1,28 @@
 :root {
-  --charcoal-950: #15181d;
-  --charcoal-900: #20242a;
-  --navy-950: #0c1929;
-  --navy-900: #14243a;
-  --navy-800: #1d314a;
-  --blue-700: #245d96;
-  --blue-600: #2e70b0;
-  --blue-500: #4c84ba;
-  --porcelain: #fcfcfb;
-  --mist-200: #e6e8ea;
-  --mist-100: #f2f3f3;
-  --mist-50: #f7f7f6;
-  --white: #ffffff;
-  --slate-950: #1d232b;
-  --slate-700: #4c5663;
-  --slate-500: #747d87;
-  --line: #dedfe1;
-  --line-strong: #c8cbcf;
-  --brass-700: #786a4d;
-  --brass-500: #a08d63;
-  --brass-50: #f4f1ea;
-  --critical: #9a3557;
-  --shadow-soft: 0 16px 44px rgba(20, 24, 29, 0.07);
-  --shadow-focus: 0 0 0 3px rgba(59, 134, 216, 0.24);
+  --charcoal-950: #050b13;
+  --charcoal-900: #0b1624;
+  --navy-950: #071524;
+  --navy-900: #0b2439;
+  --navy-800: #163a57;
+  --blue-700: #1d5f95;
+  --blue-600: #2e7db6;
+  --blue-500: #69a8d7;
+  --porcelain: #091522;
+  --mist-200: #1b2d40;
+  --mist-100: #102238;
+  --mist-50: #0d1c2d;
+  --white: #14283a;
+  --slate-950: #e8f0f6;
+  --slate-700: #b6c7d6;
+  --slate-500: #7892a8;
+  --line: #263f56;
+  --line-strong: #38566f;
+  --brass-700: #c4a873;
+  --brass-500: #9b8050;
+  --brass-50: #201b14;
+  --critical: #cd5f7e;
+  --shadow-soft: 0 18px 48px rgba(0, 0, 0, 0.24);
+  --shadow-focus: 0 0 0 3px rgba(105, 168, 215, 0.28);
   color: var(--slate-950);
   background: var(--navy-950);
   font-family: "Microsoft YaHei UI", "PingFang SC", sans-serif;
@@ -30,6 +30,11 @@
 
 * {
   box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  background: var(--charcoal-950);
 }
 
 body {
@@ -57,7 +62,7 @@ textarea:focus-visible {
   min-height: 100vh;
   display: grid;
   grid-template-columns: 264px minmax(0, 1fr);
-  background: var(--porcelain);
+  background: radial-gradient(circle at 78% -12%, rgba(42, 105, 153, 0.17), transparent 34%), var(--porcelain);
 }
 
 .sidebar {
@@ -224,7 +229,7 @@ textarea:focus-visible {
   min-width: 0;
   display: grid;
   grid-template-rows: 64px minmax(0, 1fr) auto;
-  background: var(--porcelain);
+  background: radial-gradient(circle at 100% 0, rgba(37, 103, 153, 0.11), transparent 27%), var(--porcelain);
 }
 
 .topbar {
@@ -234,7 +239,7 @@ textarea:focus-visible {
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--line);
-  background: rgba(252, 252, 251, 0.94);
+  background: rgba(9, 21, 34, 0.88);
   backdrop-filter: blur(12px);
 }
 
@@ -265,7 +270,7 @@ textarea:focus-visible {
 }
 
 .secure-dot {
-  color: #345a80;
+  color: #9bb8d0;
   font-size: 11px;
 }
 
@@ -285,8 +290,8 @@ textarea:focus-visible {
   height: 30px;
   border: 1px solid var(--line-strong);
   border-radius: 50%;
-  background: var(--mist-100);
-  color: var(--navy-800);
+  background: var(--navy-800);
+  color: var(--slate-950);
   font-size: 12px;
 }
 
@@ -309,7 +314,7 @@ textarea:focus-visible {
 
 .thread-head h1 {
   margin: 7px 0 8px;
-  color: var(--charcoal-950);
+  color: var(--slate-950);
   font: 700 30px "STSong", "Noto Serif CJK SC", serif;
   letter-spacing: 0.03em;
 }
@@ -325,7 +330,7 @@ textarea:focus-visible {
   padding: 10px 12px;
   border: 1px solid var(--line);
   background: var(--white);
-  color: var(--navy-800);
+  color: var(--slate-950);
   text-align: left;
   font-size: 12px;
   box-shadow: 0 6px 20px rgba(20, 24, 29, 0.04);
@@ -333,7 +338,7 @@ textarea:focus-visible {
 
 .trace-link:hover {
   border-color: var(--blue-500);
-  background: var(--white);
+  background: #193249;
 }
 
 .trace-link span {
@@ -394,7 +399,7 @@ textarea:focus-visible {
 .message-avatar.user {
   border-color: var(--line-strong);
   background: var(--mist-100);
-  color: var(--charcoal-900);
+  color: var(--slate-950);
 }
 
 .message-avatar.bot {
@@ -453,7 +458,7 @@ textarea:focus-visible {
 
 .withheld-card h2 {
   margin: 5px 0 7px;
-  color: var(--charcoal-950);
+  color: var(--slate-950);
   font: 600 18px "STSong", "Noto Serif CJK SC", serif;
 }
 
@@ -522,7 +527,7 @@ textarea:focus-visible {
 }
 
 .tool-top b {
-  color: var(--charcoal-900);
+  color: var(--slate-950);
   font-size: 13px;
 }
 
@@ -544,7 +549,7 @@ textarea:focus-visible {
   display: flex;
   gap: 15px;
   border-top: 1px solid var(--line);
-  color: #50667e;
+  color: var(--slate-700);
   font: 10px "Cascadia Mono", monospace;
 }
 
@@ -557,7 +562,7 @@ textarea:focus-visible {
   display: flex;
   justify-content: space-between;
   border-top: 1px solid var(--line);
-  color: var(--charcoal-900);
+  color: var(--slate-950);
   font-size: 12px;
   font-weight: 600;
 }
@@ -580,15 +585,15 @@ textarea:focus-visible {
   align-items: flex-start;
   gap: 10px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.84);
+  background: rgba(16, 34, 56, 0.78);
   color: var(--slate-950);
   text-align: left;
 }
 
 .source-card:hover {
   border-color: #8bb4d9;
-  background: var(--white);
-  box-shadow: 0 7px 18px rgba(16, 53, 91, 0.06);
+  background: #193249;
+  box-shadow: 0 7px 20px rgba(0, 0, 0, 0.2);
 }
 
 .source-index {
@@ -619,7 +624,7 @@ textarea:focus-visible {
   display: flex;
   align-items: center;
   gap: 12px;
-  border: 1px solid #d8d1c2;
+  border: 1px solid #5d5039;
   border-left: 3px solid var(--brass-500);
   background: var(--brass-50);
 }
@@ -629,7 +634,7 @@ textarea:focus-visible {
   height: 26px;
   display: grid;
   place-items: center;
-  border: 1px solid #bfb49e;
+  border: 1px solid #75623f;
   border-radius: 50%;
   background: var(--white);
   color: var(--brass-700);
@@ -647,21 +652,21 @@ textarea:focus-visible {
 }
 
 .review-card b {
-  color: var(--charcoal-900);
+  color: var(--slate-950);
   font-size: 12px;
 }
 
 .review-card small {
   margin-top: 3px;
-  color: #566a80;
+  color: var(--slate-700);
   font-size: 10px;
 }
 
 .review-status {
   margin-left: auto;
   padding: 4px 8px;
-  border: 1px solid #b9ae98;
-  background: rgba(255, 255, 255, 0.64);
+  border: 1px solid #75623f;
+  background: rgba(39, 33, 22, 0.72);
   color: var(--brass-700);
   font-size: 11px;
   white-space: nowrap;
@@ -669,7 +674,7 @@ textarea:focus-visible {
 
 .composer-wrap {
   padding: 0 34px 24px;
-  background: linear-gradient(transparent, rgba(252, 252, 251, 0.98) 18%);
+  background: linear-gradient(transparent, rgba(9, 21, 34, 0.98) 18%);
 }
 
 .state-switcher {
@@ -689,9 +694,9 @@ textarea:focus-visible {
 
 .state-switcher button {
   padding: 3px 6px;
-  border: 1px solid #c3d2df;
+  border: 1px solid var(--line-strong);
   background: transparent;
-  color: #5e6e82;
+  color: var(--slate-700);
   font-size: 10px;
 }
 
@@ -700,15 +705,15 @@ textarea:focus-visible {
 }
 
 .state-switcher button.selected {
-  border-color: var(--charcoal-900);
-  background: var(--charcoal-900);
+  border-color: var(--blue-600);
+  background: var(--navy-800);
   color: var(--white);
 }
 
 .composer {
   width: min(844px, 100%);
   margin: auto;
-  border: 1px solid #aebfd0;
+  border: 1px solid var(--line-strong);
   background: var(--white);
   box-shadow: 0 11px 28px rgba(11, 42, 75, 0.1);
 }
@@ -735,7 +740,7 @@ textarea::placeholder {
   display: flex;
   align-items: center;
   gap: 10px;
-  border-top: 1px solid #e1e9f0;
+  border-top: 1px solid var(--line);
   color: var(--slate-500);
   font-size: 10px;
 }
@@ -743,7 +748,7 @@ textarea::placeholder {
 .attach {
   width: 22px;
   height: 22px;
-  border: 1px solid #a9bfd2;
+  border: 1px solid var(--line-strong);
   background: var(--mist-50);
   color: var(--slate-700);
   font-size: 16px;
@@ -779,8 +784,8 @@ textarea:disabled {
   inset: 170px 48px auto;
   padding: 36px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.97);
-  box-shadow: 0 15px 45px rgba(20, 24, 29, 0.12);
+  background: rgba(13, 28, 45, 0.97);
+  box-shadow: 0 18px 52px rgba(0, 0, 0, 0.32);
   text-align: center;
 }
 
@@ -797,7 +802,7 @@ textarea:disabled {
 
 .state-panel h2 {
   margin: 15px 0 7px;
-  color: var(--charcoal-950);
+  color: var(--slate-950);
   font: 600 21px "STSong", "Noto Serif CJK SC", serif;
 }
 
@@ -834,6 +839,17 @@ textarea:disabled {
 
 .scrim {
   display: none;
+}
+
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 0.58s ease, transform 0.58s cubic-bezier(0.22, 0.78, 0.26, 1);
+}
+
+[data-reveal].is-revealed {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 @keyframes pulse {
@@ -891,7 +907,7 @@ textarea:disabled {
     position: sticky;
     z-index: 3;
     top: 0;
-    background: rgba(252, 252, 251, 0.96);
+    background: rgba(9, 21, 34, 0.96);
   }
 
   .menu-button {
@@ -899,7 +915,7 @@ textarea:disabled {
     display: block;
     border: 0;
     background: none;
-    color: var(--navy-900);
+    color: var(--slate-950);
     font-size: 18px;
   }
 

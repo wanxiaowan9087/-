@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+/* global document, window, IntersectionObserver, HTMLElement */
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useChatStore, type PreviewState } from './stores/chat'
 import { mockPreview } from './features/chat/mock-data'
 import { createAgentApi } from './api/client'
@@ -22,6 +23,48 @@ const api = createAgentApi({
   baseUrl: import.meta.env.VITE_API_BASE_URL || '/api/v1',
   accessToken: import.meta.env.VITE_API_ACCESS_TOKEN || '',
 })
+
+let revealObserver: IntersectionObserver | undefined
+
+function observeReveals() {
+  if (!revealObserver) {
+    document.querySelectorAll<HTMLElement>('[data-reveal]').forEach(element => element.classList.add('is-revealed'))
+    return
+  }
+  document.querySelectorAll<HTMLElement>('[data-reveal]:not([data-reveal-observed])').forEach(element => {
+    element.dataset.revealObserved = 'true'
+    revealObserver?.observe(element)
+  })
+}
+
+onMounted(() => {
+  if (!('IntersectionObserver' in window)) {
+    observeReveals()
+    return
+  }
+  revealObserver = new IntersectionObserver(
+    entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-revealed')
+          revealObserver?.unobserve(entry.target)
+        }
+      })
+    },
+    { rootMargin: '0px 0px -8% 0px', threshold: 0.08 },
+  )
+  observeReveals()
+})
+
+onBeforeUnmount(() => revealObserver?.disconnect())
+
+watch(
+  () => [chat.runId, chat.assistantText, chat.previewState],
+  async () => {
+    await nextTick()
+    observeReveals()
+  },
+)
 
 function resetConversation() {
   chat.$reset()
@@ -108,15 +151,15 @@ async function cancelActiveRun() {
       <header class="topbar">
         <button class="menu-button" type="button" aria-label="打开会话列表" @click="chat.toggleNav">☰</button>
         <div class="crumb"><span>会话 /</span> {{ mockPreview.title }} <em>v1.0</em></div>
-        <div class="header-actions"><span class="secure-dot">受控模式</span><button type="button" class="avatar" aria-label="当前用户">唐</button></div>
+        <div class="header-actions"><span class="secure-dot">受控模式</span><button type="button" class="avatar" aria-label="当前用户">访</button></div>
       </header>
 
       <section class="stage" aria-label="聊天工作区">
-        <div class="thread-head"><div><p class="eyebrow">CASE · {{ mockPreview.caseId }}</p><h1>{{ mockPreview.title }}</h1><p>{{ mockPreview.summary }}</p></div><button class="trace-link" type="button"><span>◉</span>运行追踪 <b>{{ chat.runId || '尚未运行' }}</b><i>↗</i></button></div>
+        <div class="thread-head" data-reveal><div><p class="eyebrow">CASE · {{ mockPreview.caseId }}</p><h1>{{ mockPreview.title }}</h1><p>{{ mockPreview.summary }}</p></div><button class="trace-link" type="button"><span>◉</span>运行追踪 <b>{{ chat.runId || '尚未运行' }}</b><i>↗</i></button></div>
         <div class="thread-rule"></div>
-        <article class="message customer"><div class="message-meta"><span class="message-avatar user">唐</span><b>唐世均</b><time>刚刚</time></div><p>{{ submittedQuestion || mockPreview.question }}</p></article>
+        <article class="message customer" data-reveal><div class="message-meta"><span class="message-avatar user">访</span><b>当前用户</b><time>刚刚</time></div><p>{{ submittedQuestion || mockPreview.question }}</p></article>
 
-        <article v-if="chat.runId" class="message agent" :class="{ withheld: Boolean(chat.review) }">
+        <article v-if="chat.runId" class="message agent" data-reveal :class="{ withheld: Boolean(chat.review) }">
           <div class="message-meta"><span class="message-avatar bot">程</span><b>规程台助手</b><span class="model-chip">{{ chat.previewState === 'loading' ? '正在生成' : chat.review ? '等待审核' : chat.runOutcome === 'cancelled' ? '已取消' : '已完成' }}</span><time>刚刚</time></div>
           <section v-if="chat.review" class="withheld-card" aria-label="候选答案已扣留，等待人工审核">
             <div class="withheld-seal" aria-hidden="true"><span></span><span></span><span></span></div>
