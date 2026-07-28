@@ -77,6 +77,11 @@ class PlatformTransaction(Protocol):
         status: str,
         now: datetime,
         assistant_content: str | None = None,
+        model: str | None = None,
+        retrieval_strategy: str | None = None,
+        confidence_threshold: float | None = None,
+        steps: list[dict[str, Any]] | None = None,
+        citations: list[dict[str, Any]] | None = None,
     ) -> RunRecord | None: ...
 
     async def create_feedback(
@@ -138,6 +143,7 @@ class PlatformTransaction(Protocol):
     async def create_review(
         self,
         *,
+        review_id: UUID | None = None,
         run_id: UUID,
         session_id: UUID,
         owner_id: str,

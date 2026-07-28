@@ -273,6 +273,7 @@ class AgentRuntime:
                     "candidate passed deterministic release policy",
                 )
             memory_warning = await self._extract_memory(request)
+            review_id = str(uuid4()) if release.withheld else None
             return AgentRunResult(
                 run_id=run_id,
                 status=state.status,
@@ -292,6 +293,7 @@ class AgentRuntime:
                 ),
                 model_name=draft.model_name,
                 retrieval_strategy=retrieval.strategy,
+                review_id=review_id,
             )
         except asyncio.CancelledError:
             trace.cancel_open_steps()
@@ -432,6 +434,7 @@ class AgentRuntime:
                 "safe no-evidence refusal selected",
             )
         memory_warning = await self._extract_memory(request)
+        review_id = str(uuid4()) if release.withheld else None
         return AgentRunResult(
             run_id=run_id,
             status=state.status,
@@ -448,6 +451,7 @@ class AgentRuntime:
                 ErrorCode.REVIEW_REQUIRED if release.withheld else None
             ),
             retrieval_strategy=retrieval.strategy,
+            review_id=review_id,
         )
 
     async def _extract_memory(self, request: AgentRequest) -> str | None:

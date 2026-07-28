@@ -9,7 +9,7 @@ from typing import Any, cast
 from uuid import UUID
 
 from backend.app.application.cursor import CursorCodec
-from backend.app.application.ports import RunExecution, RunExecutorPort
+from backend.app.application.ports import HealthProbePort, RunExecution, RunExecutorPort
 from backend.app.application.streaming import RunCoordinator, encode_sse
 from backend.app.core.context import request_id_var
 from backend.app.core.errors import AppError, conflict, not_found
@@ -32,6 +32,7 @@ from backend.app.schemas.resources import (
     ReviewDecisionRequest,
     ReviewDecisionResult,
     ReviewTask,
+    ReadyStatus,
     RunTrace,
     Session,
 )
@@ -46,12 +47,16 @@ class PlatformService:
         cursor_secret: str,
         idempotency_ttl_seconds: int,
         stream_retention_seconds: int,
+        redis_probe: HealthProbePort | None = None,
+        vector_probe: HealthProbePort | None = None,
     ) -> None:
         self.repository = repository
         self.executor = executor
         self.cursor = CursorCodec(cursor_secret)
         self.idempotency_ttl = timedelta(seconds=idempotency_ttl_seconds)
         self.stream_retention = timedelta(seconds=stream_retention_seconds)
+        self.redis_probe = redis_probe
+        self.vector_probe = vector_probe
         self.coordinator = RunCoordinator(repository, executor)
 
     @staticmethod
@@ -95,6 +100,31 @@ class PlatformService:
     @staticmethod
     def _envelope(data: Any) -> Envelope[Any]:
         return Envelope(data=data, request_id=request_id_var.get())
+
+    async def readiness(self) -> Envelope[ReadyStatus]:
+        postgres = "available" if await self.repository.ping() else "unavailable"
+        redis = await self.redis_probe.health() if self.redis_probe else "not_checked"
+        vector_store = await self.vector_probe.health() if self.vector_probe else "not_checked"
+        model = await self.executor.health()
+        if postgres != "available":
+            raise AppError(
+                "STORAGE_UNAVAILABLE",
+                "required storage is unavailable",
+                503,
+                {"retryable": True},
+            )
+        return Envelope(
+            data=ReadyStatus(
+                status="ready",
+                dependencies={
+                    "postgresql": postgres,
+                    "redis": redis,
+                    "vector_store": vector_store,
+                    "model": model,
+                },
+            ),
+            request_id=request_id_var.get(),
+        )
 
     async def create_session(
         self, principal: Principal, key: str, request: CreateSessionRequest
@@ -210,6 +240,33 @@ class PlatformService:
                 user_message = await tx.get_message(principal.subject_id, run.user_message_id)
                 if user_message is None:
                     raise not_found()
+                retained_events = await tx.list_events(run.id, 0)
+                latest_sequence = retained_events[-1].sequence if retained_events else 0
+                if last_event_id > latest_sequence:
+                    raise AppError(
+                        "BAD_REQUEST",
+                        "Last-Event-ID is ahead of the run event stream",
+                        400,
+                    )
+                replay_expired = bool(
+                    run.ended_at
+                    and now - run.ended_at > self.stream_retention
+                    and last_event_id < latest_sequence
+                )
+                replay_gap = bool(
+                    last_event_id > 0
+                    and (
+                        not retained_events
+                        or retained_events[0].sequence > last_event_id + 1
+                    )
+                )
+                if replay_expired or replay_gap:
+                    raise AppError(
+                        "STREAM_REPLAY_EXPIRED",
+                        "the requested stream replay window has expired",
+                        410,
+                        {"retryable": False},
+                    )
             else:
                 user_message, assistant, run = await tx.prepare_chat(
                     owner_id=principal.subject_id,
@@ -260,6 +317,8 @@ class PlatformService:
             user_message_id=run.user_message_id,
             assistant_message_id=run.assistant_message_id,
             input_content=user_message.content,
+            attempt=run.attempt,
+            retry_of_user_message_id=run.retry_of_user_message_id,
         )
         await self.coordinator.ensure_started(execution)
 

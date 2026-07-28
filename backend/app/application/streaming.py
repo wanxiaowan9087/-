@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import asdict, is_dataclass
 from datetime import UTC, datetime
-from typing import Any
+from enum import Enum
+from typing import Any, cast
 from uuid import UUID
 
 from pydantic import TypeAdapter, ValidationError
@@ -19,6 +21,22 @@ event_adapter: TypeAdapter[SseEvent] = TypeAdapter(SseEvent)
 def encode_sse(event: dict[str, Any]) -> bytes:
     data = json.dumps(event, ensure_ascii=False, separators=(",", ":"))
     return f"id: {event['sequence']}\nevent: {event['event_type']}\ndata: {data}\n\n".encode()
+
+
+def _jsonable(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, UUID):
+        return str(value)
+    if isinstance(value, Enum):
+        return value.value
+    if is_dataclass(value):
+        return {key: _jsonable(item) for key, item in asdict(cast(Any, value)).items()}
+    if isinstance(value, dict):
+        return {str(key): _jsonable(item) for key, item in value.items()}
+    if isinstance(value, tuple | list):
+        return [_jsonable(item) for item in value]
+    return value
 
 
 class RunCoordinator:
@@ -85,6 +103,42 @@ class RunCoordinator:
                             if outcome == "completed"
                             else None,
                         )
+                        get_outcome = getattr(self._executor, "get_outcome", None)
+                        rich_outcome = (
+                            await get_outcome(execution.run_id) if callable(get_outcome) else None
+                        )
+                        if rich_outcome is not None:
+                            await tx.update_run(
+                                execution.run_id,
+                                expected_statuses={outcome},
+                                status=outcome,
+                                now=now,
+                                model=rich_outcome.model_name,
+                                retrieval_strategy=rich_outcome.retrieval_strategy,
+                                confidence_threshold=rich_outcome.confidence_threshold,
+                                steps=[_jsonable(step) for step in rich_outcome.trace],
+                                citations=[
+                                    _jsonable(citation) for citation in rich_outcome.citations
+                                ],
+                            )
+                            if (
+                                outcome == "needs_review"
+                                and rich_outcome.candidate_content
+                                and rich_outcome.review_id
+                            ):
+                                await tx.create_review(
+                                    review_id=UUID(rich_outcome.review_id),
+                                    run_id=execution.run_id,
+                                    session_id=execution.session_id,
+                                    owner_id=execution.subject_id,
+                                    user_message_id=execution.user_message_id,
+                                    candidate_content=rich_outcome.candidate_content,
+                                    reason_codes=[
+                                        reason.value for reason in rich_outcome.review_reasons
+                                    ],
+                                    confidence=rich_outcome.confidence,
+                                    now=now,
+                                )
                     elif event_type == "error":
                         await tx.update_run(
                             execution.run_id,

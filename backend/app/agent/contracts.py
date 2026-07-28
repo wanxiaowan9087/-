@@ -155,6 +155,7 @@ class ModelDraft:
     cited_chunk_ids: tuple[str, ...] = ()
     tool_executions: tuple[ToolExecution, ...] = ()
     model_name: str = "unknown"
+    retrieval_strategy: str = "vector+bm25+rrf+rerank"
 
 
 @dataclass(frozen=True)
@@ -173,6 +174,7 @@ class AgentRunResult:
     error_code: ErrorCode | None = None
     model_name: str = "unknown"
     retrieval_strategy: str = "vector+bm25+rrf+rerank"
+    review_id: str | None = None
 
 
 @dataclass(frozen=True)

@@ -13,6 +13,7 @@ from backend.app.adapters.sql.database import create_engine, create_session_fact
 from backend.app.adapters.sql.repository import SqlPlatformRepository
 from backend.app.api.v1.routes import router
 from backend.app.application.ports import RunExecutorPort, UnavailableRunExecutor
+from backend.app.bootstrap import build_run_executor
 from backend.app.application.service import PlatformService
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.context import bind_context, new_request_id
@@ -42,7 +43,7 @@ def create_app(
         )
     else:
         repository_adapter = repository
-    executor_adapter = executor or UnavailableRunExecutor()
+    executor_adapter = executor or build_run_executor(settings)
     redis_adapter = redis_adapter or OptionalRedisAdapter(
         settings.redis_url, settings.redis_timeout_seconds
     )
@@ -52,8 +53,8 @@ def create_app(
         cursor_secret=settings.cursor_signing_secret,
         idempotency_ttl_seconds=settings.idempotency_ttl_seconds,
         stream_retention_seconds=settings.stream_retention_seconds,
+        redis_probe=redis_adapter,
     )
-    service.redis_adapter = redis_adapter  # type: ignore[attr-defined]
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -118,6 +119,8 @@ def create_app(
             operation["x-required-role"] = role
             if role == "anonymous":
                 operation["security"] = []
+        stream_content = document["paths"]["/chat/stream"]["post"]["responses"]["200"]["content"]
+        stream_content.pop("application/json", None)
         return document
 
     app.openapi = contract_openapi  # type: ignore[method-assign]

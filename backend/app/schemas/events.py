@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import Field, RootModel
 
 from backend.app.schemas.common import ContractModel
 from backend.app.schemas.resources import Citation
@@ -158,6 +158,10 @@ SseEvent = Annotated[
     | ErrorEvent,
     Field(discriminator="event_type"),
 ]
+
+
+class SseEventSchema(RootModel[SseEvent]):
+    """OpenAPI-only wrapper for the discriminated SSE event union."""
 
 
 TERMINAL_EVENT_TYPES = frozenset({"done", "error"})

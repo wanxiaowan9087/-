@@ -305,11 +305,26 @@ class MemoryPlatformRepository:
         status: str,
         now: datetime,
         assistant_content: str | None = None,
+        model: str | None = None,
+        retrieval_strategy: str | None = None,
+        confidence_threshold: float | None = None,
+        steps: list[dict[str, Any]] | None = None,
+        citations: list[dict[str, Any]] | None = None,
     ) -> RunRecord | None:
         run = self.runs.get(run_id)
         if run is None or run.status not in expected_statuses:
             return None
         run.status = status
+        if model is not None:
+            run.model = model
+        if retrieval_strategy is not None:
+            run.retrieval_strategy = retrieval_strategy
+        if confidence_threshold is not None:
+            run.confidence_threshold = confidence_threshold
+        if steps is not None:
+            run.steps = copy.deepcopy(steps)
+        if citations is not None:
+            run.citations = copy.deepcopy(citations)
         if status in {"completed", "cancelled", "failed", "rejected", "needs_review"}:
             run.ended_at = now
         assistant = self.messages[run.assistant_message_id]
@@ -317,6 +332,8 @@ class MemoryPlatformRepository:
         assistant.updated_at = now
         if assistant_content is not None and status == "completed":
             assistant.content = assistant_content
+        if citations is not None:
+            assistant.citations = copy.deepcopy(citations)
         return run
 
     async def create_feedback(
@@ -461,6 +478,7 @@ class MemoryPlatformRepository:
     async def create_review(
         self,
         *,
+        review_id: UUID | None = None,
         run_id: UUID,
         session_id: UUID,
         owner_id: str,
@@ -471,7 +489,7 @@ class MemoryPlatformRepository:
         now: datetime,
     ) -> ReviewRecord:
         item = ReviewRecord(
-            uuid4(),
+            review_id or uuid4(),
             run_id,
             session_id,
             owner_id,

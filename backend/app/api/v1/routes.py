@@ -9,11 +9,12 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from backend.app.api.dependencies import get_service
 from backend.app.application.service import PlatformService
 from backend.app.core.context import request_id_var
-from backend.app.core.errors import AppError
 from backend.app.core.security import Principal, get_principal, require_reviewer
-from backend.app.schemas.common import Envelope, Page
+from backend.app.schemas.common import Envelope, ErrorEnvelope, Page
+from backend.app.schemas.events import SseEventSchema
 from backend.app.schemas.resources import (
     CancelRunRequest,
+    CancelRunResult,
     CreateFeedbackRequest,
     CreateSessionRequest,
     DeleteMemoryResult,
@@ -39,6 +40,25 @@ IdempotencyKey = Annotated[
 ]
 
 
+def error_responses(*status_codes: int) -> dict[int, dict[str, Any]]:
+    descriptions = {
+        400: "请求语义或游标不合法",
+        401: "缺少或无效身份",
+        403: "角色或对象级权限不足",
+        404: "资源不存在或不可见",
+        409: "资源、幂等键或状态冲突",
+        410: "SSE 重放窗口已过期",
+        422: "请求结构校验失败",
+        429: "请求频率超过限制",
+        500: "内部错误",
+        503: "必需依赖不可用",
+    }
+    return {
+        status: {"model": ErrorEnvelope, "description": descriptions[status]}
+        for status in status_codes
+    }
+
+
 def json_result(status: int, body: Envelope[Any], replayed: bool) -> JSONResponse:
     return JSONResponse(
         status_code=status,
@@ -52,6 +72,7 @@ def json_result(status: int, body: Envelope[Any], replayed: bool) -> JSONRespons
     response_model=Envelope[LiveStatus],
     operation_id="getLiveness",
     tags=["Health"],
+    responses=error_responses(500),
 )
 async def liveness() -> Envelope[LiveStatus]:
     return Envelope(data=LiveStatus(), request_id=request_id_var.get())
@@ -62,31 +83,10 @@ async def liveness() -> Envelope[LiveStatus]:
     response_model=Envelope[ReadyStatus],
     operation_id="getReadiness",
     tags=["Health"],
+    responses=error_responses(503),
 )
 async def readiness(service: PlatformService = Depends(get_service)) -> Envelope[ReadyStatus]:
-    postgres = "available" if await service.repository.ping() else "unavailable"
-    redis_adapter = getattr(service, "redis_adapter", None)
-    redis_state = await redis_adapter.health() if redis_adapter else "not_checked"
-    model_state = await service.executor.health()
-    if postgres != "available":
-        raise AppError(
-            "STORAGE_UNAVAILABLE",
-            "required storage is unavailable",
-            503,
-            {"retryable": True},
-        )
-    return Envelope(
-        data=ReadyStatus(
-            status="ready",
-            dependencies={
-                "postgresql": postgres,
-                "redis": redis_state,
-                "vector_store": "not_checked",
-                "model": model_state,
-            },
-        ),
-        request_id=request_id_var.get(),
-    )
+    return await service.readiness()
 
 
 @router.get(
@@ -94,6 +94,7 @@ async def readiness(service: PlatformService = Depends(get_service)) -> Envelope
     response_model=Envelope[Page[Session]],
     operation_id="listSessions",
     tags=["Sessions"],
+    responses=error_responses(400, 401, 403, 422, 429, 500, 503),
 )
 async def list_sessions(
     cursor: Annotated[str | None, Query(min_length=1, max_length=512)] = None,
@@ -110,6 +111,7 @@ async def list_sessions(
     status_code=201,
     operation_id="createSession",
     tags=["Sessions"],
+    responses=error_responses(400, 401, 403, 409, 422, 429, 500, 503),
 )
 async def create_session(
     request: CreateSessionRequest,
@@ -126,6 +128,7 @@ async def create_session(
     response_model=Envelope[Session],
     operation_id="getSession",
     tags=["Sessions"],
+    responses=error_responses(401, 403, 404, 422, 500, 503),
 )
 async def get_session(
     session_id: UUID,
@@ -140,6 +143,7 @@ async def get_session(
     response_model=Envelope[Page[Message]],
     operation_id="listSessionMessages",
     tags=["Sessions"],
+    responses=error_responses(400, 401, 403, 404, 422, 500, 503),
 )
 async def list_messages(
     session_id: UUID,
@@ -151,7 +155,24 @@ async def list_messages(
     return await service.list_messages(principal, session_id, cursor, limit)
 
 
-@router.post("/chat/stream", operation_id="streamChat", tags=["Chat"])
+@router.post(
+    "/chat/stream",
+    operation_id="streamChat",
+    tags=["Chat"],
+    responses={
+        200: {
+            "description": "Agent SSE 事件流",
+            "content": {
+                "text/event-stream": {
+                    "schema": SseEventSchema.model_json_schema(
+                        ref_template="#/components/schemas/{model}"
+                    )
+                }
+            },
+        },
+        **error_responses(400, 401, 403, 404, 409, 410, 422, 429, 500, 503),
+    },
+)
 async def stream_chat(
     request: NewChatRequest | RetryChatRequest,
     key: IdempotencyKey,
@@ -181,6 +202,7 @@ async def stream_chat(
     status_code=201,
     operation_id="createMessageFeedback",
     tags=["Chat"],
+    responses=error_responses(400, 401, 403, 404, 409, 422, 429, 500, 503),
 )
 async def create_feedback(
     message_id: UUID,
@@ -193,7 +215,18 @@ async def create_feedback(
     return json_result(status, body, replayed)
 
 
-@router.post("/runs/{run_id}/cancel", operation_id="cancelRun", tags=["Runs"])
+@router.post(
+    "/runs/{run_id}/cancel",
+    operation_id="cancelRun",
+    tags=["Runs"],
+    responses={
+        202: {
+            "model": Envelope[CancelRunResult],
+            "description": "取消意图已持久化",
+        },
+        **error_responses(401, 403, 404, 409, 422, 429, 500, 503),
+    },
+)
 async def cancel_run(
     run_id: UUID,
     key: IdempotencyKey,
@@ -212,6 +245,7 @@ async def cancel_run(
     response_model=Envelope[RunTrace],
     operation_id="getRunTrace",
     tags=["Runs"],
+    responses=error_responses(401, 403, 404, 422, 500, 503),
 )
 async def get_trace(
     run_id: UUID,
@@ -226,6 +260,7 @@ async def get_trace(
     response_model=Envelope[Page[Memory]],
     operation_id="listMemories",
     tags=["Memories"],
+    responses=error_responses(400, 401, 403, 422, 500, 503),
 )
 async def list_memories(
     cursor: Annotated[str | None, Query(min_length=1, max_length=512)] = None,
@@ -243,6 +278,7 @@ async def list_memories(
     response_model=Envelope[Memory],
     operation_id="updateMemory",
     tags=["Memories"],
+    responses=error_responses(400, 401, 403, 404, 409, 422, 500, 503),
 )
 async def update_memory(
     memory_id: UUID,
@@ -260,6 +296,7 @@ async def update_memory(
     response_model=Envelope[DeleteMemoryResult],
     operation_id="deleteMemory",
     tags=["Memories"],
+    responses=error_responses(401, 403, 404, 409, 422, 500, 503),
 )
 async def delete_memory(
     memory_id: UUID,
@@ -277,6 +314,7 @@ async def delete_memory(
     response_model=Envelope[Page[ReviewTask]],
     operation_id="listReviews",
     tags=["Reviews"],
+    responses=error_responses(400, 401, 403, 422, 500, 503),
 )
 async def list_reviews(
     cursor: Annotated[str | None, Query(min_length=1, max_length=512)] = None,
@@ -293,6 +331,7 @@ async def list_reviews(
     response_model=Envelope[ReviewDecisionResult],
     operation_id="decideReview",
     tags=["Reviews"],
+    responses=error_responses(400, 401, 403, 404, 409, 422, 429, 500, 503),
 )
 async def decide_review(
     review_id: UUID,

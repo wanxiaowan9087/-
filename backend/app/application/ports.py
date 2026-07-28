@@ -15,6 +15,8 @@ class RunExecution:
     user_message_id: UUID
     assistant_message_id: UUID
     input_content: str
+    attempt: int = 1
+    retry_of_user_message_id: UUID | None = None
 
 
 class RunExecutorPort(Protocol):
@@ -27,6 +29,18 @@ class RunExecutorPort(Protocol):
     async def health(self) -> str: ...
 
     async def close(self) -> None: ...
+
+
+class RunOutcomePort(Protocol):
+    """Optional rich outcome seam for persistence after terminal streaming."""
+
+    async def get_outcome(self, run_id: UUID) -> Any | None: ...
+
+
+class HealthProbePort(Protocol):
+    """Small seam for optional infrastructure readiness checks."""
+
+    async def health(self) -> str: ...
 
 
 class UnavailableRunExecutor:
@@ -51,4 +65,8 @@ class UnavailableRunExecutor:
         return "not_checked"
 
     async def close(self) -> None:
+        return None
+
+    async def get_outcome(self, run_id: UUID) -> Any | None:
+        del run_id
         return None

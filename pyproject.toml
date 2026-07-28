@@ -21,6 +21,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+ai = [
+  "chromadb==1.5.9",
+  "dashscope==1.26.4",
+  "langchain==1.3.14",
+  "langchain-community==0.4.2",
+]
 dev = [
   "aiosqlite==0.21.0",
   "mypy==1.17.0",
