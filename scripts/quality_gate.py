@@ -82,6 +82,11 @@ def _python_tool(environment_name: str, module: str, *args: str) -> list[str]:
     return _python("-m", module, *args)
 
 
+def _npm(*args: str) -> list[str]:
+    executable = shutil.which("npm.cmd") or shutil.which("npm") or "npm"
+    return [executable, *args]
+
+
 def _git_head() -> str:
     result = _run("git-head", ["git", "rev-parse", "HEAD"])
     if result.exit_code != 0:
@@ -178,10 +183,10 @@ def run_rag(sha: str) -> list[CommandResult]:
 
 def run_frontend(_: str) -> list[CommandResult]:
     return [
-        _run("frontend-lint", ["npm", "run", "lint"], cwd=ROOT / "frontend"),
-        _run("frontend-types", ["npm", "run", "typecheck"], cwd=ROOT / "frontend"),
-        _run("frontend-tests", ["npm", "run", "test", "--", "--run"], cwd=ROOT / "frontend"),
-        _run("frontend-build", ["npm", "run", "build"], cwd=ROOT / "frontend"),
+        _run("frontend-lint", _npm("run", "lint"), cwd=ROOT / "frontend"),
+        _run("frontend-types", _npm("run", "typecheck"), cwd=ROOT / "frontend"),
+        _run("frontend-tests", _npm("run", "test", "--", "--run"), cwd=ROOT / "frontend"),
+        _run("frontend-build", _npm("run", "build"), cwd=ROOT / "frontend"),
     ]
 
 
@@ -213,7 +218,7 @@ def run_security(_: str) -> list[CommandResult]:
         return [_missing("security", "pip-audit is unavailable; dependency vulnerability gate cannot run")]
     return [
         _run("security-python", [pip_audit, "-r", "requirements.lock"]),
-        _run("security-node", ["npm", "audit", "--omit=dev", "--audit-level=high"], cwd=ROOT / "frontend"),
+        _run("security-node", _npm("audit", "--omit=dev", "--audit-level=high"), cwd=ROOT / "frontend"),
     ]
 
 
