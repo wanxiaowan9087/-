@@ -89,6 +89,11 @@ def _git_head() -> str:
     return result.output.strip()
 
 
+def _working_tree_is_clean() -> bool:
+    result = _run("git-status", ["git", "status", "--porcelain"])
+    return result.exit_code == 0 and not result.output.strip()
+
+
 def run_contract(_: str) -> list[CommandResult]:
     return [
         _run(
@@ -270,6 +275,8 @@ def main() -> int:
     actual_sha = _git_head()
     if args.integration_sha != actual_sha or len(actual_sha) != 40:
         parser.error("--integration-sha must exactly match the current 40-character HEAD SHA")
+    if args.command == "all" and not _working_tree_is_clean():
+        parser.error("the all gate requires a clean working tree at the integration SHA")
     selected = COMMANDS if args.command == "all" else (args.command,)
     started_at = datetime.now(UTC)
     results: list[CommandResult] = []

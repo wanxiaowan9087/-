@@ -17,6 +17,13 @@ export interface ReviewView {
   confidence: number | null
 }
 
+export interface ToolView {
+  toolCallId: string
+  toolName: string
+  outcome: 'running' | 'succeeded' | 'failed' | 'timeout' | 'cancelled'
+  detail: string | null
+}
+
 function readText(payload: Record<string, unknown>, key: string): string | null {
   const value = payload[key]
   return typeof value === 'string' && value.trim() ? value : null
@@ -45,6 +52,10 @@ export const useChatStore = defineStore('chat', {
     review: null as ReviewView | null,
     errorMessage: null as string | null,
     runOutcome: null as 'completed' | 'needs_review' | 'cancelled' | null,
+    lastStatus: null as string | null,
+    tools: [] as ToolView[],
+    processedEventKeys: [] as string[],
+    terminal: false,
   }),
   actions: {
     setPreviewState(state: PreviewState) { this.previewState = state },
@@ -60,13 +71,40 @@ export const useChatStore = defineStore('chat', {
       this.review = null
       this.errorMessage = null
       this.runOutcome = null
+      this.lastStatus = null
+      this.tools = []
+      this.processedEventKeys = []
+      this.terminal = false
       this.previewState = 'loading'
     },
     receiveStreamEvent(event: StreamEvent) {
+      if (this.runId && event.run_id !== this.runId) return
+      const eventKey = `${event.run_id}:${event.sequence}`
+      if (this.terminal || this.processedEventKeys.includes(eventKey)) return
+      this.processedEventKeys.push(eventKey)
       this.lastEventId = event.sequence
       this.runId = event.run_id
       if (event.event_type === 'meta') {
         this.userMessageId = readText(event.payload, 'user_message_id')
+      }
+      if (event.event_type === 'status') {
+        this.lastStatus = readText(event.payload, 'phase')
+      }
+      if (event.event_type === 'tool_start') {
+        const toolCallId = readText(event.payload, 'tool_call_id')
+        const toolName = readText(event.payload, 'tool_name')
+        if (toolCallId && toolName) {
+          this.tools.push({ toolCallId, toolName, outcome: 'running', detail: null })
+        }
+      }
+      if (event.event_type === 'tool_end') {
+        const toolCallId = readText(event.payload, 'tool_call_id')
+        const outcome = readText(event.payload, 'outcome')
+        const tool = this.tools.find((item) => item.toolCallId === toolCallId)
+        if (tool && (outcome === 'succeeded' || outcome === 'failed' || outcome === 'timeout' || outcome === 'cancelled')) {
+          tool.outcome = outcome
+          tool.detail = readText(event.payload, 'result_preview') ?? readText(event.payload, 'error_code')
+        }
       }
       if (event.event_type === 'delta') {
         this.assistantText += readText(event.payload, 'content') ?? ''
@@ -104,15 +142,18 @@ export const useChatStore = defineStore('chat', {
           ? outcome
           : null
         this.previewState = this.review ? 'disabled' : 'ready'
+        this.terminal = true
       }
       if (event.event_type === 'error') {
         this.errorMessage = readText(event.payload, 'message')
         this.previewState = 'error'
+        this.terminal = true
       }
     },
     markCancellationRequested() {
       this.runOutcome = 'cancelled'
       this.previewState = 'ready'
+      this.terminal = true
     },
   },
 })

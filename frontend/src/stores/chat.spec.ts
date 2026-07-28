@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useChatStore } from './chat'
 
-const streamEvent = (eventType: 'meta' | 'delta' | 'citation' | 'review_required' | 'done') => ({
+const streamEvent = (eventType: 'meta' | 'status' | 'tool_start' | 'tool_end' | 'delta' | 'citation' | 'review_required' | 'done') => ({
   event_type: eventType,
   sequence: 1,
   request_id: 'request-1',
@@ -58,5 +58,23 @@ describe('chat preview state', () => {
     })
 
     expect(store.userMessageId).toBe('message-1')
+  })
+
+  it('consumes status and tool events, de-duplicates replay, and ignores late events after completion', () => {
+    const store = useChatStore()
+    store.beginRun('session-1')
+    store.receiveStreamEvent({ ...streamEvent('meta'), payload: { user_message_id: 'message-1' } })
+    store.receiveStreamEvent({ ...streamEvent('status'), sequence: 2, event_type: 'status', payload: { phase: 'calling_tool' } })
+    store.receiveStreamEvent({ ...streamEvent('tool_start'), sequence: 3, event_type: 'tool_start', payload: { tool_call_id: 'tool-1', tool_name: 'search', critical: false } })
+    store.receiveStreamEvent({ ...streamEvent('tool_end'), sequence: 4, event_type: 'tool_end', payload: { tool_call_id: 'tool-1', outcome: 'succeeded', result_preview: 'one result' } })
+    store.receiveStreamEvent({ ...streamEvent('delta'), sequence: 5, payload: { content: 'answer' } })
+    store.receiveStreamEvent({ ...streamEvent('delta'), sequence: 5, payload: { content: 'answer' } })
+    store.receiveStreamEvent({ ...streamEvent('done'), sequence: 6, payload: { outcome: 'completed' } })
+    store.receiveStreamEvent({ ...streamEvent('delta'), sequence: 7, payload: { content: ' late' } })
+
+    expect(store.lastStatus).toBe('calling_tool')
+    expect(store.tools).toEqual([{ toolCallId: 'tool-1', toolName: 'search', outcome: 'succeeded', detail: 'one result' }])
+    expect(store.assistantText).toBe('answer')
+    expect(store.terminal).toBe(true)
   })
 })
