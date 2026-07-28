@@ -42,7 +42,7 @@ pip install --require-hashes -r requirements.lock
 $env:DASHSCOPE_API_KEY='your-key'
 ```
 
-真实运行时使用 `qwen3-max` 与 `text-embedding-v4`，Chroma 数据默认写入后端的 `data/chroma`；Docker Compose 使用独立 `agent-chroma` 卷保持向量数据。
+真实运行时使用 `qwen3-max` 与 `text-embedding-v4`，Chroma 数据默认写入后端的 `data/chroma`；Docker Compose 使用独立 `agent-chroma` 卷保持向量数据。服务启动时会由已持久化的 Chroma 分片重建内存 BM25 索引，因此重启后仍保持向量 + 词法的混合检索。
 
 ## 验证
 

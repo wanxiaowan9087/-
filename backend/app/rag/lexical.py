@@ -28,10 +28,18 @@ def tokenize(text: str) -> tuple[str, ...]:
 class BM25KeywordIndex:
     """Deterministic in-process BM25 adapter for tests and small deployments."""
 
-    def __init__(self, *, k1: float = 1.5, b: float = 0.75) -> None:
+    def __init__(
+        self,
+        chunks: Sequence[Chunk] = (),
+        *,
+        k1: float = 1.5,
+        b: float = 0.75,
+    ) -> None:
         self._k1 = k1
         self._b = b
-        self._chunks: dict[str, Chunk] = {}
+        self._chunks: dict[str, Chunk] = {
+            chunk.chunk_id: chunk for chunk in chunks
+        }
 
     async def replace_document(
         self,

@@ -50,10 +50,11 @@ def build_run_executor(
         embeddings = DashScopeEmbeddingAdapter(
             DashScopeEmbeddings(model=settings.agent_embedding_model_name)
         )
+        vector_store = ChromaVectorStore(collection)
         retriever = HybridRetriever(
             embeddings,
-            ChromaVectorStore(collection),
-            BM25KeywordIndex(),
+            vector_store,
+            BM25KeywordIndex(vector_store.load_all_chunks()),
             IdentityReranker(),
         )
         react_engine = LangChainReActEngine(

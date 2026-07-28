@@ -81,6 +81,23 @@ class ChromaVectorStore:
             for document, metadata in zip(documents, metadatas)
         )
 
+    def load_all_chunks(self) -> tuple[Chunk, ...]:
+        """Rebuild an in-process lexical index from durable Chroma records.
+
+        Chroma owns vector persistence, while BM25 deliberately stays a small,
+        deterministic in-process implementation. Loading its source chunks at
+        bootstrap prevents a process restart from silently degrading hybrid
+        retrieval to vector-only retrieval.
+        """
+
+        result = self._collection.get(include=["documents", "metadatas"])
+        documents = result.get("documents", []) if result else []
+        metadatas = result.get("metadatas", []) if result else []
+        return tuple(
+            _chunk(document, metadata)
+            for document, metadata in zip(documents, metadatas)
+        )
+
 
 def _metadata(chunk: Chunk) -> dict[str, Any]:
     safe_custom = {
