@@ -6,13 +6,16 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from backend.app.api.dependencies import get_service
+from backend.app.api.dependencies import get_identity_service, get_service
+from backend.app.application.identity import IdentityService, IdentityUser, IssuedSession
 from backend.app.application.service import PlatformService
 from backend.app.core.context import request_id_var
 from backend.app.core.security import Principal, get_principal, require_reviewer
 from backend.app.schemas.common import Envelope, ErrorEnvelope, Page
 from backend.app.schemas.events import SseEventSchema
 from backend.app.schemas.resources import (
+    AuthSession,
+    AuthUser,
     CancelRunRequest,
     CancelRunResult,
     CreateFeedbackRequest,
@@ -20,10 +23,12 @@ from backend.app.schemas.resources import (
     DeleteMemoryResult,
     Feedback,
     LiveStatus,
+    LoginRequest,
     Memory,
     Message,
     NewChatRequest,
     ReadyStatus,
+    RegisterRequest,
     RetryChatRequest,
     ReviewDecisionRequest,
     ReviewDecisionResult,
@@ -65,6 +70,76 @@ def json_result(status: int, body: Envelope[Any], replayed: bool) -> JSONRespons
         content=body.model_dump(mode="json"),
         headers={"Idempotency-Replayed": str(replayed).lower()},
     )
+
+
+def auth_user(user: IdentityUser) -> AuthUser:
+    return AuthUser(
+        id=user.id,
+        username=user.username,
+        nickname=user.nickname,
+        avatar_url=user.avatar_url,
+        role=user.role,
+        created_at=user.created_at,
+    )
+
+
+def auth_session(grant: IssuedSession) -> AuthSession:
+    return AuthSession(
+        access_token=grant.access_token,
+        expires_at=grant.expires_at,
+        user=auth_user(grant.user),
+    )
+
+
+@router.post(
+    "/auth/register",
+    response_model=Envelope[AuthSession],
+    status_code=201,
+    operation_id="registerUser",
+    tags=["Authentication"],
+    responses=error_responses(409, 422, 500),
+)
+async def register(
+    request: RegisterRequest,
+    identity: IdentityService = Depends(get_identity_service),
+) -> Envelope[AuthSession]:
+    grant = await identity.register(
+        username=request.username,
+        password=request.password,
+        nickname=request.nickname,
+        avatar_url=request.avatar_url,
+    )
+    return Envelope(data=auth_session(grant), request_id=request_id_var.get())
+
+
+@router.post(
+    "/auth/login",
+    response_model=Envelope[AuthSession],
+    operation_id="loginUser",
+    tags=["Authentication"],
+    responses=error_responses(401, 422, 500),
+)
+async def login(
+    request: LoginRequest,
+    identity: IdentityService = Depends(get_identity_service),
+) -> Envelope[AuthSession]:
+    grant = await identity.login(username=request.username, password=request.password)
+    return Envelope(data=auth_session(grant), request_id=request_id_var.get())
+
+
+@router.get(
+    "/auth/me",
+    response_model=Envelope[AuthUser],
+    operation_id="getCurrentUser",
+    tags=["Authentication"],
+    responses=error_responses(401, 404, 500),
+)
+async def current_user(
+    principal: Principal = Depends(get_principal),
+    identity: IdentityService = Depends(get_identity_service),
+) -> Envelope[AuthUser]:
+    user = await identity.profile(principal.subject_id)
+    return Envelope(data=auth_user(user), request_id=request_id_var.get())
 
 
 @router.get(

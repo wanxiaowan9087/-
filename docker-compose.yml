@@ -40,7 +40,7 @@ services:
     environment:
       APP_DATABASE_URL: postgresql+asyncpg://agent:agent@postgres:5432/agent
       APP_REDIS_URL: redis://redis:6379/0
-      APP_DEMO_AUTH_ENABLED: "true"
+      APP_DEMO_AUTH_ENABLED: "false"
       APP_CORS_ORIGINS: '["http://localhost:5173"]'
       APP_AGENT_VECTOR_STORE_PATH: /app/data/chroma
     ports:

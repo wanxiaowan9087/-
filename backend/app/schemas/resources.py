@@ -21,6 +21,34 @@ class ReadyStatus(ContractModel):
     ]
 
 
+class AuthUser(ContractModel):
+    id: UUID
+    username: str = Field(min_length=3, max_length=32)
+    nickname: str = Field(min_length=1, max_length=40)
+    avatar_url: str = Field(min_length=8, max_length=2048)
+    role: Literal["user", "reviewer"]
+    created_at: datetime
+
+
+class RegisterRequest(ContractModel):
+    username: str = Field(min_length=3, max_length=32, pattern=r"^[A-Za-z0-9_]+$")
+    password: str = Field(min_length=8, max_length=128)
+    nickname: str = Field(min_length=1, max_length=40)
+    avatar_url: str | None = Field(default=None, min_length=8, max_length=2048)
+
+
+class LoginRequest(ContractModel):
+    username: str = Field(min_length=3, max_length=32, pattern=r"^[A-Za-z0-9_]+$")
+    password: str = Field(min_length=8, max_length=128)
+
+
+class AuthSession(ContractModel):
+    access_token: str = Field(min_length=20, max_length=256)
+    token_type: Literal["Bearer"] = "Bearer"
+    expires_at: datetime
+    user: AuthUser
+
+
 class CreateSessionRequest(ContractModel):
     title: str | None = Field(default=None, min_length=1, max_length=120)
 

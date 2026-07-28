@@ -54,3 +54,23 @@ async def client() -> AsyncIterator[AsyncClient]:
     ) as async_client:
         yield async_client
     await app.state.platform_service.close()
+
+
+@pytest_asyncio.fixture
+async def identity_client() -> AsyncIterator[AsyncClient]:
+    settings = Settings(
+        environment="test",
+        database_url="sqlite+aiosqlite:///./identity-test.db",
+        redis_url=None,
+        demo_auth_enabled=False,
+    )
+    app = create_app(
+        settings,
+        repository=MemoryPlatformRepository(),
+        executor=FakeExecutor(),
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as async_client:
+        yield async_client
+    await app.state.platform_service.close()

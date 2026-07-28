@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
     cors_allow_credentials: bool = True
     demo_auth_enabled: bool = True
+    auth_token_ttl_seconds: int = Field(default=604_800, ge=300, le=2_592_000)
     test_executor_enabled: bool = False
     cursor_signing_secret: str = "development-only-cursor-secret"
     idempotency_ttl_seconds: int = Field(default=86_400, ge=86_400)

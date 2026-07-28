@@ -1,4 +1,4 @@
-import type { ApiErrorBody, ChatRequest, Envelope, Session, StreamEvent } from './contracts'
+import type { ApiErrorBody, AuthSession, AuthUser, ChatRequest, Envelope, Session, StreamEvent } from './contracts'
 import { parseSseStream } from './sse'
 
 export class ApiClientError extends Error {
@@ -13,7 +13,7 @@ export class ApiClientError extends Error {
 
 export interface AgentApiOptions {
   baseUrl: string
-  accessToken: string
+  accessToken: string | (() => string)
   fetcher?: typeof fetch
 }
 
@@ -37,7 +37,7 @@ function isSuccessEnvelope<T>(body: Envelope<T> | ApiErrorBody): body is Envelop
 export function createAgentApi(options: AgentApiOptions) {
   const fetcher = options.fetcher ?? fetch
   const headers = (extra: HeadersInit = {}) => ({
-    Authorization: `Bearer ${options.accessToken}`,
+    Authorization: `Bearer ${typeof options.accessToken === 'function' ? options.accessToken() : options.accessToken}`,
     Accept: 'application/json',
     ...extra,
   })
@@ -52,6 +52,29 @@ export function createAgentApi(options: AgentApiOptions) {
   }
 
   return {
+    async register(input: { username: string; password: string; nickname: string; avatar_url?: string }): Promise<AuthSession> {
+      const response = await fetcher(`${options.baseUrl}/auth/register`, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      })
+      return readJson<AuthSession>(response)
+    },
+
+    async login(input: { username: string; password: string }): Promise<AuthSession> {
+      const response = await fetcher(`${options.baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      })
+      return readJson<AuthSession>(response)
+    },
+
+    async currentUser(): Promise<AuthUser> {
+      const response = await fetcher(`${options.baseUrl}/auth/me`, { headers: headers() })
+      return readJson<AuthUser>(response)
+    },
+
     async createSession(title?: string): Promise<Session> {
       const response = await fetcher(`${options.baseUrl}/sessions`, {
         method: 'POST',

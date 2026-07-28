@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from backend.app.core.config import Settings, get_settings
@@ -14,6 +14,8 @@ from backend.app.core.errors import AppError
 class Principal:
     subject_id: str
     role: str
+    nickname: str | None = None
+    avatar_url: str | None = None
 
 
 class AuthenticationPort(Protocol):
@@ -37,13 +39,21 @@ bearer = HTTPBearer(auto_error=False)
 
 
 async def get_principal(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     settings: Settings = Depends(get_settings),
 ) -> Principal:
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise AppError("UNAUTHORIZED", "authentication required", 401)
     if not settings.demo_auth_enabled:
-        raise AppError("UNAUTHORIZED", "no production authentication adapter configured", 401)
+        identity = request.app.state.identity_service
+        user = await identity.authenticate(credentials.credentials)
+        return Principal(
+            subject_id=str(user.id),
+            role=user.role,
+            nickname=user.nickname,
+            avatar_url=user.avatar_url,
+        )
     return await DemoAuthenticationAdapter().authenticate(credentials.credentials)
 
 

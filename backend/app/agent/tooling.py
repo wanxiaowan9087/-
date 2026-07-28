@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import logging
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import MISSING, dataclass, fields, is_dataclass
 from time import monotonic
@@ -19,6 +20,8 @@ from uuid import uuid4
 
 from .contracts import ErrorCode, ToolExecution, ToolOutcome, ToolResult
 from .redaction import redact_text, redact_value
+
+logger = logging.getLogger(__name__)
 
 InputT = TypeVar("InputT")
 HandlerInputT = TypeVar("HandlerInputT", contravariant=True)
@@ -251,6 +254,10 @@ class ToolExecutor:
                     )
                 await self._retry_delay(definition.retry_policy, attempt, token)
             except Exception:
+                logger.exception(
+                    "tool adapter failed",
+                    extra={"tool_name": name, "error_code": "TOOL_FAILED"},
+                )
                 return self._failure(
                     call_id,
                     name,

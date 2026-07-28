@@ -7,21 +7,21 @@
   --blue-700: #1d5f95;
   --blue-600: #2e7db6;
   --blue-500: #69a8d7;
-  --porcelain: #091522;
-  --mist-200: #1b2d40;
-  --mist-100: #102238;
-  --mist-50: #0d1c2d;
-  --white: #14283a;
-  --slate-950: #e8f0f6;
-  --slate-700: #b6c7d6;
-  --slate-500: #7892a8;
-  --line: #263f56;
-  --line-strong: #38566f;
+  --porcelain: #f3f6f8;
+  --mist-200: #e4ebf0;
+  --mist-100: #eaf0f4;
+  --mist-50: #f8fafb;
+  --white: #ffffff;
+  --slate-950: #172536;
+  --slate-700: #52677c;
+  --slate-500: #71869a;
+  --line: #d9e1e7;
+  --line-strong: #b9c8d4;
   --brass-700: #c4a873;
   --brass-500: #9b8050;
   --brass-50: #201b14;
   --critical: #cd5f7e;
-  --shadow-soft: 0 18px 48px rgba(0, 0, 0, 0.24);
+  --shadow-soft: 0 18px 48px rgba(21, 38, 54, 0.09);
   --shadow-focus: 0 0 0 3px rgba(105, 168, 215, 0.28);
   color: var(--slate-950);
   background: var(--navy-950);
@@ -62,7 +62,7 @@ textarea:focus-visible {
   min-height: 100vh;
   display: grid;
   grid-template-columns: 264px minmax(0, 1fr);
-  background: radial-gradient(circle at 78% -12%, rgba(42, 105, 153, 0.17), transparent 34%), var(--porcelain);
+  background: radial-gradient(circle at 78% -12%, rgba(42, 105, 153, 0.1), transparent 34%), var(--porcelain);
 }
 
 .sidebar {
@@ -229,7 +229,7 @@ textarea:focus-visible {
   min-width: 0;
   display: grid;
   grid-template-rows: 64px minmax(0, 1fr) auto;
-  background: radial-gradient(circle at 100% 0, rgba(37, 103, 153, 0.11), transparent 27%), var(--porcelain);
+  background: radial-gradient(circle at 100% 0, rgba(37, 103, 153, 0.08), transparent 27%), var(--porcelain);
 }
 
 .topbar {
@@ -239,7 +239,7 @@ textarea:focus-visible {
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--line);
-  background: rgba(9, 21, 34, 0.88);
+  background: rgba(248, 251, 252, 0.9);
   backdrop-filter: blur(12px);
 }
 
@@ -270,7 +270,7 @@ textarea:focus-visible {
 }
 
 .secure-dot {
-  color: #9bb8d0;
+  color: #496b89;
   font-size: 11px;
 }
 
@@ -290,10 +290,98 @@ textarea:focus-visible {
   height: 30px;
   border: 1px solid var(--line-strong);
   border-radius: 50%;
-  background: var(--navy-800);
-  color: var(--slate-950);
+  background: var(--mist-100);
+  color: var(--navy-800);
   font-size: 12px;
+  overflow: hidden;
 }
+
+.avatar img,
+.message-avatar img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.avatar span,
+.message-avatar i {
+  display: none;
+}
+
+.auth-loading {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: var(--charcoal-950);
+  color: #c8d9e7;
+  font: 12px "Cascadia Mono", monospace;
+  letter-spacing: 0.08em;
+}
+
+.auth-shell {
+  min-height: 100vh;
+  padding: clamp(28px, 6vw, 96px);
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 430px);
+  align-items: center;
+  gap: clamp(44px, 9vw, 150px);
+  background:
+    radial-gradient(circle at 12% 20%, rgba(44, 113, 164, 0.23), transparent 27%),
+    linear-gradient(120deg, #06111d, #0b1e31 54%, #dfe9ef 54%, #f6f8f9);
+}
+
+.auth-promo {
+  max-width: 560px;
+  color: #dfeaf2;
+}
+
+.auth-promo .eyebrow { color: #83b4dc; }
+
+.auth-promo h1 {
+  margin: 14px 0 20px;
+  font: 700 clamp(38px, 5vw, 66px)/1.16 "STSong", "Noto Serif CJK SC", serif;
+  letter-spacing: 0.03em;
+}
+
+.auth-promo > p:not(.eyebrow) {
+  max-width: 430px;
+  color: #a8bdcf;
+  font-size: 15px;
+  line-height: 1.9;
+}
+
+.auth-rule { width: 56px; margin: 36px 0 16px; border-top: 2px solid #73a9d5; }
+
+.auth-promo small { color: #7e9bb4; font: 10px "Cascadia Mono", monospace; letter-spacing: 0.12em; }
+
+.auth-card {
+  padding: 42px;
+  position: relative;
+  border: 1px solid rgba(123, 147, 165, 0.34);
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 26px 72px rgba(12, 31, 47, 0.22);
+  backdrop-filter: blur(16px);
+}
+
+.auth-avatar {
+  width: 46px;
+  height: 46px;
+  margin-bottom: 20px;
+  border: 2px solid #d9e8f2;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.auth-card h2 { margin: 8px 0; color: var(--charcoal-950); font: 700 28px "STSong", "Noto Serif CJK SC", serif; }
+.auth-hint { margin: 0 0 24px; color: var(--slate-700); font-size: 13px; line-height: 1.7; }
+.auth-card label { margin-top: 15px; display: grid; gap: 7px; color: var(--slate-700); font-size: 11px; font-weight: 700; }
+.auth-card input { padding: 12px 0; border: 0; border-bottom: 1px solid var(--line-strong); outline: 0; background: transparent; color: var(--slate-950); font: 14px "Microsoft YaHei UI", sans-serif; }
+.auth-card input:focus { border-bottom-color: var(--blue-600); }
+.auth-error { margin: 14px 0 0; color: #a23552; font-size: 12px; }
+.auth-submit { width: 100%; margin-top: 26px; padding: 13px 16px; border: 0; background: var(--navy-900); color: var(--white); text-align: left; }
+.auth-submit span { float: right; color: #8dc1e8; font-size: 18px; line-height: 0.8; }
+.auth-switch { width: 100%; margin-top: 10px; padding: 8px; border: 0; background: transparent; color: var(--blue-700); font-size: 12px; }
 
 .menu-button {
   display: none;
@@ -314,7 +402,7 @@ textarea:focus-visible {
 
 .thread-head h1 {
   margin: 7px 0 8px;
-  color: var(--slate-950);
+  color: var(--charcoal-950);
   font: 700 30px "STSong", "Noto Serif CJK SC", serif;
   letter-spacing: 0.03em;
 }
@@ -338,7 +426,7 @@ textarea:focus-visible {
 
 .trace-link:hover {
   border-color: var(--blue-500);
-  background: #193249;
+  background: #f6fbff;
 }
 
 .trace-link span {
@@ -394,12 +482,13 @@ textarea:focus-visible {
   width: 24px;
   height: 24px;
   font-size: 11px;
+  overflow: hidden;
 }
 
 .message-avatar.user {
   border-color: var(--line-strong);
   background: var(--mist-100);
-  color: var(--slate-950);
+  color: var(--charcoal-900);
 }
 
 .message-avatar.bot {
@@ -428,7 +517,7 @@ textarea:focus-visible {
   border-left: 3px solid var(--blue-600);
   background: var(--white);
   box-shadow: var(--shadow-soft);
-  color: var(--slate-950);
+  color: var(--charcoal-950);
   font-size: 14px;
   line-height: 1.85;
   white-space: pre-wrap;
@@ -458,7 +547,7 @@ textarea:focus-visible {
 
 .withheld-card h2 {
   margin: 5px 0 7px;
-  color: var(--slate-950);
+  color: var(--charcoal-900);
   font: 600 18px "STSong", "Noto Serif CJK SC", serif;
 }
 
@@ -527,7 +616,7 @@ textarea:focus-visible {
 }
 
 .tool-top b {
-  color: var(--slate-950);
+  color: var(--charcoal-900);
   font-size: 13px;
 }
 
@@ -585,15 +674,15 @@ textarea:focus-visible {
   align-items: flex-start;
   gap: 10px;
   border: 1px solid var(--line);
-  background: rgba(16, 34, 56, 0.78);
+  background: rgba(255, 255, 255, 0.86);
   color: var(--slate-950);
   text-align: left;
 }
 
 .source-card:hover {
   border-color: #8bb4d9;
-  background: #193249;
-  box-shadow: 0 7px 20px rgba(0, 0, 0, 0.2);
+  background: var(--white);
+  box-shadow: 0 7px 20px rgba(16, 53, 91, 0.08);
 }
 
 .source-index {
@@ -652,7 +741,7 @@ textarea:focus-visible {
 }
 
 .review-card b {
-  color: var(--slate-950);
+  color: var(--charcoal-900);
   font-size: 12px;
 }
 
@@ -674,7 +763,7 @@ textarea:focus-visible {
 
 .composer-wrap {
   padding: 0 34px 24px;
-  background: linear-gradient(transparent, rgba(9, 21, 34, 0.98) 18%);
+  background: linear-gradient(transparent, rgba(243, 246, 248, 0.98) 18%);
 }
 
 .state-switcher {
@@ -784,8 +873,8 @@ textarea:disabled {
   inset: 170px 48px auto;
   padding: 36px;
   border: 1px solid var(--line);
-  background: rgba(13, 28, 45, 0.97);
-  box-shadow: 0 18px 52px rgba(0, 0, 0, 0.32);
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 18px 52px rgba(21, 38, 54, 0.14);
   text-align: center;
 }
 
@@ -871,6 +960,10 @@ textarea:disabled {
 }
 
 @media (max-width: 760px) {
+  .auth-shell { padding: 32px 20px; display: block; background: linear-gradient(160deg, #071727, #17344d 36%, #f3f6f8 36%); }
+  .auth-promo { margin-bottom: 44px; }
+  .auth-promo h1 { font-size: 36px; }
+  .auth-card { padding: 28px 24px; }
   .app-shell {
     display: block;
   }
@@ -907,7 +1000,7 @@ textarea:disabled {
     position: sticky;
     z-index: 3;
     top: 0;
-    background: rgba(9, 21, 34, 0.96);
+    background: rgba(248, 251, 252, 0.96);
   }
 
   .menu-button {
@@ -915,7 +1008,7 @@ textarea:disabled {
     display: block;
     border: 0;
     background: none;
-    color: var(--slate-950);
+    color: var(--navy-900);
     font-size: 18px;
   }
 

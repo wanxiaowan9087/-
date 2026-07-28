@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Sequence
 from dataclasses import replace
 from typing import Any
@@ -13,6 +14,8 @@ from .ports import (
     RerankerPort,
     VectorStorePort,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class RetrievalUnavailable(RuntimeError):
@@ -103,6 +106,11 @@ class HybridRetriever:
                 )
             )
         except Exception:
+            logger.warning(
+                "reranker degraded; using fused order",
+                exc_info=True,
+                extra={"component": "reranker"},
+            )
             degraded.append("reranker")
             reranked = tuple(fused[: self._result_limit])
         confidence = _evidence_confidence(reranked)

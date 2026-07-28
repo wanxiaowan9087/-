@@ -4,7 +4,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useChatStore, type PreviewState } from './stores/chat'
 import { mockPreview } from './features/chat/mock-data'
 import { createAgentApi } from './api/client'
-import type { ChatRequest } from './api/contracts'
+import type { AuthSession, AuthUser, ChatRequest } from './api/contracts'
 
 const chat = useChatStore()
 const states: { value: PreviewState; label: string }[] = [
@@ -19,10 +19,18 @@ const latestTool = computed(() => chat.tools.at(-1) ?? null)
 const draft = ref('')
 const submittedQuestion = ref('')
 const activeAbortController = ref<InstanceType<typeof globalThis.AbortController> | null>(null)
+const accessToken = ref(globalThis.localStorage.getItem('agent.access-token') ?? '')
+const authUser = ref<AuthUser | null>(null)
+const authLoading = ref(true)
+const authMode = ref<'login' | 'register'>('login')
+const authError = ref<string | null>(null)
+const authForm = ref({ username: '', password: '', nickname: '' })
+const defaultAvatarUrl = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=160&q=80'
 const api = createAgentApi({
   baseUrl: import.meta.env.VITE_API_BASE_URL || '/api/v1',
-  accessToken: import.meta.env.VITE_API_ACCESS_TOKEN || '',
+  accessToken: () => accessToken.value,
 })
+const userInitial = computed(() => authUser.value?.nickname.slice(0, 1) || '访')
 
 let revealObserver: IntersectionObserver | undefined
 
@@ -38,6 +46,7 @@ function observeReveals() {
 }
 
 onMounted(() => {
+  void restoreAuthentication()
   if (!('IntersectionObserver' in window)) {
     observeReveals()
     return
@@ -65,6 +74,51 @@ watch(
     observeReveals()
   },
 )
+
+async function restoreAuthentication() {
+  if (!accessToken.value) {
+    authLoading.value = false
+    return
+  }
+  try {
+    authUser.value = await api.currentUser()
+  } catch {
+    globalThis.localStorage.removeItem('agent.access-token')
+    accessToken.value = ''
+  } finally {
+    authLoading.value = false
+  }
+}
+
+function acceptAuthentication(session: AuthSession) {
+  accessToken.value = session.access_token
+  authUser.value = session.user
+  globalThis.localStorage.setItem('agent.access-token', session.access_token)
+  authError.value = null
+}
+
+async function submitAuthentication() {
+  authError.value = null
+  try {
+    const session = authMode.value === 'login'
+      ? await api.login({ username: authForm.value.username, password: authForm.value.password })
+      : await api.register({
+          username: authForm.value.username,
+          password: authForm.value.password,
+          nickname: authForm.value.nickname,
+        })
+    acceptAuthentication(session)
+  } catch (error) {
+    authError.value = error instanceof Error ? error.message : '身份验证失败，请稍后重试。'
+  }
+}
+
+function signOut() {
+  globalThis.localStorage.removeItem('agent.access-token')
+  accessToken.value = ''
+  authUser.value = null
+  resetConversation()
+}
 
 function resetConversation() {
   chat.$reset()
@@ -98,8 +152,8 @@ async function executeChat(request: ChatRequest, question: string) {
 async function sendMessage() {
   const content = draft.value.trim()
   if (!content) return
-  if (!import.meta.env.VITE_API_ACCESS_TOKEN) {
-    chat.errorMessage = '请在 frontend/.env 中配置 VITE_API_ACCESS_TOKEN 后再连接本地后端。'
+  if (!accessToken.value) {
+    chat.errorMessage = '登录状态已失效，请重新登录后继续。'
     chat.setPreviewState('error')
     return
   }
@@ -136,7 +190,12 @@ async function cancelActiveRun() {
 </script>
 
 <template>
-  <div class="app-shell" :class="{ 'nav-open': chat.navOpen }">
+  <div v-if="authLoading" class="auth-loading">正在验证登录状态…</div>
+  <section v-else-if="!authUser" class="auth-shell" aria-label="登录">
+    <div class="auth-promo"><p class="eyebrow">AGENT WORKSPACE</p><h1>把每一次对话，留在属于你的工作台。</h1><p>注册后会创建独立用户 ID；会话、记忆与运行记录只在你的身份范围内可见。</p><div class="auth-rule"></div><small>CONTROLLED KNOWLEDGE · TRACEABLE RUNS</small></div>
+    <form class="auth-card" @submit.prevent="submitAuthentication"><img class="auth-avatar" :src="defaultAvatarUrl" alt="默认头像" /><p class="eyebrow">{{ authMode === 'login' ? 'WELCOME BACK' : 'CREATE ACCOUNT' }}</p><h2>{{ authMode === 'login' ? '登录工作台' : '创建你的工作身份' }}</h2><p class="auth-hint">{{ authMode === 'login' ? '使用已注册账号继续你的对话。' : '昵称与默认头像将展示在你的每次对话中。' }}</p><label>账号<input v-model.trim="authForm.username" autocomplete="username" required minlength="3" maxlength="32" pattern="[A-Za-z0-9_]+" placeholder="例如 agent_user" /></label><label v-if="authMode === 'register'">昵称<input v-model.trim="authForm.nickname" required maxlength="40" placeholder="例如 小王" /></label><label>密码<input v-model="authForm.password" type="password" :autocomplete="authMode === 'login' ? 'current-password' : 'new-password'" required minlength="8" maxlength="128" placeholder="至少 8 位" /></label><p v-if="authError" class="auth-error">{{ authError }}</p><button class="auth-submit" type="submit">{{ authMode === 'login' ? '登录并进入' : '注册并进入' }} <span>↗</span></button><button class="auth-switch" type="button" @click="authMode = authMode === 'login' ? 'register' : 'login'; authError = null">{{ authMode === 'login' ? '没有账号？创建一个' : '已有账号？直接登录' }}</button></form>
+  </section>
+  <div v-else class="app-shell" :class="{ 'nav-open': chat.navOpen }">
     <aside class="sidebar" aria-label="会话导航">
       <div class="brand-lockup"><span class="brand-mark">程</span><span>规程台</span><small>OPERATION DESK</small></div>
       <button class="new-session" type="button" @click="resetConversation"><span>＋</span>新建会话 <kbd>⌘ K</kbd></button>
@@ -144,20 +203,20 @@ async function cancelActiveRun() {
       <nav class="session-list">
         <button v-for="(session, index) in mockPreview.sessions" :key="session" class="session" :class="{ active: index === 0 }" type="button"><b>{{ session }}</b><span>{{ index === 0 ? '刚刚 · 运行中' : index === 1 ? '今天 10:42' : '昨天' }}</span></button>
       </nav>
-      <div class="sidebar-foot"><span class="presence"></span><div><b>客服运营组</b><small>受控知识库 · 已连接</small></div><button aria-label="更多设置">···</button></div>
+      <div class="sidebar-foot"><span class="presence"></span><div><b>{{ authUser.nickname }}</b><small>独立会话空间 · 已连接</small></div><button aria-label="退出登录" title="退出登录" @click="signOut">退出</button></div>
     </aside>
 
     <main class="workspace">
       <header class="topbar">
         <button class="menu-button" type="button" aria-label="打开会话列表" @click="chat.toggleNav">☰</button>
         <div class="crumb"><span>会话 /</span> {{ mockPreview.title }} <em>v1.0</em></div>
-        <div class="header-actions"><span class="secure-dot">受控模式</span><button type="button" class="avatar" aria-label="当前用户">访</button></div>
+        <div class="header-actions"><span class="secure-dot">受控模式</span><button type="button" class="avatar" :aria-label="`${authUser.nickname}，退出登录`" @click="signOut"><img :src="authUser.avatar_url" :alt="`${authUser.nickname}的头像`" /><span>{{ userInitial }}</span></button></div>
       </header>
 
       <section class="stage" aria-label="聊天工作区">
         <div class="thread-head" data-reveal><div><p class="eyebrow">CASE · {{ mockPreview.caseId }}</p><h1>{{ mockPreview.title }}</h1><p>{{ mockPreview.summary }}</p></div><button class="trace-link" type="button"><span>◉</span>运行追踪 <b>{{ chat.runId || '尚未运行' }}</b><i>↗</i></button></div>
         <div class="thread-rule"></div>
-        <article class="message customer" data-reveal><div class="message-meta"><span class="message-avatar user">访</span><b>当前用户</b><time>刚刚</time></div><p>{{ submittedQuestion || mockPreview.question }}</p></article>
+        <article class="message customer" data-reveal><div class="message-meta"><span class="message-avatar user"><img :src="authUser.avatar_url" :alt="`${authUser.nickname}的头像`" /><i>{{ userInitial }}</i></span><b>{{ authUser.nickname }}</b><time>刚刚</time></div><p>{{ submittedQuestion || mockPreview.question }}</p></article>
 
         <article v-if="chat.runId" class="message agent" data-reveal :class="{ withheld: Boolean(chat.review) }">
           <div class="message-meta"><span class="message-avatar bot">程</span><b>规程台助手</b><span class="model-chip">{{ chat.previewState === 'loading' ? '正在生成' : chat.review ? '等待审核' : chat.runOutcome === 'cancelled' ? '已取消' : '已完成' }}</span><time>刚刚</time></div>

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
@@ -42,6 +43,8 @@ from .safety import (
 )
 from .tooling import CancellationToken
 from .tracing import RunStateMachine, TraceRecorder
+
+logger = logging.getLogger(__name__)
 
 
 class MemoryRuntimePort(Protocol):
@@ -314,6 +317,7 @@ class AgentRuntime:
                 error_code=ErrorCode.CANCELLED,
             )
         except Exception:
+            logger.exception("agent runtime failed", extra={"error_code": "INTERNAL_ERROR"})
             trace.cancel_open_steps()
             if state.status is RunStatus.RUNNING:
                 state.transition(RunStatus.FAILED)
@@ -354,6 +358,7 @@ class AgentRuntime:
             )
             return context
         except Exception:
+            logger.warning("memory context degraded", exc_info=True, extra={"component": "memory"})
             degraded.append("memory")
             trace.finish(
                 step,
@@ -468,6 +473,9 @@ class AgentRuntime:
                 ),
             )
         except Exception:
+            logger.warning(
+                "memory extraction degraded", exc_info=True, extra={"component": "memory"}
+            )
             # Extraction is explicitly best-effort and cannot turn a valid
             # answer into an internal failure.
             return "memory_extraction_degraded"

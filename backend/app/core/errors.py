@@ -32,6 +32,10 @@ def error_payload(error: AppError) -> dict[str, Any]:
 
 
 async def app_error_handler(_: Request, error: AppError) -> JSONResponse:
+    logger.warning(
+        "handled application error",
+        extra={"error_code": error.code, "status_code": error.status_code},
+    )
     return JSONResponse(
         status_code=error.status_code,
         content=error_payload(error),
@@ -44,6 +48,7 @@ async def validation_error_handler(_: Request, error: RequestValidationError) ->
         {"field": ".".join(str(part) for part in item["loc"]), "reason": item["msg"]}
         for item in error.errors()[:50]
     ]
+    logger.info("request validation failed", extra={"issue_count": len(issues), "status_code": 422})
     return JSONResponse(
         status_code=422,
         content={

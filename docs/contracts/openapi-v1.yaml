@@ -10,6 +10,7 @@ servers:
   - url: /api/v1
 tags:
   - name: Health
+  - name: Authentication
   - name: Sessions
   - name: Chat
   - name: Runs
@@ -55,6 +56,51 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
+  /auth/register:
+    post:
+      tags: [Authentication]
+      operationId: registerUser
+      summary: 注册用户并签发访问令牌
+      security: []
+      responses:
+        "201":
+          description: 注册成功
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /auth/login:
+    post:
+      tags: [Authentication]
+      operationId: loginUser
+      summary: 登录并签发访问令牌
+      security: []
+      responses:
+        "200":
+          description: 登录成功
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /auth/me:
+    get:
+      tags: [Authentication]
+      operationId: getCurrentUser
+      summary: 获取当前登录用户资料
+      x-required-role: user
+      responses:
+        "200":
+          description: 当前用户资料
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /sessions:
     get:
       tags: [Sessions]

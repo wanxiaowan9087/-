@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from dataclasses import asdict, is_dataclass
 from datetime import UTC, datetime
 from enum import Enum
@@ -11,11 +12,13 @@ from uuid import UUID
 from pydantic import TypeAdapter, ValidationError
 
 from backend.app.application.ports import RunExecution, RunExecutorPort
+from backend.app.core.context import bind_context
 from backend.app.domain.records import StreamEventRecord
 from backend.app.repositories.ports import PlatformRepository
 from backend.app.schemas.events import SseEvent
 
 event_adapter: TypeAdapter[SseEvent] = TypeAdapter(SseEvent)
+logger = logging.getLogger(__name__)
 
 
 def encode_sse(event: dict[str, Any]) -> bytes:
@@ -57,16 +60,19 @@ class RunCoordinator:
                 )
 
     async def _execute(self, execution: RunExecution) -> None:
+        tokens = bind_context(
+            execution.request_id, str(execution.session_id), str(execution.run_id)
+        )
         content_parts: list[str] = []
-        async with self._repository.transaction() as tx:
-            await tx.update_run(
-                execution.run_id,
-                expected_statuses={"queued"},
-                status="running",
-                now=datetime.now(UTC),
-            )
-            sequence = len(await tx.list_events(execution.run_id, 0))
         try:
+            async with self._repository.transaction() as tx:
+                await tx.update_run(
+                    execution.run_id,
+                    expected_statuses={"queued"},
+                    status="running",
+                    now=datetime.now(UTC),
+                )
+                sequence = len(await tx.list_events(execution.run_id, 0))
             async for event_type, payload in self._executor.stream(execution):
                 now = datetime.now(UTC)
                 async with self._repository.transaction() as tx:
@@ -150,6 +156,13 @@ class RunCoordinator:
                         return
             raise RuntimeError("run executor ended without a terminal event")
         except (Exception, ValidationError):
+            logger.exception(
+                "agent run execution failed",
+                extra={
+                    "error_code": "INTERNAL_ERROR",
+                    "event_sequence": sequence if "sequence" in locals() else 0,
+                },
+            )
             now = datetime.now(UTC)
             async with self._repository.transaction() as tx:
                 run = await tx.get_run(execution.subject_id, execution.run_id)
@@ -177,6 +190,8 @@ class RunCoordinator:
                     status="failed",
                     now=now,
                 )
+        finally:
+            tokens.reset()
 
     async def cancel(self, run_id: UUID) -> None:
         await self._executor.request_cancel(run_id)
