@@ -43,7 +43,7 @@ def create_app(
         )
     else:
         repository_adapter = repository
-    executor_adapter = executor or build_run_executor(settings)
+    executor_adapter = executor or build_run_executor(settings, repository_adapter)
     redis_adapter = redis_adapter or OptionalRedisAdapter(
         settings.redis_url, settings.redis_timeout_seconds
     )

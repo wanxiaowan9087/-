@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useChatStore, type PreviewState } from './stores/chat'
 import { mockPreview } from './features/chat/mock-data'
+import { createAgentApi } from './api/client'
 
 const chat = useChatStore()
 const states: { value: PreviewState; label: string }[] = [
@@ -9,6 +10,37 @@ const states: { value: PreviewState; label: string }[] = [
   { value: 'empty', label: '空会话' }, { value: 'error', label: '异常' }, { value: 'disabled', label: '受限' },
 ]
 const isOverlay = computed(() => ['empty', 'loading', 'error', 'disabled'].includes(chat.previewState))
+const draft = ref('')
+const submittedQuestion = ref('')
+const api = createAgentApi({
+  baseUrl: import.meta.env.VITE_API_BASE_URL || '/api/v1',
+  accessToken: import.meta.env.VITE_API_ACCESS_TOKEN || '',
+})
+
+async function sendMessage() {
+  const content = draft.value.trim()
+  if (!content) return
+  if (!import.meta.env.VITE_API_ACCESS_TOKEN) {
+    chat.setPreviewState('error')
+    return
+  }
+  try {
+    const session = chat.sessionId ?? (await api.createSession('New agent session')).id
+    chat.beginRun(session)
+    submittedQuestion.value = content
+    await api.streamChat(
+      { mode: 'new', session_id: session, content },
+      {
+        idempotencyKey: globalThis.crypto.randomUUID(),
+        lastEventId: chat.lastEventId ?? undefined,
+        onEvent: event => chat.receiveStreamEvent(event),
+      },
+    )
+    draft.value = ''
+  } catch {
+    chat.setPreviewState('error')
+  }
+}
 </script>
 
 <template>
@@ -33,7 +65,7 @@ const isOverlay = computed(() => ['empty', 'loading', 'error', 'disabled'].inclu
       <section class="stage" aria-label="聊天工作区">
         <div class="thread-head"><div><p class="eyebrow">CASE · {{ mockPreview.caseId }}</p><h1>{{ mockPreview.title }}</h1><p>{{ mockPreview.summary }}</p></div><button class="trace-link" type="button"><span>◌</span>运行追踪 <b>run_01HZX…</b><i>→</i></button></div>
         <div class="thread-rule"></div>
-        <article class="message customer"><div class="message-meta"><span class="message-avatar user">唐</span><b>唐世均</b><time>10:58</time></div><p>{{ mockPreview.question }}</p></article>
+        <article class="message customer"><div class="message-meta"><span class="message-avatar user">唐</span><b>唐世均</b><time>10:58</time></div><p>{{ submittedQuestion || mockPreview.question }}</p></article>
         <article class="message agent withheld"><div class="message-meta"><span class="message-avatar bot">稽</span><b>规程台助手</b><span class="model-chip">内容已扣留</span><time>10:58</time></div>
           <section class="withheld-card" aria-label="候选答案已扣留，等待人工审核">
             <div class="withheld-seal" aria-hidden="true"><span></span><span></span><span></span></div>
@@ -51,7 +83,7 @@ const isOverlay = computed(() => ['empty', 'loading', 'error', 'disabled'].inclu
           <button v-if="chat.previewState === 'error'" type="button" @click="chat.setPreviewState('ready')">返回对话</button>
         </section>
       </section>
-      <footer class="composer-wrap"><div class="state-switcher" aria-label="静态状态预览"><span>审阅状态</span><button v-for="state in states" :key="state.value" type="button" :class="{ selected: chat.previewState === state.value }" @click="chat.setPreviewState(state.value)">{{ state.label }}</button></div><form class="composer" @submit.prevent><textarea aria-label="消息输入" placeholder="询问知识库，或输入一条客服处理需求…" :disabled="chat.previewState === 'disabled'"></textarea><div class="composer-bar"><button type="button" class="attach" aria-label="添加附件">＋</button><span>仅使用受控知识库 · 不发送隐私信息</span><button type="submit" class="send" :disabled="chat.previewState === 'disabled'">发送 <b>↑</b></button></div></form></footer>
+      <footer class="composer-wrap"><div class="state-switcher" aria-label="静态状态预览"><span>审阅状态</span><button v-for="state in states" :key="state.value" type="button" :class="{ selected: chat.previewState === state.value }" @click="chat.setPreviewState(state.value)">{{ state.label }}</button></div><form class="composer" @submit.prevent="sendMessage"><textarea v-model="draft" aria-label="消息输入" placeholder="询问知识库，或输入一条客服处理需求…" :disabled="chat.previewState === 'disabled'"></textarea><div class="composer-bar"><button type="button" class="attach" aria-label="添加附件">＋</button><span>仅使用受控知识库 · 不发送隐私信息</span><button type="submit" class="send" :disabled="chat.previewState === 'disabled' || !draft.trim()">发送 <b>↑</b></button></div></form></footer>
     </main>
     <button class="scrim" aria-label="关闭会话列表" @click="chat.closeNav"></button>
   </div>

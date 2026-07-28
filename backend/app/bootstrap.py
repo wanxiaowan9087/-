@@ -4,6 +4,7 @@ from typing import Any
 
 from backend.app.adapters.llm.langchain_react import LangChainReActEngine
 from backend.app.adapters.llm.platform_executor import RuntimeRunExecutor
+from backend.app.adapters.memory.platform_runtime import PlatformMemoryRuntime
 from backend.app.adapters.vector.chroma import ChromaVectorStore
 from backend.app.adapters.vector.dashscope import DashScopeEmbeddingAdapter
 from backend.app.agent.runtime import AgentRuntime
@@ -12,13 +13,16 @@ from backend.app.application.ports import RunExecutorPort, UnavailableRunExecuto
 from backend.app.core.config import Settings
 from backend.app.rag.lexical import BM25KeywordIndex
 from backend.app.rag.retrieval import HybridRetriever, IdentityReranker
+from backend.app.repositories.ports import PlatformRepository
 
 
 class AgentRuntimeBootstrapError(RuntimeError):
     """Configuration or optional dependency failure during live runtime wiring."""
 
 
-def build_run_executor(settings: Settings) -> RunExecutorPort:
+def build_run_executor(
+    settings: Settings, repository: PlatformRepository | None = None
+) -> RunExecutorPort:
     """Build the real LangChain/Chroma/DashScope runtime only when enabled.
 
     Keeping this opt-in makes local API and contract work deterministic. A live
@@ -63,4 +67,11 @@ def build_run_executor(settings: Settings) -> RunExecutorPort:
         raise AgentRuntimeBootstrapError(
             "AI runtime configuration could not be initialized"
         ) from error
-    return RuntimeRunExecutor(AgentRuntime(react_engine=react_engine, retriever=retriever))
+    memory = PlatformMemoryRuntime(repository) if repository is not None else None
+    return RuntimeRunExecutor(
+        AgentRuntime(
+            react_engine=react_engine,
+            retriever=retriever,
+            memory=memory,
+        )
+    )
