@@ -258,7 +258,10 @@ def run_e2e(_: str) -> list[CommandResult]:
             "--wait-timeout",
             "120",
         ],
-        timeout_seconds=150.0,
+        # A clean backend image must install the locked Python dependencies.
+        # The first build on a new machine can legitimately exceed 150 seconds;
+        # keep the cap bounded while allowing that cold-start path to complete.
+        timeout_seconds=240.0,
     )
     if stack.exit_code != 0:
         return [stack]
@@ -298,7 +301,17 @@ def run_security(_: str) -> list[CommandResult]:
     return [
         _run(
             "security-python",
-            [pip_audit, "-r", "requirements.lock"],
+            [
+                pip_audit,
+                "-r",
+                "requirements.lock",
+                "--no-deps",
+                "--disable-pip",
+                "--timeout",
+                "10",
+                "--progress-spinner",
+                "off",
+            ],
             timeout_seconds=45.0,
         ),
         _run(

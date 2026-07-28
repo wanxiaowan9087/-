@@ -65,8 +65,8 @@ class LangChainReActEngine:
         ]
         try:
             result = await agent.ainvoke(
-                {"messages": messages},
-                context={"run_id": request.run_id, "mode": request.mode.value},
+                cast(Any, {"messages": messages}),
+                context=cast(Any, {"run_id": request.run_id, "mode": request.mode.value}),
             )
         except TimeoutError as error:
             raise ModelTimeout("model execution timed out") from error

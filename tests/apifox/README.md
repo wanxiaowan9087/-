@@ -4,10 +4,16 @@
 Apifox export. It maps the required black-box scenarios to OpenAPI operation IDs
 and assertions; it is not a replacement API contract or an executable CLI suite.
 
-When the CLI is provisioned, import `docs/contracts/openapi-v1.yaml`, export the
-reviewed offline scenario suite under `tests/apifox/scenarios/`, and retain the
-same IDs and assertions. Generate CLI, JSON, and JUnit reports in
-`artifacts/apifox/`; do not add tokens or private variables to the repository.
+To produce the required suite, import `docs/contracts/openapi-v1.yaml` into the
+Apifox project, implement and review the nine scenarios in the manifest, then
+open each scenario's **Continuous Integration** action and export its Apifox CLI
+data. Save the reviewed combined export as
+`tests/apifox/scenarios/offline-suite.json`; retain the same IDs and assertions.
+Generate CLI, JSON, and JUnit reports in `artifacts/apifox/`; do not add tokens
+or private variables to the repository.
 
-CLI status at creation: only `D:\apifox\Apifox.exe` desktop client is available;
-no CLI was installed or run.
+The current machine has Apifox CLI 2.2.8 available as
+`C:\Users\唐世均\AppData\Roaming\npm\apifox.cmd`. The executable suite is still
+absent, so `quality_gate.py apifox` correctly remains blocked until the reviewed
+export is added. The export must contain no access token, private environment,
+or personal project URL.
