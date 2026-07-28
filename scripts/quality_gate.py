@@ -286,6 +286,9 @@ def run_compose(_: str) -> list[CommandResult]:
         _run(
             "compose",
             [docker, "compose", "up", "--build", "--wait", "--wait-timeout", "120"],
+            # Keep the regular integration stack consistent with e2e: a first
+            # locked dependency build can exceed the generic 90-second cap.
+            timeout_seconds=240.0,
         )
     ]
 
