@@ -1,0 +1,17 @@
+{
+  "openapi_source": "docs/contracts/openapi-v1.yaml",
+  "openapi_version": "1.0.0",
+  "environment_variables": ["BASE_URL", "USER_BEARER_TOKEN", "REVIEWER_BEARER_TOKEN"],
+  "private_variable_pattern": "*.private.*",
+  "scenarios": [
+    {"id":"APIFOX-001","flow":"createSession > streamChat(new) > listSessionMessages > getRunTrace","operations":["createSession","streamChat","listSessionMessages","getRunTrace"],"assertions":["request_id","schema","HTTP status"]},
+    {"id":"APIFOX-002","flow":"repeat same key/body then reuse key with different body","operations":["createSession"],"assertions":["replay header","same response","409 IDEMPOTENCY_KEY_REUSED"]},
+    {"id":"APIFOX-003","flow":"streamChat(retry) on original user message","operations":["streamChat"],"assertions":["new run","original user message not duplicated"]},
+    {"id":"APIFOX-004","flow":"cancel run then repeat cancellation","operations":["cancelRun"],"assertions":["202 cancellation_requested or 200 already_terminal","idempotent replay"]},
+    {"id":"APIFOX-005","flow":"pagination, malformed cursor, unknown resource, foreign resource","operations":["listSessions","listSessionMessages","getSession"],"assertions":["400","404","no enumeration"]},
+    {"id":"APIFOX-006","flow":"create feedback and duplicate submission","operations":["createMessageFeedback"],"assertions":["201","409","request_id"]},
+    {"id":"APIFOX-007","flow":"list, correct, deactivate, delete memory with stale versions","operations":["listMemories","updateMemory","deleteMemory"],"assertions":["200","409","If-Match"]},
+    {"id":"APIFOX-008","flow":"reviewer approve, reject, edit; duplicate decision; ordinary user denial","operations":["listReviews","decideReview"],"assertions":["200","409","403"]},
+    {"id":"APIFOX-009","flow":"invalid payload, missing auth, rate limit, dependency failure","operations":["createSession","streamChat"],"assertions":["422","401","429","503","safe ErrorEnvelope"]}
+  ]
+}

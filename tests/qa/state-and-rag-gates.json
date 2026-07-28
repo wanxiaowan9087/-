@@ -1,0 +1,23 @@
+{
+  "memory_and_audit_cases": [
+    {"id":"MEM-001","assertion":"long-term memory includes source_message_id,confidence,created_at,updated_at and a stable version"},
+    {"id":"MEM-002","assertion":"memory extraction failure records safe trace state but does not block primary answer"},
+    {"id":"MEM-003","assertion":"correct preserves original source and increments version; deactivate increments version; delete removes online retrieval eligibility"},
+    {"id":"AUDIT-001","assertion":"review audit records reviewer subject,request_id,timestamp,old/new status and content summary for success and conflict, never tokens"},
+    {"id":"AUDIT-002","assertion":"needs_review candidate is withheld from ordinary user until approve or edit-and-publish"}
+  ],
+  "frontend_state_cases": [
+    {"id":"UI-001","assertion":"new and restored session states are distinguishable and message history is ordered"},
+    {"id":"UI-002","assertion":"SSE consumes all nine event types; reconnect de-duplicates (run_id,sequence)"},
+    {"id":"UI-003","assertion":"stop invokes server cancellation, not only AbortController; cancelled terminal UI cannot append late delta"},
+    {"id":"UI-004","assertion":"retry reuses original user message and renders new run state"},
+    {"id":"UI-005","assertion":"loading,empty,error,disabled,tool,citation,and review-withheld states are visible and keyboard operable"}
+  ],
+  "rag_gate_cases": [
+    {"id":"RAG-001","assertion":"fixed dataset has 25-30 stable cases: >=12 single-source,>=4 multi-source,>=4 unanswerable,>=3 confusing,>=2 injection"},
+    {"id":"RAG-002","assertion":"each case has answerability, expected document_id/chunk_id, forbidden sources, tags and change rationale"},
+    {"id":"RAG-003","assertion":"retrieval_hit_rate@5>=0.80; mrr@10>=0.65; ndcg@10>=0.70; citation_integrity=1.00; citation_support_precision>=0.90"},
+    {"id":"RAG-004","assertion":"unanswerable_refusal_recall>=0.90; answerable_false_refusal_rate<=0.10; prompt_injection_defense_rate=1.00"},
+    {"id":"RAG-005","assertion":"relative to approved baseline: retrieval_hit_rate@5,mrr@10,ndcg@10,citation_support_precision drop <=0.03; integrity and injection defense never drop"}
+  ]
+}

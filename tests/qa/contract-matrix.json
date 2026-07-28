@@ -1,0 +1,22 @@
+{
+  "contract_version": "1.0.0",
+  "source": "docs/contracts/openapi-v1.yaml",
+  "cases": [
+    {"id":"API-HEALTH-001","operation":"getLiveness","assertions":["200 envelope code=OK,message=success,request_id","data.status=alive","anonymous allowed"]},
+    {"id":"API-HEALTH-002","operation":"getReadiness","assertions":["200 has sanitized postgresql,redis,vector_store,model states","required dependency unavailable returns 503 ErrorEnvelope","anonymous allowed"]},
+    {"id":"API-SESSION-001","operation":"createSession","assertions":["Idempotency-Key required and constrained to 16-128 printable ASCII","201 SessionEnvelope","same canonical request replays original result with Idempotency-Replayed=true","different request with same key is 409 IDEMPOTENCY_KEY_REUSED"]},
+    {"id":"API-SESSION-002","operation":"listSessions","assertions":["stable last_message_at DESC,id DESC pagination","invalid or filter-mismatched cursor is 400 BAD_REQUEST","all responses contain request_id"]},
+    {"id":"API-SESSION-003","operation":"getSession","assertions":["owner succeeds","unknown or another user's resource is 404 NOT_FOUND","unauthenticated is 401"]},
+    {"id":"API-MESSAGE-001","operation":"listSessionMessages","assertions":["created_at ASC,id ASC pagination","no duplicate item across cursor pages","invalid cursor is 400 BAD_REQUEST"]},
+    {"id":"API-CHAT-001","operation":"streamChat","assertions":["new mode requires session_id and content","retry mode requires session_id and original_user_message_id","missing structural data is 422 VALIDATION_ERROR","semantic failure is 400 BAD_REQUEST"]},
+    {"id":"API-CHAT-002","operation":"streamChat","assertions":["same key and body resumes/replays same run","Last-Event-ID replays only larger persisted sequence","expired replay is pre-stream 410 STREAM_REPLAY_EXPIRED","disconnect alone does not cancel run"]},
+    {"id":"API-RUN-001","operation":"cancelRun","assertions":["queued/running cancellation is 202 cancellation_requested","terminal cancellation is 200 already_terminal","repeat cancellation is idempotent","late model/tool result is not published"]},
+    {"id":"API-RUN-002","operation":"getRunTrace","assertions":["owner and linked reviewer only","trace contains sanitized summaries and configured confidence threshold","no prompt, token, or raw private-data leakage"]},
+    {"id":"API-FEEDBACK-001","operation":"createMessageFeedback","assertions":["only own published assistant message","one feedback per user/message","duplicate/unique conflict is 409","request_id is present"]},
+    {"id":"API-MEMORY-001","operation":"updateMemory","assertions":["correct and deactivate require expected_version","stale version is 409 CONFLICT","correction retains source_message_id and correction chain","inactive/deleted memory is not retrieved"]},
+    {"id":"API-MEMORY-002","operation":"deleteMemory","assertions":["If-Match required","stale version is 409 CONFLICT","successful delete makes online data unavailable and retains audit only","idempotency replay preserves result"]},
+    {"id":"API-REVIEW-001","operation":"listReviews","assertions":["reviewer succeeds","ordinary user is 403 FORBIDDEN","queue candidate text is never exposed through user message history"]},
+    {"id":"API-REVIEW-002","operation":"decideReview","assertions":["approve,reject,edit_and_publish each require expected_version","only one concurrent decision succeeds","later/repeated decision is 409 CONFLICT","approve/edit atomically publish; reject does not publish","all success and conflict attempts are audited"]},
+    {"id":"API-ERROR-001","operation":"all","assertions":["ErrorEnvelope has code,message,data,request_id","422 uses VALIDATION_ERROR","429 includes Retry-After","safe messages do not disclose credentials, internals, prompts, or personal data"]}
+  ]
+}
