@@ -26,13 +26,13 @@ describe('chat preview state', () => {
     store.receiveStreamEvent({ ...streamEvent('delta'), payload: { content: 'First ' } })
     store.receiveStreamEvent({ ...streamEvent('delta'), sequence: 2, payload: { content: 'answer' } })
     const citation = {
-      document_id: 'guide', document_version: 'v3', chunk_id: 'chunk-12', title: 'Maintenance guide', locator: 'Section 3.2',
+      document_id: 'guide', document_version: 'v3', chunk_id: 'chunk-12', title: 'Maintenance guide', source: 'kb://maintenance', page: 3,
     }
     store.receiveStreamEvent({ ...streamEvent('citation'), sequence: 3, payload: citation })
     store.receiveStreamEvent({ ...streamEvent('citation'), sequence: 4, payload: citation })
 
     expect(store.assistantText).toBe('First answer')
-    expect(store.citations).toEqual([{ documentId: 'guide', documentVersion: 'v3', chunkId: 'chunk-12', title: 'Maintenance guide', locator: 'Section 3.2' }])
+    expect(store.citations).toEqual([{ documentId: 'guide', documentVersion: 'v3', chunkId: 'chunk-12', title: 'Maintenance guide', locator: 'kb://maintenance · page 3' }])
   })
 
   it('withholds candidate content when the runtime requires review', () => {

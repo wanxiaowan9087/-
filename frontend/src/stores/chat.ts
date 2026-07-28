@@ -76,12 +76,14 @@ export const useChatStore = defineStore('chat', {
         const documentVersion = readText(event.payload, 'document_version')
         const chunkId = readText(event.payload, 'chunk_id')
         if (documentId && documentVersion && chunkId) {
+          const source = readText(event.payload, 'source') ?? chunkId
+          const page = readNumber(event.payload, 'page')
           const citation = {
             documentId,
             documentVersion,
             chunkId,
             title: readText(event.payload, 'title') ?? documentId,
-            locator: readText(event.payload, 'locator') ?? chunkId,
+            locator: page === null ? source : `${source} · page ${page}`,
           }
           if (!this.citations.some((item) => item.chunkId === citation.chunkId && item.documentVersion === citation.documentVersion)) {
             this.citations.push(citation)
