@@ -44,6 +44,15 @@ $env:DASHSCOPE_API_KEY='your-key'
 
 真实运行时使用 `qwen3-max` 与 `text-embedding-v4`，Chroma 数据默认写入后端的 `data/chroma`；Docker Compose 使用独立 `agent-chroma` 卷保持向量数据。服务启动时会由已持久化的 Chroma 分片重建内存 BM25 索引，因此重启后仍保持向量 + 词法的混合检索。
 
+知识导入不新增面向普通用户的 HTTP 接口，而是使用显式的运维命令和版本化 JSONL 清单（示例见 [`docs/knowledge-manifest.example.jsonl`](docs/knowledge-manifest.example.jsonl)）：
+
+```powershell
+python -m backend.scripts.ingest_knowledge --manifest docs/knowledge-manifest.example.jsonl --dry-run
+python -m backend.scripts.ingest_knowledge --manifest my-knowledge.jsonl
+```
+
+第二条命令需要 AI extra 与 `DASHSCOPE_API_KEY`，会对同一 `document_id` 的旧版本进行幂等替换；没有配置密钥时不会尝试伪造向量数据。
+
 ## 验证
 
 ```powershell
