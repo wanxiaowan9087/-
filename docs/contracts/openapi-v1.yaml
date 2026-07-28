@@ -702,7 +702,7 @@ components:
       schema:
         $ref: "#/components/schemas/Uuid"
     IdempotencyReplayed:
-      description: `true` 表示响应来自幂等记录重放，否则为 `false`
+      description: "`true` 表示响应来自幂等记录重放，否则为 `false`"
       schema:
         type: boolean
   responses:
