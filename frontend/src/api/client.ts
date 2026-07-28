@@ -20,7 +20,14 @@ export interface AgentApiOptions {
 export interface StreamOptions {
   idempotencyKey: string
   lastEventId?: number
+  signal?: AbortSignal
   onEvent: (event: StreamEvent) => void
+}
+
+export interface CancelRunResult {
+  run_id: string
+  status: 'cancellation_requested' | 'already_terminal'
+  requested_at: string
 }
 
 function isSuccessEnvelope<T>(body: Envelope<T> | ApiErrorBody): body is Envelope<T> {
@@ -64,6 +71,7 @@ export function createAgentApi(options: AgentApiOptions) {
           ...(stream.lastEventId === undefined ? {} : { 'Last-Event-ID': String(stream.lastEventId) }),
         }),
         body: JSON.stringify(request),
+        signal: stream.signal,
       })
       if (!response.ok) await readJson<never>(response)
       if (!response.body) throw new ApiClientError('Stream body is missing', response.status)
@@ -76,6 +84,18 @@ export function createAgentApi(options: AgentApiOptions) {
         }
         stream.onEvent(event)
       }
+    },
+
+    async cancelRun(runId: string, reason = 'Cancelled by user'): Promise<CancelRunResult> {
+      const response = await fetcher(`${options.baseUrl}/runs/${runId}/cancel`, {
+        method: 'POST',
+        headers: headers({
+          'Content-Type': 'application/json',
+          'Idempotency-Key': crypto.randomUUID(),
+        }),
+        body: JSON.stringify({ reason }),
+      })
+      return readJson<CancelRunResult>(response)
     },
   }
 }

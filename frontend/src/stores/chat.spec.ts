@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useChatStore } from './chat'
 
-const streamEvent = (eventType: 'delta' | 'citation' | 'review_required' | 'done') => ({
+const streamEvent = (eventType: 'meta' | 'delta' | 'citation' | 'review_required' | 'done') => ({
   event_type: eventType,
   sequence: 1,
   request_id: 'request-1',
@@ -46,5 +46,17 @@ describe('chat preview state', () => {
 
     expect(store.previewState).toBe('disabled')
     expect(store.review).toEqual({ reviewId: 'review-1', reasonCodes: ['POLICY_R04'], confidence: 0.86 })
+  })
+
+  it('keeps the original user message ID for a contract-compliant retry', () => {
+    const store = useChatStore()
+    store.beginRun('session-1')
+    store.receiveStreamEvent({
+      ...streamEvent('delta'),
+      event_type: 'meta',
+      payload: { user_message_id: 'message-1' },
+    })
+
+    expect(store.userMessageId).toBe('message-1')
   })
 })

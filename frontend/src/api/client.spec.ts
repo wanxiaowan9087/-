@@ -42,4 +42,17 @@ describe('SSE API client', () => {
     })
     expect(events).toEqual(['done'])
   })
+
+  it('cancels an active run through the contract endpoint', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      code: 'OK', message: 'success', request_id: 'request-1',
+      data: { run_id: 'run-1', status: 'cancellation_requested', requested_at: '2026-07-28T00:00:00Z' },
+    }), { status: 202 }))
+    const api = createAgentApi({ baseUrl: '/api/v1', accessToken: 'demo:user', fetcher })
+
+    await expect(api.cancelRun('run-1')).resolves.toMatchObject({ status: 'cancellation_requested' })
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('/api/v1/runs/run-1/cancel')
+    expect(init).toMatchObject({ method: 'POST', body: JSON.stringify({ reason: 'Cancelled by user' }) })
+  })
 })

@@ -38,11 +38,13 @@ export const useChatStore = defineStore('chat', {
     navOpen: false,
     sessionId: null as string | null,
     runId: null as string | null,
+    userMessageId: null as string | null,
     lastEventId: null as number | null,
     assistantText: '',
     citations: [] as CitationView[],
     review: null as ReviewView | null,
     errorMessage: null as string | null,
+    runOutcome: null as 'completed' | 'needs_review' | 'cancelled' | null,
   }),
   actions: {
     setPreviewState(state: PreviewState) { this.previewState = state },
@@ -51,16 +53,21 @@ export const useChatStore = defineStore('chat', {
     beginRun(sessionId: string) {
       this.sessionId = sessionId
       this.runId = null
+      this.userMessageId = null
       this.lastEventId = null
       this.assistantText = ''
       this.citations = []
       this.review = null
       this.errorMessage = null
+      this.runOutcome = null
       this.previewState = 'loading'
     },
     receiveStreamEvent(event: StreamEvent) {
       this.lastEventId = event.sequence
       this.runId = event.run_id
+      if (event.event_type === 'meta') {
+        this.userMessageId = readText(event.payload, 'user_message_id')
+      }
       if (event.event_type === 'delta') {
         this.assistantText += readText(event.payload, 'content') ?? ''
       }
@@ -89,11 +96,21 @@ export const useChatStore = defineStore('chat', {
         }
         this.previewState = 'disabled'
       }
-      if (event.event_type === 'done') this.previewState = this.review ? 'disabled' : 'ready'
+      if (event.event_type === 'done') {
+        const outcome = readText(event.payload, 'outcome')
+        this.runOutcome = outcome === 'completed' || outcome === 'needs_review' || outcome === 'cancelled'
+          ? outcome
+          : null
+        this.previewState = this.review ? 'disabled' : 'ready'
+      }
       if (event.event_type === 'error') {
         this.errorMessage = readText(event.payload, 'message')
         this.previewState = 'error'
       }
+    },
+    markCancellationRequested() {
+      this.runOutcome = 'cancelled'
+      this.previewState = 'ready'
     },
   },
 })
