@@ -4,9 +4,13 @@ import csv
 import hashlib
 import io
 import re
-from dataclasses import replace
+from collections.abc import Callable
+from typing import TypeAlias
 
 from .models import Chunk, DocumentRecord, DocumentType, SourceLocation
+
+ChunkMetadata: TypeAlias = dict[str, str | int]
+ChunkPiece: TypeAlias = tuple[str, SourceLocation, ChunkMetadata]
 
 
 def document_version(document: DocumentRecord) -> str:
@@ -29,7 +33,7 @@ class DocumentChunker:
 
     def split(self, document: DocumentRecord) -> tuple[Chunk, ...]:
         version = document_version(document)
-        builders = {
+        builders: dict[DocumentType, Callable[[DocumentRecord], list[ChunkPiece]]] = {
             DocumentType.FAQ: self._faq,
             DocumentType.MARKDOWN: self._markdown,
             DocumentType.TEXT: self._text,
@@ -63,7 +67,7 @@ class DocumentChunker:
 
     def _faq(
         self, document: DocumentRecord
-    ) -> list[tuple[str, SourceLocation, dict[str, str]]]:
+    ) -> list[ChunkPiece]:
         pattern = re.compile(
             r"(?ims)^\s*(?:Q|问题)\s*[:：]\s*(.+?)\s*$"
             r"\s*^\s*(?:A|答案)\s*[:：]\s*(.+?)"
@@ -83,8 +87,8 @@ class DocumentChunker:
 
     def _markdown(
         self, document: DocumentRecord
-    ) -> list[tuple[str, SourceLocation, dict[str, str]]]:
-        pieces: list[tuple[str, SourceLocation, dict[str, str]]] = []
+    ) -> list[ChunkPiece]:
+        pieces: list[ChunkPiece] = []
         heading = "document"
         buffer: list[str] = []
         for line in document.content.splitlines():
@@ -114,16 +118,16 @@ class DocumentChunker:
 
     def _text(
         self, document: DocumentRecord
-    ) -> list[tuple[str, SourceLocation, dict[str, str]]]:
+    ) -> list[ChunkPiece]:
         return self._recursive_pieces(
             document.content, SourceLocation(), {}
         )
 
     def _pdf(
         self, document: DocumentRecord
-    ) -> list[tuple[str, SourceLocation, dict[str, int]]]:
+    ) -> list[ChunkPiece]:
         pages = document.pages or (document.content,)
-        pieces: list[tuple[str, SourceLocation, dict[str, int]]] = []
+        pieces: list[ChunkPiece] = []
         for page_number, page in enumerate(pages, 1):
             pieces.extend(
                 self._recursive_pieces(
@@ -136,7 +140,7 @@ class DocumentChunker:
 
     def _table(
         self, document: DocumentRecord
-    ) -> list[tuple[str, SourceLocation, dict[str, int]]]:
+    ) -> list[ChunkPiece]:
         rows = list(csv.DictReader(io.StringIO(document.content)))
         if not rows:
             return self._text(document)
@@ -153,12 +157,12 @@ class DocumentChunker:
         self,
         content: str,
         location: SourceLocation,
-        metadata: dict,
-    ) -> list[tuple[str, SourceLocation, dict]]:
+        metadata: ChunkMetadata,
+    ) -> list[ChunkPiece]:
         text = _clean(content)
         if len(text) <= self._chunk_size:
             return [(text, location, metadata)]
-        pieces: list[tuple[str, SourceLocation, dict]] = []
+        pieces: list[ChunkPiece] = []
         start = 0
         while start < len(text):
             target = min(len(text), start + self._chunk_size)

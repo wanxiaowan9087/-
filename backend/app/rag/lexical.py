@@ -3,10 +3,9 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter
-from typing import Sequence
+from collections.abc import Sequence
 
 from .models import Chunk, ScoredChunk
-
 
 _WORD = re.compile(r"[a-z0-9]+|[\u4e00-\u9fff]+", re.IGNORECASE)
 
@@ -68,7 +67,7 @@ class BM25KeywordIndex:
             for term in query_terms
         }
         ranked: list[ScoredChunk] = []
-        for chunk, terms in zip(documents, tokenized):
+        for chunk, terms in zip(documents, tokenized, strict=False):
             counts = Counter(terms)
             raw_score = 0.0
             matched = 0

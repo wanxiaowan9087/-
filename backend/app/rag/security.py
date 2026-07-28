@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import json
-from typing import Sequence
+from collections.abc import Sequence
 
 from ..agent.safety import (
     InjectionSignal,
     PromptInjectionDetector,
 )
-
 from .models import SearchHit
 
 

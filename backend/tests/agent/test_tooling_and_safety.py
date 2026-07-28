@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from backend.app.agent.contracts import (
     ErrorCode,
     ReviewReason,
-    ToolResult,
     ToolOutcome,
+    ToolResult,
 )
 from backend.app.agent.safety import (
     DeterministicReviewPolicy,

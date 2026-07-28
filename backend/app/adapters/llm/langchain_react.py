@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import MISSING, fields, is_dataclass
-from typing import Any, Mapping, get_type_hints
+from typing import Any, cast, get_type_hints
 
 from ...agent.contracts import (
     AgentModelRequest,
@@ -10,8 +11,8 @@ from ...agent.contracts import (
     ToolExecution,
     ToolOutcome,
 )
-from ...agent.tooling import CancellationToken, ToolExecutor
 from ...agent.ports import ModelTimeout, ModelUnavailable
+from ...agent.tooling import CancellationToken, ToolExecutor
 
 
 class LangChainReActEngine:
@@ -96,7 +97,7 @@ class LangChainReActEngine:
             args_schema = _pydantic_schema(definition.input_type)
 
             async def invoke(
-                _definition=definition, **payload: Any
+                *, _definition: Any = definition, **payload: Any
             ) -> str:
                 execution = await self._tool_executor.execute(
                     _definition.name,
@@ -145,7 +146,12 @@ def _pydantic_schema(input_type: type[Any]) -> type[Any]:
             hints.get(declared.name, Any),
             default,
         )
-    return create_model(f"{input_type.__name__}Schema", **schema_fields)
+    return cast(
+        type[Any],
+        create_model(  # type: ignore[call-overload]
+            f"{input_type.__name__}Schema", **schema_fields
+        ),
+    )
 
 
 def _model_input(request: AgentModelRequest) -> str:

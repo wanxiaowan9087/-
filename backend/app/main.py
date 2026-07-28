@@ -12,9 +12,9 @@ from backend.app.adapters.redis.client import OptionalRedisAdapter
 from backend.app.adapters.sql.database import create_engine, create_session_factory
 from backend.app.adapters.sql.repository import SqlPlatformRepository
 from backend.app.api.v1.routes import router
-from backend.app.application.ports import RunExecutorPort, UnavailableRunExecutor
-from backend.app.bootstrap import build_run_executor
+from backend.app.application.ports import RunExecutorPort
 from backend.app.application.service import PlatformService
+from backend.app.bootstrap import build_run_executor
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.context import bind_context, new_request_id
 from backend.app.core.errors import (

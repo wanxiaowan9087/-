@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from backend.app.adapters.llm.fake import FakeReActEngine
 from backend.app.agent.contracts import (
@@ -19,8 +19,8 @@ from backend.app.agent.memory import (
     MemoryConfig,
     MemoryCoordinator,
 )
-from backend.app.agent.runtime import AgentRuntime
 from backend.app.agent.ports import ModelTimeout, ModelUnavailable
+from backend.app.agent.runtime import AgentRuntime
 from backend.app.agent.tooling import CancellationToken
 from backend.app.rag.models import (
     Chunk,
@@ -72,7 +72,7 @@ class MemoryTests(unittest.IsolatedAsyncioTestCase):
                 message_id=str(index),
                 role="user",
                 content=f"message {index}",
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             )
             for index in range(5)
         )
@@ -123,7 +123,7 @@ class MemoryTests(unittest.IsolatedAsyncioTestCase):
         warning = await coordinator.extract_best_effort(
             "subject",
             ConversationMessage(
-                "m", "user", "hello", datetime.now(timezone.utc)
+                "m", "user", "hello", datetime.now(UTC)
             ),
         )
         self.assertEqual(warning, "memory_extraction_degraded")

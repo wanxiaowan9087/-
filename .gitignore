@@ -13,6 +13,7 @@ htmlcov/
 logs/
 apifox-reports/
 artifacts/apifox/
+artifacts/quality/
 .apifox/*.private.*
 tests/apifox/**/*.private.*
 *.log

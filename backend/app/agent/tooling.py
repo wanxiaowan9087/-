@@ -2,16 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import MISSING, dataclass, fields, is_dataclass
 from time import monotonic
 from typing import (
     Any,
-    Awaitable,
-    Callable,
     Generic,
-    Mapping,
     Protocol,
     TypeVar,
+    cast,
     get_args,
     get_origin,
     get_type_hints,
@@ -21,13 +20,13 @@ from uuid import uuid4
 from .contracts import ErrorCode, ToolExecution, ToolOutcome, ToolResult
 from .redaction import redact_text, redact_value
 
-
 InputT = TypeVar("InputT")
+HandlerInputT = TypeVar("HandlerInputT", contravariant=True)
 
 
-class ToolHandler(Protocol[InputT]):
+class ToolHandler(Protocol[HandlerInputT]):
     def __call__(
-        self, arguments: InputT
+        self, arguments: HandlerInputT
     ) -> ToolResult | Awaitable[ToolResult]: ...
 
 
@@ -50,9 +49,9 @@ class RetryPolicy:
 
     def delay(self, failed_attempt: int, jitter: Callable[[], float]) -> float:
         exponential = self.base_delay_seconds * (2 ** (failed_attempt - 1))
-        return min(self.max_delay_seconds, exponential) + (
+        return float(min(self.max_delay_seconds, exponential) + (
             self.jitter_seconds * max(0.0, min(1.0, jitter()))
-        )
+        ))
 
 
 @dataclass(frozen=True)
@@ -222,7 +221,7 @@ class ToolExecutor:
                     arguments_preview,
                     ErrorCode.CANCELLED,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 if attempt >= definition.retry_policy.max_attempts:
                     return self._failure(
                         call_id,
@@ -295,7 +294,7 @@ class ToolExecutor:
                 raise asyncio.CancelledError
             if handler_task not in done:
                 handler_task.cancel()
-                raise asyncio.TimeoutError
+                raise TimeoutError
             return handler_task.result()
         finally:
             cancellation_task.cancel()
@@ -306,7 +305,7 @@ class ToolExecutor:
         attempt: int,
         token: CancellationToken,
     ) -> None:
-        delay_task = asyncio.create_task(
+        delay_task: asyncio.Future[None] = asyncio.ensure_future(
             self._sleep(retry_policy.delay(attempt, self._jitter))
         )
         cancellation_task = asyncio.create_task(token.wait_cancelled())
@@ -365,7 +364,7 @@ def _arguments_preview(
 def _decode_input(input_type: type[InputT], payload: Mapping[str, Any]) -> InputT:
     model_validate = getattr(input_type, "model_validate", None)
     if callable(model_validate):
-        return model_validate(dict(payload))
+        return cast(InputT, model_validate(dict(payload)))
     if not is_dataclass(input_type):
         raise TypeError("unsupported tool input type")
 
@@ -397,7 +396,7 @@ def _matches_type(value: Any, expected: Any) -> bool:
     origin = get_origin(expected)
     if origin is None:
         if expected is float:
-            return isinstance(value, (float, int)) and not isinstance(value, bool)
+            return isinstance(value, float | int) and not isinstance(value, bool)
         if expected is int:
             return isinstance(value, int) and not isinstance(value, bool)
         return isinstance(value, expected)

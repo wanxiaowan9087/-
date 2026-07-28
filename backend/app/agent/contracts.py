@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 
 def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class ConversationMode(StrEnum):
@@ -183,9 +184,9 @@ class AgentModelRequest:
     mode: ConversationMode
     user_text: str
     rendered_context: str
-    short_term_messages: Sequence["ConversationMessage"]
+    short_term_messages: Sequence[ConversationMessage]
     conversation_summary: str | None
-    long_term_facts: Sequence["LongTermFact"]
+    long_term_facts: Sequence[LongTermFact]
     report_scope: ReportScope | None
 
 
@@ -223,7 +224,7 @@ class LongTermFact:
         if self.version < 1:
             raise ValueError("memory version must be positive")
 
-    def corrected(self, content: str) -> "LongTermFact":
+    def corrected(self, content: str) -> LongTermFact:
         return LongTermFact(
             memory_id=self.memory_id,
             memory_type=self.memory_type,
@@ -234,7 +235,7 @@ class LongTermFact:
             active=True,
         )
 
-    def deactivated(self) -> "LongTermFact":
+    def deactivated(self) -> LongTermFact:
         return LongTermFact(
             memory_id=self.memory_id,
             memory_type=self.memory_type,

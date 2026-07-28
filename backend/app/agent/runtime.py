@@ -1,25 +1,26 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 from uuid import uuid4
 
 from ..rag.citations import CitationService
-from ..rag.models import RetrievalResult
+from ..rag.models import Citation, RetrievalResult
 from ..rag.ports import RetrieverPort
 from ..rag.retrieval import RetrievalUnavailable
 from ..rag.security import (
     render_untrusted_context,
     scan_retrieved_content,
 )
-
 from .contracts import (
     AgentModelRequest,
     AgentRequest,
     AgentRunResult,
     ConversationMessage,
     ErrorCode,
+    MemoryContext,
     ModelDraft,
     RunStatus,
     StepStatus,
@@ -33,6 +34,7 @@ from .safety import (
     DeterministicReviewPolicy,
     DraftGate,
     PolicyAction,
+    PolicyDecision,
     PolicyInput,
     PromptInjectionDetector,
     classify_user_risk,
@@ -43,7 +45,7 @@ from .tracing import RunStateMachine, TraceRecorder
 
 
 class MemoryRuntimePort(Protocol):
-    async def build_context(self, session_id: str, subject_id: str): ...
+    async def build_context(self, session_id: str, subject_id: str) -> MemoryContext: ...
 
     async def extract_best_effort(
         self, subject_id: str, source: ConversationMessage
@@ -333,7 +335,7 @@ class AgentRuntime:
         request: AgentRequest,
         trace: TraceRecorder,
         degraded: list[str],
-    ):
+    ) -> MemoryContext:
         step = trace.start(
             StepType.CONTEXT, "preparing window, summary, and sourced facts"
         )
@@ -409,9 +411,9 @@ class AgentRuntime:
         state: RunStateMachine,
         trace: TraceRecorder,
         retrieval: RetrievalResult,
-        decision,
+        decision: PolicyDecision,
         candidate: str,
-        citations,
+        citations: Sequence[Citation],
         degraded: list[str],
     ) -> AgentRunResult:
         step = trace.start(

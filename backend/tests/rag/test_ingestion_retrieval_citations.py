@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import unittest
 from uuid import uuid4
 
@@ -98,7 +97,7 @@ class RagTests(unittest.IsolatedAsyncioTestCase):
             document_type=DocumentType.TEXT,
             location=SourceLocation(page=2),
         )
-        from backend.app.rag.models import ScoredChunk, SearchHit
+        from backend.app.rag.models import SearchHit
 
         hit = SearchHit(
             chunk=chunk,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import math
-from typing import Sequence
+from collections.abc import Sequence
 
 from ...rag.lexical import tokenize
 from ...rag.models import Chunk, ScoredChunk
@@ -61,7 +61,7 @@ class InMemoryVectorStore:
         ]
         for chunk_id in stale:
             del self._entries[chunk_id]
-        for chunk, vector in zip(chunks, vectors):
+        for chunk, vector in zip(chunks, vectors, strict=False):
             if chunk.document_version != document_version:
                 raise ValueError("mixed document versions")
             self._entries[chunk.chunk_id] = (chunk, tuple(vector))
@@ -98,6 +98,6 @@ def _cosine(left: Sequence[float], right: Sequence[float]) -> float:
     right_norm = math.sqrt(sum(value * value for value in right))
     if not left_norm or not right_norm:
         return 0.0
-    return sum(a * b for a, b in zip(left, right)) / (
+    return sum(a * b for a, b in zip(left, right, strict=False)) / (
         left_norm * right_norm
     )

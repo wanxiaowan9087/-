@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from .models import (

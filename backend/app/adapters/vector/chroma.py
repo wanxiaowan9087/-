@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from ...rag.models import (
     Chunk,
@@ -58,7 +59,7 @@ class ChromaVectorStore:
         distances = _first(result.get("distances"))
         hits: list[ScoredChunk] = []
         for document, metadata, distance in zip(
-            documents, metadatas, distances
+            documents, metadatas, distances, strict=False
         ):
             hits.append(
                 ScoredChunk(
@@ -78,7 +79,7 @@ class ChromaVectorStore:
         metadatas = result.get("metadatas", [])
         return tuple(
             _chunk(document, metadata)
-            for document, metadata in zip(documents, metadatas)
+            for document, metadata in zip(documents, metadatas, strict=False)
         )
 
     def load_all_chunks(self) -> tuple[Chunk, ...]:
@@ -95,7 +96,7 @@ class ChromaVectorStore:
         metadatas = result.get("metadatas", []) if result else []
         return tuple(
             _chunk(document, metadata)
-            for document, metadata in zip(documents, metadatas)
+            for document, metadata in zip(documents, metadatas, strict=False)
         )
 
 
@@ -103,7 +104,7 @@ def _metadata(chunk: Chunk) -> dict[str, Any]:
     safe_custom = {
         str(key): value
         for key, value in chunk.metadata.items()
-        if isinstance(value, (str, int, float, bool)) or value is None
+        if isinstance(value, str | int | float | bool) or value is None
     }
     return {
         "document_id": chunk.document_id,
@@ -138,7 +139,7 @@ def _chunk(document: str, metadata: dict[str, Any]) -> Chunk:
     )
 
 
-def _first(value: Any) -> list:
+def _first(value: Any) -> list[Any]:
     if isinstance(value, list) and value and isinstance(value[0], list):
         return value[0]
     return value or []

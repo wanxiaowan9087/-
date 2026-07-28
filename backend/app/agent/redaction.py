@@ -4,7 +4,6 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
-
 _SENSITIVE_KEY = re.compile(
     r"(authorization|api[-_]?key|token|secret|password|credential|cookie|"
     r"email|phone|id_card)",
@@ -37,8 +36,8 @@ def redact_value(value: Any) -> Any:
             )
             for key, item in value.items()
         }
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, list | tuple):
         return [redact_value(item) for item in value]
-    if isinstance(value, (int, float, bool)) or value is None:
+    if isinstance(value, int | float | bool) or value is None:
         return value
     return "[REDACTED_OBJECT]"

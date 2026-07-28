@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime
 from time import monotonic
-from typing import Callable
 
 from .contracts import (
     ErrorCode,
@@ -14,7 +14,6 @@ from .contracts import (
     utc_now,
 )
 from .redaction import redact_text
-
 
 _ALLOWED_TRANSITIONS: dict[RunStatus, frozenset[RunStatus]] = {
     RunStatus.QUEUED: frozenset({RunStatus.RUNNING, RunStatus.CANCELLED}),

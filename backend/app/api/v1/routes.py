@@ -40,7 +40,7 @@ IdempotencyKey = Annotated[
 ]
 
 
-def error_responses(*status_codes: int) -> dict[int, dict[str, Any]]:
+def error_responses(*status_codes: int) -> dict[int | str, dict[str, Any]]:
     descriptions = {
         400: "请求语义或游标不合法",
         401: "缺少或无效身份",

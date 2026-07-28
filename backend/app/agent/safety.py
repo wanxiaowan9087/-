@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Sequence
 
 from .contracts import ReviewReason, ToolExecution, ToolOutcome
 

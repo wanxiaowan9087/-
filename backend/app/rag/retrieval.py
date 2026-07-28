@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 from dataclasses import replace
-from typing import Sequence
+from typing import Any
 
 from .lexical import tokenize
 from .models import RetrievalResult, ScoredChunk, SearchHit
@@ -127,7 +128,7 @@ def reciprocal_rank_fusion(
     vector_weight: float = 1.0,
     keyword_weight: float = 1.0,
 ) -> tuple[SearchHit, ...]:
-    combined: dict[str, dict] = {}
+    combined: dict[str, dict[str, Any]] = {}
     for rank, scored in enumerate(vector_hits, 1):
         state = combined.setdefault(
             scored.chunk.chunk_id,
