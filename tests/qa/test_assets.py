@@ -6,7 +6,6 @@ import json
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 QA_ASSETS = (
     ROOT / "tests" / "qa" / "contract-matrix.json",
@@ -28,13 +27,30 @@ class QaAssetTest(unittest.TestCase):
     def test_contract_matrix_covers_blocking_domains(self) -> None:
         matrix = json.loads(QA_ASSETS[0].read_text(encoding="utf-8"))
         case_ids = {case["id"] for case in matrix["cases"]}
-        self.assertTrue({"API-CHAT-002", "API-MEMORY-002", "API-REVIEW-002", "API-ERROR-001"} <= case_ids)
+        required_case_ids = {
+            "API-CHAT-002",
+            "API-MEMORY-002",
+            "API-REVIEW-002",
+            "API-ERROR-001",
+        }
+        self.assertTrue(required_case_ids <= case_ids)
 
     def test_sse_matrix_covers_all_discriminated_events(self) -> None:
         sse = json.loads(QA_ASSETS[1].read_text(encoding="utf-8"))
+        expected_event_types = {
+            "meta",
+            "status",
+            "tool_start",
+            "tool_end",
+            "delta",
+            "citation",
+            "review_required",
+            "done",
+            "error",
+        }
         self.assertEqual(
             set(sse["event_types"]),
-            {"meta", "status", "tool_start", "tool_end", "delta", "citation", "review_required", "done", "error"},
+            expected_event_types,
         )
 
     def test_apifox_manifest_keeps_required_black_box_flows(self) -> None:

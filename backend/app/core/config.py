@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 from functools import lru_cache
+from typing import Annotated
 
 from pydantic import Field, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -23,7 +25,7 @@ class Settings(BaseSettings):
     database_command_timeout_seconds: float = Field(default=10.0, gt=0)
     redis_url: str | None = "redis://redis:6379/0"
     redis_timeout_seconds: float = Field(default=1.0, gt=0)
-    cors_origins: list[str] = ["http://localhost:5173"]
+    cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
     cors_allow_credentials: bool = True
     demo_auth_enabled: bool = True
     cursor_signing_secret: str = "development-only-cursor-secret"
@@ -46,7 +48,9 @@ class Settings(BaseSettings):
     @field_validator("cors_origins", mode="before")
     @classmethod
     def split_origins(cls, value: object) -> object:
-        if isinstance(value, str) and not value.lstrip().startswith("["):
+        if isinstance(value, str):
+            if value.lstrip().startswith("["):
+                return json.loads(value)
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
 
