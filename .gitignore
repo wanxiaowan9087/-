@@ -17,6 +17,7 @@ artifacts/quality/
 frontend/playwright-report/
 frontend/test-results/
 .apifox/*.private.*
+.apifox/
 tests/apifox/**/*.private.*
 *.log
 chroma_db/
