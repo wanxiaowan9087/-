@@ -38,7 +38,13 @@ class CommandResult:
     output: str
 
 
-def _run(name: str, command: list[str], *, cwd: Path = ROOT) -> CommandResult:
+def _run(
+    name: str,
+    command: list[str],
+    *,
+    cwd: Path = ROOT,
+    timeout_seconds: float = 90.0,
+) -> CommandResult:
     started = time.monotonic()
     try:
         completed = subprocess.run(
@@ -49,12 +55,19 @@ def _run(name: str, command: list[str], *, cwd: Path = ROOT) -> CommandResult:
             encoding="utf-8",
             errors="replace",
             check=False,
+            timeout=timeout_seconds,
         )
         output = "\n".join(item for item in (completed.stdout, completed.stderr) if item)
         exit_code = completed.returncode
     except FileNotFoundError as error:
         output = f"required executable is unavailable: {error}"
         exit_code = 127
+    except subprocess.TimeoutExpired as error:
+        partial = error.stdout or ""
+        if isinstance(partial, bytes):
+            partial = partial.decode("utf-8", errors="replace")
+        output = f"command timed out after {timeout_seconds:.0f} seconds\n{partial}"
+        exit_code = 124
     return CommandResult(
         name=name,
         command=subprocess.list2cmdline(command),
@@ -217,7 +230,11 @@ def run_security(_: str) -> list[CommandResult]:
     if not pip_audit:
         return [_missing("security", "pip-audit is unavailable; dependency vulnerability gate cannot run")]
     return [
-        _run("security-python", [pip_audit, "-r", "requirements.lock"]),
+        _run(
+            "security-python",
+            [pip_audit, "-r", "requirements.lock"],
+            timeout_seconds=45.0,
+        ),
         _run("security-node", _npm("audit", "--omit=dev", "--audit-level=high"), cwd=ROOT / "frontend"),
     ]
 
