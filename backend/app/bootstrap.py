@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from backend.app.adapters.llm.deterministic_executor import DeterministicRunExecutor
 from backend.app.adapters.llm.langchain_react import LangChainReActEngine
 from backend.app.adapters.llm.platform_executor import RuntimeRunExecutor
 from backend.app.adapters.memory.platform_runtime import PlatformMemoryRuntime
@@ -30,6 +31,8 @@ def build_run_executor(
     DashScope credential through the provider's standard environment variable.
     """
 
+    if settings.test_executor_enabled:
+        return DeterministicRunExecutor()
     if not settings.agent_runtime_enabled:
         return UnavailableRunExecutor()
     try:

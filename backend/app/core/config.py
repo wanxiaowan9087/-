@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
     cors_allow_credentials: bool = True
     demo_auth_enabled: bool = True
+    test_executor_enabled: bool = False
     cursor_signing_secret: str = "development-only-cursor-secret"
     idempotency_ttl_seconds: int = Field(default=86_400, ge=86_400)
     stream_retention_seconds: int = Field(default=86_400, ge=86_400)
@@ -56,6 +57,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def enforce_production_baseline(self) -> Settings:
+        if self.test_executor_enabled and self.environment != "test":
+            raise ValueError("test executor can only be enabled in the test environment")
         if self.environment == "production":
             if self.demo_auth_enabled:
                 raise ValueError("demo authentication must be disabled in production")

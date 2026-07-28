@@ -8,11 +8,10 @@ import shutil
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Callable
-
 
 ROOT = Path(__file__).resolve().parents[1]
 ARTIFACT_DIR = ROOT / "artifacts" / "quality"
@@ -44,6 +43,7 @@ def _run(
     *,
     cwd: Path = ROOT,
     timeout_seconds: float = 90.0,
+    env: dict[str, str] | None = None,
 ) -> CommandResult:
     started = time.monotonic()
     try:
@@ -56,6 +56,7 @@ def _run(
             errors="replace",
             check=False,
             timeout=timeout_seconds,
+            env=env,
         )
         output = "\n".join(item for item in (completed.stdout, completed.stderr) if item)
         exit_code = completed.returncode
@@ -98,6 +99,28 @@ def _python_tool(environment_name: str, module: str, *args: str) -> list[str]:
 def _npm(*args: str) -> list[str]:
     executable = shutil.which("npm.cmd") or shutil.which("npm") or "npm"
     return [executable, *args]
+
+
+def _docker() -> str | None:
+    configured = os.environ.get("QUALITY_DOCKER_CLI")
+    if configured and Path(configured).is_file():
+        return configured
+    discovered = shutil.which("docker.exe") or shutil.which("docker")
+    if discovered:
+        return discovered
+    d_drive_default = Path("D:/DockerDesktop/resources/bin/docker.exe")
+    if d_drive_default.is_file():
+        return str(d_drive_default)
+    return None
+
+
+def _playwright_environment() -> dict[str, str]:
+    environment = os.environ.copy()
+    if "PLAYWRIGHT_BROWSERS_PATH" not in environment:
+        d_drive_default = Path("D:/codex_store/playwright-browsers")
+        if d_drive_default.is_dir():
+            environment["PLAYWRIGHT_BROWSERS_PATH"] = str(d_drive_default)
+    return environment
 
 
 def _git_head() -> str:
@@ -159,7 +182,9 @@ def run_backend(_: str) -> list[CommandResult]:
         _run("backend-types", _python_tool("QUALITY_MYPY_BIN", "mypy", "backend/app")),
         _run(
             "backend-tests",
-            _python("-m", "pytest", "backend/tests/test_api.py", "backend/tests/test_sql_adapter.py"),
+            _python(
+                "-m", "pytest", "backend/tests/test_api.py", "backend/tests/test_sql_adapter.py"
+            ),
         ),
     ]
 
@@ -206,14 +231,50 @@ def run_frontend(_: str) -> list[CommandResult]:
 
 def run_e2e(_: str) -> list[CommandResult]:
     executable = ROOT / "frontend" / "node_modules" / ".bin" / "playwright.cmd"
-    tests = ROOT / "tests" / "e2e"
+    config = ROOT / "frontend" / "playwright.config.ts"
+    tests = ROOT / "frontend" / "tests" / "e2e"
     if not executable.is_file() or not tests.is_dir():
         return [_missing("e2e", "Playwright executable or reviewed e2e suite is missing")]
-    return [_run("e2e", [str(executable), "test", str(tests)])]
+    docker = _docker()
+    if not docker:
+        return [_missing("e2e", "Docker CLI is unavailable for the real API test stack")]
+    if os.environ.get("QUALITY_ALLOW_COMPOSE") != "1":
+        return [
+            _missing("e2e", "set QUALITY_ALLOW_COMPOSE=1 to allow test stack lifecycle execution")
+        ]
+    stack = _run(
+        "e2e-stack",
+        [
+            docker,
+            "compose",
+            "-f",
+            "docker-compose.yml",
+            "-f",
+            "docker-compose.e2e.yml",
+            "up",
+            "--build",
+            "-d",
+            "--wait",
+            "--wait-timeout",
+            "120",
+        ],
+        timeout_seconds=150.0,
+    )
+    if stack.exit_code != 0:
+        return [stack]
+    return [
+        stack,
+        _run(
+            "e2e",
+            [str(executable), "test", "--config", str(config)],
+            cwd=ROOT / "frontend",
+            env=_playwright_environment(),
+        ),
+    ]
 
 
 def run_compose(_: str) -> list[CommandResult]:
-    docker = shutil.which("docker")
+    docker = _docker()
     if not docker:
         return [_missing("compose", "Docker CLI is unavailable")]
     if os.environ.get("QUALITY_ALLOW_COMPOSE") != "1":
@@ -229,14 +290,22 @@ def run_compose(_: str) -> list[CommandResult]:
 def run_security(_: str) -> list[CommandResult]:
     pip_audit = shutil.which("pip-audit")
     if not pip_audit:
-        return [_missing("security", "pip-audit is unavailable; dependency vulnerability gate cannot run")]
+        return [
+            _missing(
+                "security", "pip-audit is unavailable; dependency vulnerability gate cannot run"
+            )
+        ]
     return [
         _run(
             "security-python",
             [pip_audit, "-r", "requirements.lock"],
             timeout_seconds=45.0,
         ),
-        _run("security-node", _npm("audit", "--omit=dev", "--audit-level=high"), cwd=ROOT / "frontend"),
+        _run(
+            "security-node",
+            _npm("audit", "--omit=dev", "--audit-level=high"),
+            cwd=ROOT / "frontend",
+        ),
     ]
 
 
@@ -264,7 +333,7 @@ def _write_report(sha: str, results: list[CommandResult], started_at: datetime) 
             "platform": platform.platform(),
             "python": sys.version,
             "node": _run("node-version", ["node", "--version"]).output.strip(),
-            "docker": _run("docker-version", ["docker", "--version"]).output.strip(),
+            "docker": _run("docker-version", [_docker() or "docker", "--version"]).output.strip(),
         },
         "passed": all(result.exit_code == 0 for result in results),
         "results": [asdict(result) for result in results],
@@ -284,7 +353,10 @@ def _write_report(sha: str, results: list[CommandResult], started_at: datetime) 
         "| --- | ---: | ---: | --- |",
     ]
     lines.extend(
-        f"| {result.name} | {result.exit_code} | {result.duration_seconds:.3f} | `{result.command}` |"
+        (
+            f"| {result.name} | {result.exit_code} | {result.duration_seconds:.3f} | "
+            f"`{result.command}` |"
+        )
         for result in results
     )
     (ARTIFACT_DIR / "acceptance-report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -293,7 +365,9 @@ def _write_report(sha: str, results: list[CommandResult], started_at: datetime) 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the project's authoritative quality gates.")
     parser.add_argument("command", choices=(*COMMANDS, "all"))
-    parser.add_argument("--integration-sha", required=True, help="exact 40-character Git SHA at HEAD")
+    parser.add_argument(
+        "--integration-sha", required=True, help="exact 40-character Git SHA at HEAD"
+    )
     args = parser.parse_args()
     actual_sha = _git_head()
     if args.integration_sha != actual_sha or len(actual_sha) != 40:
