@@ -5,6 +5,7 @@ import json
 import os
 import platform
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -17,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ARTIFACT_DIR = ROOT / "artifacts" / "quality"
 COMMANDS = (
     "contract",
-    "apifox",
+    "api-scenarios",
     "backend",
     "agent",
     "rag",
@@ -123,6 +124,21 @@ def _playwright_environment() -> dict[str, str]:
     return environment
 
 
+def _integration_environment() -> dict[str, str]:
+    """Provide one free host port to Compose and Vite for an integration run."""
+
+    environment = _playwright_environment()
+    port = environment.get("QUALITY_BACKEND_PORT")
+    if not port:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+            listener.bind(("127.0.0.1", 0))
+            port = str(listener.getsockname()[1])
+        environment["QUALITY_BACKEND_PORT"] = port
+    environment["AGENT_BACKEND_PORT"] = port
+    environment["VITE_BACKEND_PROXY_TARGET"] = f"http://127.0.0.1:{port}"
+    return environment
+
+
 def _git_head() -> str:
     result = _run("git-head", ["git", "rev-parse", "HEAD"])
     if result.exit_code != 0:
@@ -150,27 +166,28 @@ def run_contract(_: str) -> list[CommandResult]:
     ]
 
 
-def run_apifox(_: str) -> list[CommandResult]:
-    candidate = os.environ.get("APIFOX_CLI")
-    discovered = shutil.which("apifox.cmd") or shutil.which("apifox")
-    executable = Path(candidate) if candidate else Path(discovered or "")
-    suite = ROOT / "tests" / "apifox" / "scenarios" / "offline-suite.json"
-    if not executable.is_file():
-        return [_missing("apifox", "APIFOX_CLI is not configured to an executable")]
-    if not suite.is_file():
-        return [_missing("apifox", f"reviewed executable scenario suite is missing: {suite}")]
-    ARTIFACT_DIR.joinpath("apifox").mkdir(parents=True, exist_ok=True)
+def run_api_scenarios(_: str) -> list[CommandResult]:
+    """Run the approved local replacement for the unavailable Apifox CLI export.
+
+    The tests exercise the frozen HTTP routes through FastAPI's ASGI boundary and
+    emit JUnit output for CI. The reviewed Apifox online report remains evidence
+    of the manual tool run; no access token or vendor-hosted state is required by
+    this deterministic gate.
+    """
+
+    artifact_dir = ARTIFACT_DIR / "api-scenarios"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
     return [
         _run(
-            "apifox",
+            "api-scenarios",
             [
-                str(executable),
-                "run",
-                str(suite),
-                "--reporters",
-                "cli,json,junit",
-                "--output",
-                str(ARTIFACT_DIR / "apifox"),
+                *_python(
+                    "-m",
+                    "pytest",
+                    "backend/tests/test_api_scenarios.py",
+                    "--junitxml",
+                    str(artifact_dir / "junit.xml"),
+                ),
             ],
         )
     ]
@@ -242,6 +259,7 @@ def run_e2e(_: str) -> list[CommandResult]:
         return [
             _missing("e2e", "set QUALITY_ALLOW_COMPOSE=1 to allow test stack lifecycle execution")
         ]
+    environment = _integration_environment()
     stack = _run(
         "e2e-stack",
         [
@@ -262,6 +280,7 @@ def run_e2e(_: str) -> list[CommandResult]:
         # The first build on a new machine can legitimately exceed 150 seconds;
         # keep the cap bounded while allowing that cold-start path to complete.
         timeout_seconds=240.0,
+        env=environment,
     )
     if stack.exit_code != 0:
         return [stack]
@@ -271,7 +290,7 @@ def run_e2e(_: str) -> list[CommandResult]:
             "e2e",
             [str(executable), "test", "--config", str(config)],
             cwd=ROOT / "frontend",
-            env=_playwright_environment(),
+            env=environment,
         ),
     ]
 
@@ -289,23 +308,17 @@ def run_compose(_: str) -> list[CommandResult]:
             # Keep the regular integration stack consistent with e2e: a first
             # locked dependency build can exceed the generic 90-second cap.
             timeout_seconds=240.0,
+            env=_integration_environment(),
         )
     ]
 
 
 def run_security(_: str) -> list[CommandResult]:
-    pip_audit = shutil.which("pip-audit")
-    if not pip_audit:
-        return [
-            _missing(
-                "security", "pip-audit is unavailable; dependency vulnerability gate cannot run"
-            )
-        ]
     return [
         _run(
             "security-python",
             [
-                pip_audit,
+                *_python("-m", "pip_audit"),
                 "-r",
                 "requirements.lock",
                 "--no-deps",
@@ -319,7 +332,12 @@ def run_security(_: str) -> list[CommandResult]:
         ),
         _run(
             "security-node",
-            _npm("audit", "--omit=dev", "--audit-level=high"),
+            _npm(
+                "audit",
+                "--registry=https://registry.npmjs.org",
+                "--omit=dev",
+                "--audit-level=high",
+            ),
             cwd=ROOT / "frontend",
         ),
     ]
@@ -327,7 +345,7 @@ def run_security(_: str) -> list[CommandResult]:
 
 RUNNERS: dict[str, Callable[[str], list[CommandResult]]] = {
     "contract": run_contract,
-    "apifox": run_apifox,
+    "api-scenarios": run_api_scenarios,
     "backend": run_backend,
     "agent": run_agent,
     "rag": run_rag,

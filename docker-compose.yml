@@ -44,7 +44,7 @@ services:
       APP_CORS_ORIGINS: '["http://localhost:5173"]'
       APP_AGENT_VECTOR_STORE_PATH: /app/data/vector-store.json
     ports:
-      - "8000:8000"
+      - "${AGENT_BACKEND_PORT:-8000}:8000"
     volumes:
       - agent-vector-data:/app/data
     depends_on:

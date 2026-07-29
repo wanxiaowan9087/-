@@ -26,7 +26,7 @@ python scripts/quality_gate.py all --integration-sha <40位Git提交SHA>
 
 ```bash
 python scripts/quality_gate.py contract
-python scripts/quality_gate.py apifox
+python scripts/quality_gate.py api-scenarios
 python scripts/quality_gate.py backend
 python scripts/quality_gate.py agent
 python scripts/quality_gate.py rag
@@ -57,7 +57,7 @@ CI 中所有质量作业必须检出同一个提交 SHA，并使用锁定依赖�
 | CI job | 调用 | 阻断条件 |
 |---|---|---|
 | `quality-contract` | `quality_gate.py contract` | OpenAPI、Pydantic、普通响应或流式事件契约不一致 |
-| `quality-api-scenarios` | `quality_gate.py apifox` | Apifox CLI 场景、断言、数据驱动用例或报告生成失败 |
+| `quality-api-scenarios` | `quality_gate.py api-scenarios` | 冻结 HTTP 场景、断言或 JUnit 报告生成失败 |
 | `quality-backend` | `quality_gate.py backend` | lint、类型检查、单元、Repository、事务或迁移测试失败 |
 | `quality-agent` | `quality_gate.py agent` | 工具、重试、超时、取消、降级、审核触发或记忆测试失败 |
 | `quality-rag` | `quality_gate.py rag` | 固定评测集缺失、硬阈值未达标或发生禁止回归 |
@@ -96,7 +96,7 @@ CI 必须保存验收报告、JUnit 报告、前端覆盖率、Playwright trace/
 
 不得仅用 Mock HTTP 响应替代“真实联调”。真实联调要求浏览器发出真实网络请求，并由运行中的 FastAPI 和真实基础设施 Adapter 处理；Fake Model 与固定 Embedding 不影响这一判定。
 
-Apifox CLI 是 `all` 的阻断组成，不是第二套完整验收入口。其场景和非敏感数据保存在 `tests/apifox/`；CI 报告写入 `artifacts/apifox/` 并汇总到总验收报告。具体边界、运行模式和密钥规则见 `docs/testing/apifox-cli.md`。
+Apifox 在线场景是人工验收补充，不是第二套完整验收入口。由于用户于 2026-07-29 明确批准替代失效的“导出数据运行”功能，`all` 的阻断场景由 `backend/tests/test_api_scenarios.py` 在 FastAPI ASGI 边界执行，并输出 `artifacts/quality/api-scenarios/junit.xml`。`tests/apifox/scenarios/scenario-manifest-v1.json` 仍是九组场景的可审阅来源，线上 Apifox 27/27 报告保留为补充证据；不向仓库提交 Token、私有变量或 vendor 导出文件。
 
 ## 5. RAG 验收阈值
 

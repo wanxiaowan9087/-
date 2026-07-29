@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from uuid import UUID
 
 import pytest_asyncio
@@ -10,6 +11,14 @@ from backend.app.adapters.memory.repository import MemoryPlatformRepository
 from backend.app.application.ports import RunExecution
 from backend.app.core.config import Settings
 from backend.app.main import create_app
+
+
+@dataclass(frozen=True)
+class ScenarioHarness:
+    """HTTP client plus the isolated fixture store used to arrange API scenarios."""
+
+    client: AsyncClient
+    repository: MemoryPlatformRepository
 
 
 class FakeExecutor:
@@ -73,4 +82,28 @@ async def identity_client() -> AsyncIterator[AsyncClient]:
         transport=ASGITransport(app=app), base_url="http://test"
     ) as async_client:
         yield async_client
+    await app.state.platform_service.close()
+
+
+@pytest_asyncio.fixture
+async def scenario_harness() -> AsyncIterator[ScenarioHarness]:
+    """Provide an isolated FastAPI application for the offline scenario suite.
+
+    The scenarios arrange memory and review candidates through the repository because
+    the frozen public contract intentionally exposes no create endpoints for those
+    internal records. Every behaviour under test still crosses the HTTP route.
+    """
+
+    settings = Settings(
+        environment="test",
+        database_url="sqlite+aiosqlite:///./scenario-test.db",
+        redis_url=None,
+        demo_auth_enabled=True,
+    )
+    repository = MemoryPlatformRepository()
+    app = create_app(settings, repository=repository, executor=FakeExecutor())
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as async_client:
+        yield ScenarioHarness(client=async_client, repository=repository)
     await app.state.platform_service.close()

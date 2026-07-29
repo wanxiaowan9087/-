@@ -1,8 +1,8 @@
-# Apifox CLI 测试规范
+# Apifox 场景验收与离线替代规范
 
 ## 1. 定位
 
-Apifox CLI 负责从客户端视角验证真实 FastAPI 服务，包括请求编排、变量提取、数据驱动断言和测试报告。它是 `quality_gate.py apifox` 的实现工具，并由唯一总入口 `quality_gate.py all` 调用。
+Apifox 在线场景用于人工验证真实 FastAPI 服务，包括请求编排、变量提取和数据驱动断言。2026-07-29 已验证 Apifox CLI 2.2.8 与桌面端，但桌面端“导出数据运行”仍不可用，且普通项目导出不能由当前 CLI 运行。经用户明确批准，`quality_gate.py all` 的离线阻断场景改为仓库内的 `backend/tests/test_api_scenarios.py`；Apifox 在线 27/27 报告仅保留为补充验收证据。
 
 测试职责保持分层：
 
@@ -10,7 +10,8 @@ Apifox CLI 负责从客户端视角验证真实 FastAPI 服务，包括请求编
 |---|---|
 | OpenAPI | Method、Path、schema、状态码、错误码和 SSE 事件结构 |
 | pytest | Pydantic、领域规则、事务、故障注入、SSE 逐事件状态机和内部 Adapter |
-| Apifox CLI | 运行中服务的黑盒 REST/场景链路、权限、幂等和报告 |
+| Apifox 在线场景 | 人工补充验证运行中的 REST/场景链路、权限与幂等 |
+| 仓库 API 场景测试 | 可重复的 HTTP 场景链路、权限、幂等与 JUnit 报告 |
 | Playwright | 浏览器到 FastAPI 的真实前后端联调 |
 | RAG evals | 检索、排序、引用、拒答与注入防御指标 |
 
@@ -27,9 +28,9 @@ Apifox 用例通过不能替代其他层；同一个业务风险可在不同层�
 
 ```text
 tests/apifox/
-  scenarios/          # 可离线运行的场景或套件导出文件
+  scenarios/          # 可审阅的场景意图清单（非可执行 vendor 导出）
   data/               # 不含隐私的 JSON/CSV 数据
-  README.md           # 导出版本、场景 ID、环境变量名和更新方式
+  README.md           # 场景 ID、替代原因和更新方式
   *.private.*         # 本地私有变量，Git 忽略
 ```
 
@@ -52,13 +53,13 @@ QA 是该目录 owner。场景文件变更必须说明对应 OpenAPI 版本、�
 
 `/chat/stream` 可以由 Apifox 场景验证能建立连接和最终业务结果，但 `sequence`、九类事件 payload、断线重放与唯一终止仍必须由 pytest 的流式集成测试负责。
 
+当前离线替代场景对 APIFOX-009 覆盖 `422`、`401` 和依赖不可用 `503`。运行时限流器尚未实现，因此没有诚实、可重复的 `429` 触发条件；该缺口记录在 `docs/quality/apifox-progress.md`，不得将现有 9/9 场景结果表述为已验证限流行为。
+
 ## 5. CI 运行模式
 
-- 合并门优先运行仓库内已审查的离线导出场景，避免 Apifox 云端资源变化导致同一 SHA 得到不同结果。
-- 在线项目场景可用于手工或定时补充回归，但不能成为最终集成 SHA 的唯一证据。
-- 实际命令由当前安装版本的 `apifox run --help` 和 Apifox 客户端 CI/CD 面板生成；不得在规范中锁死未经当前版本验证的参数组合。
-- CI 必须请求 `cli`、`json`、`junit` 报告；可选 `html`。输出统一进入 `artifacts/apifox/`，失败退出码阻断 `quality-api-scenarios`。
-- `quality_gate.py` 记录 Apifox CLI 版本、场景文件摘要、运行环境、目标提交 SHA、用例数量和报告路径。
+- 合并门运行 `python scripts/quality_gate.py api-scenarios --integration-sha <HEAD_SHA>`，由 pytest 在 FastAPI ASGI 边界执行 APIFOX-001 至 APIFOX-009。
+- CI 输出 JUnit 至 `artifacts/quality/api-scenarios/junit.xml`，失败退出码阻断 `quality-api-scenarios`；总验收报告记录目标提交 SHA、用例数与运行结果。
+- 在线项目场景可用于手工或定时补充回归，但不能成为最终集成 SHA 的唯一证据，也不要求为 CI 提供 access token。
 
 ## 6. 变量与密钥
 
@@ -70,4 +71,4 @@ QA 是该目录 owner。场景文件变更必须说明对应 OpenAPI 版本、�
 
 ## 7. 安装约束
 
-Apifox CLI 依赖 Node.js。当前机器已有 `D:\apifox\Apifox.exe` 桌面端，但它不是 PATH 中可调用的 CLI。当前项目禁止未经确认向 C 盘全局安装。实施阶段优先把 CLI 放入 `D:\apifox\cli` 或 CI 专用环境；安装位置、版本和空间占用先报告用户，再执行安装。桌面端继续用于编排场景，CLI 用于可重复执行。
+Apifox CLI 依赖 Node.js。当前机器已有 `D:\apifox\Apifox.exe` 桌面端，但它不是 PATH 中可调用的 CLI。当前项目禁止未经确认向 C 盘全局安装。桌面端继续用于人工编排与在线验收；当前离线质量门禁不依赖 CLI 或 vendor 导出文件。
