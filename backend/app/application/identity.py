@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import secrets
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
@@ -42,10 +43,16 @@ class IdentityStore(Protocol):
 
     async def find_user_by_id(self, user_id: UUID) -> IdentityUser | None: ...
 
+    async def update_user(
+        self, user_id: UUID, *, nickname: str | None, avatar_url: str | None
+    ) -> IdentityUser | None: ...
+
+    async def update_password(self, user_id: UUID, password_hash: str) -> IdentityUser | None: ...
+
     async def save_token(self, user_id: UUID, token_digest: str, expires_at: datetime) -> None: ...
 
-    async def find_user_by_token_digest(
-        self, token_digest: str, now: datetime
+    async def authenticate_token(
+        self, token_digest: str, now: datetime, refreshed_expires_at: datetime
     ) -> IdentityUser | None: ...
 
 
@@ -96,10 +103,17 @@ class PasswordHasher:
 class IdentityService:
     """Small identity seam: registration, login, profile lookup, and bearer verification."""
 
-    def __init__(self, store: IdentityStore, *, token_ttl_seconds: int) -> None:
+    def __init__(
+        self,
+        store: IdentityStore,
+        *,
+        token_ttl_seconds: int,
+        clock: Callable[[], datetime] | None = None,
+    ) -> None:
         self._store = store
         self._token_ttl = timedelta(seconds=token_ttl_seconds)
         self._hasher = PasswordHasher()
+        self._clock = clock or _utc_now
 
     async def register(
         self, *, username: str, password: str, nickname: str, avatar_url: str | None
@@ -107,7 +121,7 @@ class IdentityService:
         normalized_username = username.strip().lower()
         if await self._store.find_user_by_username(normalized_username):
             raise conflict("username is already registered")
-        now = datetime.now(UTC)
+        now = self._clock()
         user = IdentityUser(
             id=uuid4(),
             username=normalized_username,
@@ -123,10 +137,13 @@ class IdentityService:
         user = await self._store.find_user_by_username(username.strip().lower())
         if user is None or not self._hasher.verify(password, user.password_hash):
             raise AppError("UNAUTHORIZED", "invalid username or password", 401)
-        return await self._issue(user, datetime.now(UTC))
+        return await self._issue(user, self._clock())
 
     async def authenticate(self, token: str) -> IdentityUser:
-        user = await self._store.find_user_by_token_digest(_token_digest(token), datetime.now(UTC))
+        now = self._clock()
+        user = await self._store.authenticate_token(
+            _token_digest(token), now, now + self._token_ttl
+        )
         if user is None:
             raise AppError("UNAUTHORIZED", "invalid or expired access token", 401)
         return user
@@ -141,6 +158,45 @@ class IdentityService:
             raise not_found()
         return user
 
+    async def update_profile(
+        self, subject_id: str, *, nickname: str | None, avatar_url: str | None
+    ) -> IdentityUser:
+        try:
+            user_id = UUID(subject_id)
+        except ValueError as error:
+            raise not_found() from error
+        if nickname is None and avatar_url is None:
+            raise AppError("VALIDATION_ERROR", "at least one profile field is required", 422)
+        user = await self._store.update_user(
+            user_id,
+            nickname=nickname.strip() if nickname is not None else None,
+            avatar_url=avatar_url.strip() if avatar_url is not None else None,
+        )
+        if user is None:
+            raise not_found()
+        return user
+
+    async def change_password(
+        self, subject_id: str, *, current_password: str, new_password: str
+    ) -> IdentityUser:
+        try:
+            user_id = UUID(subject_id)
+        except ValueError as error:
+            raise not_found() from error
+        user = await self._store.find_user_by_id(user_id)
+        if user is None:
+            raise not_found()
+        if not self._hasher.verify(current_password, user.password_hash):
+            raise AppError("UNAUTHORIZED", "current password is incorrect", 401)
+        if current_password == new_password:
+            raise AppError(
+                "VALIDATION_ERROR", "new password must differ from current password", 422
+            )
+        updated = await self._store.update_password(user_id, self._hasher.hash(new_password))
+        if updated is None:
+            raise not_found()
+        return updated
+
     async def _issue(self, user: IdentityUser, now: datetime) -> IssuedSession:
         token = secrets.token_urlsafe(32)
         expires_at = now + self._token_ttl
@@ -150,3 +206,7 @@ class IdentityService:
 
 def _token_digest(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC)

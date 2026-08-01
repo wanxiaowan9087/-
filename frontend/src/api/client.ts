@@ -1,4 +1,4 @@
-import type { ApiErrorBody, AuthSession, AuthUser, ChatRequest, Envelope, Session, StreamEvent } from './contracts'
+import type { ApiErrorBody, AuthSession, AuthUser, ChatRequest, Envelope, Memory, Message, Page, Session, StreamEvent } from './contracts'
 import { parseSseStream } from './sse'
 
 export class ApiClientError extends Error {
@@ -15,6 +15,7 @@ export interface AgentApiOptions {
   baseUrl: string
   accessToken: string | (() => string)
   fetcher?: typeof fetch
+  onAuthenticatedResponse?: () => void
 }
 
 export interface StreamOptions {
@@ -42,12 +43,13 @@ export function createAgentApi(options: AgentApiOptions) {
     ...extra,
   })
 
-  async function readJson<T>(response: Response): Promise<T> {
+  async function readJson<T>(response: Response, authenticated = false): Promise<T> {
     const body = await response.json() as Envelope<T> | ApiErrorBody
     if (!response.ok || !isSuccessEnvelope<T>(body)) {
       const error = body as ApiErrorBody
       throw new ApiClientError(error.message || 'Request failed', response.status, error.code)
     }
+    if (authenticated) options.onAuthenticatedResponse?.()
     return body.data
   }
 
@@ -72,7 +74,34 @@ export function createAgentApi(options: AgentApiOptions) {
 
     async currentUser(): Promise<AuthUser> {
       const response = await fetcher(`${options.baseUrl}/auth/me`, { headers: headers() })
-      return readJson<AuthUser>(response)
+      return readJson<AuthUser>(response, true)
+    },
+
+    async updateProfile(input: { nickname?: string; avatar_url?: string }): Promise<AuthUser> {
+      const response = await fetcher(`${options.baseUrl}/auth/me`, {
+        method: 'PATCH',
+        headers: headers({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(input),
+      })
+      return readJson<AuthUser>(response, true)
+    },
+
+    async uploadAvatar(file: File): Promise<AuthUser> {
+      const response = await fetcher(`${options.baseUrl}/auth/me/avatar`, {
+        method: 'PUT',
+        headers: headers({ 'Content-Type': file.type }),
+        body: file,
+      })
+      return readJson<AuthUser>(response, true)
+    },
+
+    async changePassword(input: { current_password: string; new_password: string }): Promise<AuthUser> {
+      const response = await fetcher(`${options.baseUrl}/auth/me/password`, {
+        method: 'PATCH',
+        headers: headers({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(input),
+      })
+      return readJson<AuthUser>(response, true)
     },
 
     async createSession(title?: string): Promise<Session> {
@@ -81,7 +110,28 @@ export function createAgentApi(options: AgentApiOptions) {
         headers: headers({ 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() }),
         body: JSON.stringify({ title }),
       })
-      return readJson<Session>(response)
+      return readJson<Session>(response, true)
+    },
+
+    async listSessions(limit = 30): Promise<Page<Session>> {
+      const response = await fetcher(`${options.baseUrl}/sessions?limit=${limit}`, {
+        headers: headers(),
+      })
+      return readJson<Page<Session>>(response, true)
+    },
+
+    async listMessages(sessionId: string, limit = 50): Promise<Page<Message>> {
+      const response = await fetcher(`${options.baseUrl}/sessions/${sessionId}/messages?limit=${limit}`, {
+        headers: headers(),
+      })
+      return readJson<Page<Message>>(response, true)
+    },
+
+    async listMemories(limit = 20): Promise<Page<Memory>> {
+      const response = await fetcher(`${options.baseUrl}/memories?status=active&limit=${limit}`, {
+        headers: headers(),
+      })
+      return readJson<Page<Memory>>(response, true)
     },
 
     async streamChat(request: ChatRequest, stream: StreamOptions): Promise<void> {
@@ -97,6 +147,7 @@ export function createAgentApi(options: AgentApiOptions) {
         signal: stream.signal,
       })
       if (!response.ok) await readJson<never>(response)
+      options.onAuthenticatedResponse?.()
       if (!response.body) throw new ApiClientError('Stream body is missing', response.status)
       for await (const frame of parseSseStream(response.body)) {
         let event: StreamEvent
@@ -118,7 +169,7 @@ export function createAgentApi(options: AgentApiOptions) {
         }),
         body: JSON.stringify({ reason }),
       })
-      return readJson<CancelRunResult>(response)
+      return readJson<CancelRunResult>(response, true)
     },
   }
 }

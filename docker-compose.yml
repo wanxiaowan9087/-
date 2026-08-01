@@ -33,6 +33,16 @@ services:
       postgres:
         condition: service_healthy
 
+  volume-init:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    user: root
+    command: ["sh", "-c", "mkdir -p /app/runtime /app/data/uploads && chown -R app:app /app/runtime /app/data/uploads"]
+    volumes:
+      - agent-runtime-data:/app/runtime
+      - agent-uploads:/app/data/uploads
+
   backend:
     build:
       context: .
@@ -41,14 +51,21 @@ services:
       APP_DATABASE_URL: postgresql+asyncpg://agent:agent@postgres:5432/agent
       APP_REDIS_URL: redis://redis:6379/0
       APP_DEMO_AUTH_ENABLED: "false"
+      APP_AGENT_RUNTIME_ENABLED: "true"
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:?Set DASHSCOPE_API_KEY in the shell before starting Docker Compose}
       APP_CORS_ORIGINS: '["http://localhost:5173"]'
-      APP_AGENT_VECTOR_STORE_PATH: /app/data/vector-store.json
+      APP_AGENT_VECTOR_STORE_PATH: /app/runtime/vector-store.json
+      APP_AGENT_LOCAL_CORPUS_DIR: /app/data
+      APP_UPLOADS_DIR: /app/data/uploads
     ports:
       - "${AGENT_BACKEND_PORT:-8000}:8000"
     volumes:
-      - agent-vector-data:/app/data
+      - agent-runtime-data:/app/runtime
+      - agent-uploads:/app/data/uploads
     depends_on:
       migrate:
+        condition: service_completed_successfully
+      volume-init:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
@@ -66,5 +83,6 @@ services:
 
 volumes:
   postgres-data:
-  agent-vector-data:
+  agent-runtime-data:
+  agent-uploads:
 

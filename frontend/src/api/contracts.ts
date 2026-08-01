@@ -20,6 +20,52 @@ export interface Session {
   last_message_at: string | null
 }
 
+export interface Page<T> {
+  items: T[]
+  page: {
+    next_cursor: string | null
+    has_more: boolean
+  }
+}
+
+export interface Citation {
+  citation_id: string
+  document_id: string
+  document_version: string
+  chunk_id: string
+  title: string
+  source: string
+  score: number
+  page: number | null
+  excerpt: string | null
+}
+
+export interface Message {
+  id: string
+  session_id: string
+  role: 'user' | 'assistant'
+  status: 'accepted' | 'generating' | 'completed' | 'needs_review' | 'cancelled' | 'failed' | 'rejected'
+  content: string
+  reply_to_message_id: string | null
+  run_id: string | null
+  citations: Citation[]
+  created_at: string
+  updated_at: string
+}
+
+export interface Memory {
+  id: string
+  memory_type: 'user_fact' | 'preference' | 'task_summary'
+  content: string
+  status: 'active' | 'inactive'
+  confidence: number
+  source_message_id: string
+  corrected_from_version: number | null
+  version: number
+  created_at: string
+  updated_at: string
+}
+
 export interface AuthUser {
   id: string
   username: string

@@ -101,6 +101,77 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
+    patch:
+      tags: [Authentication]
+      operationId: updateCurrentUser
+      summary: 更新当前登录用户的昵称或头像
+      x-required-role: user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProfileRequest"
+      responses:
+        "200":
+          description: 用户资料已更新
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /auth/me/password:
+    patch:
+      tags: [Authentication]
+      operationId: changeCurrentUserPassword
+      summary: 修改当前用户密码
+      x-required-role: user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "200":
+          description: 密码已更新
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /auth/me/avatar:
+    put:
+      tags: [Authentication]
+      operationId: uploadCurrentUserAvatar
+      summary: 上传当前用户头像
+      x-required-role: user
+      requestBody:
+        required: true
+        content:
+          image/jpeg:
+            schema: { type: string, format: binary }
+          image/png:
+            schema: { type: string, format: binary }
+          image/webp:
+            schema: { type: string, format: binary }
+      responses:
+        "200":
+          description: 头像已更新
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /sessions:
     get:
       tags: [Sessions]
@@ -929,6 +1000,32 @@ components:
           minLength: 1
           maxLength: 120
           default: null
+    UpdateProfileRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        nickname:
+          type: string
+          minLength: 1
+          maxLength: 40
+        avatar_url:
+          type: string
+          minLength: 8
+          maxLength: 2048
+    ChangePasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [current_password, new_password]
+      properties:
+        current_password:
+          type: string
+          minLength: 8
+          maxLength: 128
+        new_password:
+          type: string
+          minLength: 12
+          maxLength: 128
     Session:
       type: object
       additionalProperties: false

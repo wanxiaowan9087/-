@@ -8,6 +8,7 @@ from time import perf_counter
 from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import RequestResponseEndpoint
 
 from backend.app.adapters.auth.memory import MemoryIdentityStore
@@ -15,6 +16,7 @@ from backend.app.adapters.auth.sql import SqlIdentityStore
 from backend.app.adapters.redis.client import OptionalRedisAdapter
 from backend.app.adapters.sql.database import create_engine, create_session_factory
 from backend.app.adapters.sql.repository import SqlPlatformRepository
+from backend.app.adapters.uploads.avatar_store import AvatarStore
 from backend.app.api.v1.routes import router
 from backend.app.application.identity import IdentityService
 from backend.app.application.ports import RunExecutorPort
@@ -112,6 +114,9 @@ def create_app(
             ("post", "/auth/register"): "anonymous",
             ("post", "/auth/login"): "anonymous",
             ("get", "/auth/me"): "user",
+            ("patch", "/auth/me"): "user",
+            ("patch", "/auth/me/password"): "user",
+            ("put", "/auth/me/avatar"): "user",
             ("get", "/sessions"): "user",
             ("post", "/sessions"): "user",
             ("get", "/sessions/{session_id}"): "user",
@@ -144,6 +149,7 @@ def create_app(
     app.openapi = contract_openapi  # type: ignore[method-assign]
     app.state.platform_service = service
     app.state.identity_service = resolved_identity_service
+    app.state.avatar_store = AvatarStore(settings.uploads_dir)
     app.dependency_overrides[get_settings] = lambda: settings
     app.add_exception_handler(AppError, app_error_handler)  # type: ignore[arg-type]
     app.add_exception_handler(RequestValidationError, validation_error_handler)  # type: ignore[arg-type]
@@ -162,6 +168,7 @@ def create_app(
             "X-Request-ID",
         ],
     )
+    app.mount("/uploads", StaticFiles(directory=settings.uploads_dir), name="uploads")
 
     @app.middleware("http")
     async def request_context(request: Request, call_next: RequestResponseEndpoint) -> Response:

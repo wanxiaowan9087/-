@@ -56,6 +56,29 @@ class SqlIdentityStore(IdentityStore):
             row = await session.get(UserModel, user_id)
         return _user(row) if row else None
 
+    async def update_user(
+        self, user_id: UUID, *, nickname: str | None, avatar_url: str | None
+    ) -> IdentityUser | None:
+        async with self._session_factory.begin() as session:
+            row = await session.get(UserModel, user_id, with_for_update=True)
+            if row is None:
+                return None
+            if nickname is not None:
+                row.nickname = nickname
+            if avatar_url is not None:
+                row.avatar_url = avatar_url
+            await session.flush()
+            return _user(row)
+
+    async def update_password(self, user_id: UUID, password_hash: str) -> IdentityUser | None:
+        async with self._session_factory.begin() as session:
+            row = await session.get(UserModel, user_id, with_for_update=True)
+            if row is None:
+                return None
+            row.password_hash = password_hash
+            await session.flush()
+            return _user(row)
+
     async def save_token(self, user_id: UUID, token_digest: str, expires_at: datetime) -> None:
         async with self._session_factory.begin() as session:
             session.add(
@@ -67,16 +90,22 @@ class SqlIdentityStore(IdentityStore):
                 )
             )
 
-    async def find_user_by_token_digest(
-        self, token_digest: str, now: datetime
+    async def authenticate_token(
+        self, token_digest: str, now: datetime, refreshed_expires_at: datetime
     ) -> IdentityUser | None:
-        async with self._session_factory() as session:
-            row = await session.scalar(
-                select(UserModel)
-                .join(AccessTokenModel, AccessTokenModel.user_id == UserModel.id)
+        async with self._session_factory.begin() as session:
+            result = await session.execute(
+                select(AccessTokenModel, UserModel)
+                .join(UserModel, AccessTokenModel.user_id == UserModel.id)
                 .where(
                     AccessTokenModel.token_digest == token_digest,
                     AccessTokenModel.expires_at > now,
                 )
+                .with_for_update()
             )
-        return _user(row) if row else None
+            row = result.first()
+            if row is None:
+                return None
+            token, user = row
+            token.expires_at = refreshed_expires_at
+            return _user(user)

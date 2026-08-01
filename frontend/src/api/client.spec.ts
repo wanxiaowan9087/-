@@ -55,4 +55,40 @@ describe('SSE API client', () => {
     expect(url).toBe('/api/v1/runs/run-1/cancel')
     expect(init).toMatchObject({ method: 'POST', body: JSON.stringify({ reason: 'Cancelled by user' }) })
   })
+
+  it('renews the browser session after a successful authenticated response', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      code: 'OK', message: 'success', request_id: 'request-2',
+      data: { id: 'user-1', username: 'visitor', nickname: '访客', avatar_url: '', role: 'user', created_at: '2026-08-01T00:00:00Z' },
+    }), { status: 200 }))
+    const onAuthenticatedResponse = vi.fn()
+    const api = createAgentApi({
+      baseUrl: '/api/v1', accessToken: 'real-token', fetcher, onAuthenticatedResponse,
+    })
+
+    await api.currentUser()
+
+    expect(onAuthenticatedResponse).toHaveBeenCalledOnce()
+    expect(fetcher).toHaveBeenCalledWith('/api/v1/auth/me', expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: 'Bearer real-token' }),
+    }))
+  })
+
+  it('loads durable sessions, messages, and memories through authenticated APIs', async () => {
+    const payload = { code: 'OK', message: 'success', request_id: 'request-3', data: { items: [], page: { next_cursor: null, has_more: false } } }
+    const fetcher = vi.fn().mockImplementation(() => Promise.resolve(
+      new Response(JSON.stringify(payload), { status: 200 }),
+    ))
+    const api = createAgentApi({ baseUrl: '/api/v1', accessToken: 'token', fetcher })
+
+    await api.listSessions()
+    await api.listMessages('session-1')
+    await api.listMemories()
+
+    expect(fetcher).toHaveBeenNthCalledWith(1, '/api/v1/sessions?limit=30', expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+    }))
+    expect(fetcher).toHaveBeenNthCalledWith(2, '/api/v1/sessions/session-1/messages?limit=50', expect.any(Object))
+    expect(fetcher).toHaveBeenNthCalledWith(3, '/api/v1/memories?status=active&limit=20', expect.any(Object))
+  })
 })

@@ -11,6 +11,7 @@ COPY pyproject.toml requirements.lock ./
 RUN pip install --require-hashes --no-deps -r requirements.lock
 
 COPY backend ./backend
+COPY data ./data
 USER app
 EXPOSE 8000
 

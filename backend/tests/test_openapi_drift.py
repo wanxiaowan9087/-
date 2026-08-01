@@ -22,7 +22,7 @@ def _frozen_response_statuses() -> dict[tuple[str, str], set[str]]:
         if indent == 2 and stripped.startswith("/") and stripped.endswith(":"):
             current_path = stripped[:-1]
             in_responses = False
-        elif indent == 4 and stripped in {"get:", "post:", "patch:", "delete:"}:
+        elif indent == 4 and stripped in {"get:", "post:", "put:", "patch:", "delete:"}:
             current_method = stripped[:-1]
             in_responses = False
         elif indent == 6 and stripped == "responses:":
@@ -52,7 +52,7 @@ def test_runtime_openapi_matches_frozen_paths_and_response_statuses() -> None:
         (method, path): set(operation["responses"])
         for path, path_item in runtime["paths"].items()
         for method, operation in path_item.items()
-        if method in {"get", "post", "patch", "delete"}
+            if method in {"get", "post", "put", "patch", "delete"}
     }
     assert actual == _frozen_response_statuses()
 
@@ -60,4 +60,3 @@ def test_runtime_openapi_matches_frozen_paths_and_response_statuses() -> None:
     assert set(stream_content) == {"text/event-stream"}
     schema = stream_content["text/event-stream"]["schema"]
     assert schema["discriminator"]["propertyName"] == "event_type"
-

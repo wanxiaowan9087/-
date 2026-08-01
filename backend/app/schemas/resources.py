@@ -42,6 +42,16 @@ class LoginRequest(ContractModel):
     password: str = Field(min_length=8, max_length=128)
 
 
+class UpdateProfileRequest(ContractModel):
+    nickname: str | None = Field(default=None, min_length=1, max_length=40)
+    avatar_url: str | None = Field(default=None, min_length=8, max_length=2048)
+
+
+class ChangePasswordRequest(ContractModel):
+    current_password: str = Field(min_length=8, max_length=128)
+    new_password: str = Field(min_length=12, max_length=128)
+
+
 class AuthSession(ContractModel):
     access_token: str = Field(min_length=20, max_length=256)
     token_type: Literal["Bearer"] = "Bearer"

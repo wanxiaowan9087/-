@@ -3,13 +3,14 @@ from __future__ import annotations
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Body, Depends, Header, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from backend.app.api.dependencies import get_identity_service, get_service
 from backend.app.application.identity import IdentityService, IdentityUser, IssuedSession
 from backend.app.application.service import PlatformService
 from backend.app.core.context import request_id_var
+from backend.app.core.errors import AppError
 from backend.app.core.security import Principal, get_principal, require_reviewer
 from backend.app.schemas.common import Envelope, ErrorEnvelope, Page
 from backend.app.schemas.events import SseEventSchema
@@ -18,6 +19,7 @@ from backend.app.schemas.resources import (
     AuthUser,
     CancelRunRequest,
     CancelRunResult,
+    ChangePasswordRequest,
     CreateFeedbackRequest,
     CreateSessionRequest,
     DeleteMemoryResult,
@@ -36,6 +38,7 @@ from backend.app.schemas.resources import (
     RunTrace,
     Session,
     UpdateMemoryRequest,
+    UpdateProfileRequest,
 )
 
 router = APIRouter()
@@ -139,6 +142,75 @@ async def current_user(
     identity: IdentityService = Depends(get_identity_service),
 ) -> Envelope[AuthUser]:
     user = await identity.profile(principal.subject_id)
+    return Envelope(data=auth_user(user), request_id=request_id_var.get())
+
+
+@router.patch(
+    "/auth/me",
+    response_model=Envelope[AuthUser],
+    operation_id="updateCurrentUser",
+    tags=["Authentication"],
+    responses=error_responses(401, 404, 422, 500),
+)
+async def update_current_user(
+    request: UpdateProfileRequest,
+    principal: Principal = Depends(get_principal),
+    identity: IdentityService = Depends(get_identity_service),
+) -> Envelope[AuthUser]:
+    user = await identity.update_profile(
+        principal.subject_id, nickname=request.nickname, avatar_url=request.avatar_url
+    )
+    return Envelope(data=auth_user(user), request_id=request_id_var.get())
+
+
+@router.patch(
+    "/auth/me/password",
+    response_model=Envelope[AuthUser],
+    operation_id="changeCurrentUserPassword",
+    tags=["Authentication"],
+    responses=error_responses(401, 404, 422, 500),
+)
+async def change_current_user_password(
+    payload: ChangePasswordRequest,
+    principal: Principal = Depends(get_principal),
+    identity: IdentityService = Depends(get_identity_service),
+) -> Envelope[AuthUser]:
+    user = await identity.change_password(
+        principal.subject_id,
+        current_password=payload.current_password,
+        new_password=payload.new_password,
+    )
+    return Envelope(data=auth_user(user), request_id=request_id_var.get())
+
+
+@router.put(
+    "/auth/me/avatar",
+    response_model=Envelope[AuthUser],
+    operation_id="uploadCurrentUserAvatar",
+    tags=["Authentication"],
+    responses=error_responses(401, 404, 422, 500),
+)
+async def upload_current_user_avatar(
+    request: Request,
+    payload: bytes = Body(),
+    principal: Principal = Depends(get_principal),
+    identity: IdentityService = Depends(get_identity_service),
+) -> Envelope[AuthUser]:
+    from backend.app.adapters.uploads.avatar_store import AvatarStore
+
+    store = request.app.state.avatar_store
+    if not isinstance(store, AvatarStore):
+        raise RuntimeError("avatar storage is not configured")
+    try:
+        user_id = UUID(principal.subject_id)
+    except ValueError as error:
+        raise AppError("UNAUTHORIZED", "invalid user identity", 401) from error
+    avatar_url = store.save(
+        user_id=user_id,
+        content_type=request.headers.get("content-type", ""),
+        payload=payload,
+    )
+    user = await identity.update_profile(principal.subject_id, nickname=None, avatar_url=avatar_url)
     return Envelope(data=auth_user(user), request_id=request_id_var.get())
 
 

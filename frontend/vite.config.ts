@@ -11,6 +11,10 @@ export default defineConfig({
         target: backendProxyTarget,
         changeOrigin: true,
       },
+      '/uploads': {
+        target: backendProxyTarget,
+        changeOrigin: true,
+      },
     },
   },
 })
