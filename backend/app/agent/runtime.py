@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
@@ -45,6 +46,32 @@ from .tooling import CancellationToken
 from .tracing import RunStateMachine, TraceRecorder
 
 logger = logging.getLogger(__name__)
+
+
+IDENTITY_INTENT_PATTERNS = (
+    "你是谁",
+    "你能做什么",
+    "你可以做什么",
+    "介绍一下你",
+    "怎么上传知识",
+    "如何上传知识",
+    "上传新文件",
+    "上传资料",
+    "知识库怎么更新",
+)
+
+
+def answer_identity_intent(user_text: str) -> str | None:
+    compact = re.sub(r"\s+", "", user_text.lower())
+    if not any(pattern in compact for pattern in IDENTITY_INTENT_PATTERNS):
+        return None
+    return (
+        "我是小智智能客服，一个面向扫地/扫拖机器人场景的受控知识库 Agent。"
+        "我会优先基于已接入的产品资料回答选购、使用、维护和故障排查问题；"
+        "如果资料不足，我会说明无法确认，避免编造。\n\n"
+        "你也可以上传新的 `.txt` 或 `.md` 知识文件，上传后系统会把它加入本地知识库检索范围，"
+        "后续提问就能基于新资料回答。"
+    )
 
 
 class MemoryRuntimePort(Protocol):
@@ -108,6 +135,33 @@ class AgentRuntime:
 
         try:
             token.checkpoint()
+            identity_answer = answer_identity_intent(request.user_text)
+            if identity_answer is not None:
+                step = trace.start(
+                    StepType.POLICY,
+                    "answering supported assistant identity and usage intent",
+                )
+                state.transition(RunStatus.COMPLETED)
+                trace.finish(
+                    step,
+                    StepStatus.SUCCEEDED,
+                    "deterministic identity answer selected before retrieval",
+                )
+                memory_warning = await self._extract_memory(request)
+                return AgentRunResult(
+                    run_id=run_id,
+                    status=state.status,
+                    public_content=identity_answer,
+                    candidate_content=None,
+                    citations=(),
+                    trace=trace.snapshot(),
+                    confidence=1.0,
+                    confidence_threshold=self._config.confidence_threshold,
+                    degraded_dependencies=(),
+                    memory_warning=memory_warning,
+                    model_name="deterministic-identity",
+                    retrieval_strategy="identity-intent",
+                )
             memory_context = await self._prepare_memory(
                 request, trace, degraded
             )

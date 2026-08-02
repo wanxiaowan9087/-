@@ -266,6 +266,23 @@ class SqlPlatformTransaction:
         ).scalar_one_or_none()
         return _session(row) if row else None
 
+    async def update_session_title(
+        self, owner_id: str, session_id: UUID, title: str, now: datetime
+    ) -> SessionRecord | None:
+        row = (
+            await self.session.execute(
+                select(SessionModel)
+                .where(SessionModel.id == session_id, SessionModel.owner_id == owner_id)
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            return None
+        row.title = title
+        row.updated_at = now
+        await self.session.flush()
+        return _session(row)
+
     async def list_messages(
         self, owner_id: str, session_id: UUID, *, limit: int, after: tuple[datetime, UUID] | None
     ) -> list[MessageRecord]:
@@ -301,6 +318,7 @@ class SqlPlatformTransaction:
         session_id: UUID,
         content: str | None,
         original_user_message_id: UUID | None,
+        session_title: str | None,
         now: datetime,
     ) -> tuple[MessageRecord, MessageRecord, RunRecord]:
         session_row = (
@@ -312,6 +330,14 @@ class SqlPlatformTransaction:
         ).scalar_one_or_none()
         if session_row is None:
             raise not_found()
+        if session_title and session_row.title.strip() in {
+            "",
+            "新会话",
+            "New agent session",
+            "Agent session",
+            "Untitled session",
+        }:
+            session_row.title = session_title
         if original_user_message_id is None:
             if content is None:
                 raise AppError("BAD_REQUEST", "new chat requires content", 400)

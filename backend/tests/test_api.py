@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
+
+from backend.app.adapters.memory.repository import MemoryPlatformRepository
+from backend.app.core.config import Settings
+from backend.app.main import create_app
 
 USER = {"Authorization": "Bearer alice:user"}
 REVIEWER = {"Authorization": "Bearer reviewer:reviewer"}
@@ -72,6 +77,56 @@ async def test_chat_new_stream_persists_message_and_replays(client: AsyncClient)
     messages = await client.get(f"/api/v1/sessions/{session_id}/messages", headers=USER)
     assert messages.status_code == 200
     assert [item["role"] for item in messages.json()["data"]["items"]] == ["user", "assistant"]
+
+    listed = await client.get("/api/v1/sessions", headers=USER)
+    assert listed.status_code == 200
+    assert listed.json()["data"]["items"][0]["title"] == "hello"
+
+
+@pytest.mark.asyncio
+async def test_chat_session_title_uses_first_message_summary(client: AsyncClient) -> None:
+    created = await client.post(
+        "/api/v1/sessions",
+        headers={**USER, "Idempotency-Key": "session-key-title-001"},
+        json={},
+    )
+    session_id = created.json()["data"]["id"]
+    content = "扫地机器人一直提示尘盒未安装，我应该先检查哪里？"
+    streamed = await client.post(
+        "/api/v1/chat/stream",
+        headers={**USER, "Idempotency-Key": "stream-key-title-001"},
+        json={"mode": "new", "session_id": session_id, "content": content},
+    )
+    assert streamed.status_code == 200
+    listed = await client.get("/api/v1/sessions", headers=USER)
+    assert (
+        listed.json()["data"]["items"][0]["title"]
+        == "扫地机器人一直提示尘盒未安装，我应该先检查哪里"
+    )
+
+
+@pytest.mark.asyncio
+async def test_upload_knowledge_file_persists_text_document(tmp_path: Path) -> None:
+    settings = Settings(
+        environment="test",
+        database_url="sqlite+aiosqlite:///./knowledge-upload-test.db",
+        redis_url=None,
+        demo_auth_enabled=True,
+        uploads_dir=str(tmp_path),
+    )
+    app = create_app(settings, repository=MemoryPlatformRepository())
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/knowledge/files?filename=新品维护手册.md",
+            headers={**USER, "Content-Type": "text/markdown"},
+            content="# 新品维护手册\n边刷每 3 个月检查一次。",
+        )
+    await app.state.platform_service.close()
+    assert response.status_code == 201
+    body = response.json()["data"]
+    assert body["filename"].endswith(".md")
+    assert body["chunk_count"] >= 1
+    assert (tmp_path / "knowledge" / body["filename"]).exists()
 
 
 @pytest.mark.asyncio

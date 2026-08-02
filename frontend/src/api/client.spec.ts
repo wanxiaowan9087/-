@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createAgentApi } from './client'
+import { ApiClientError, createAgentApi } from './client'
 import { parseSseStream } from './sse'
 
 const encoder = new TextEncoder()
@@ -90,5 +90,38 @@ describe('SSE API client', () => {
     }))
     expect(fetcher).toHaveBeenNthCalledWith(2, '/api/v1/sessions/session-1/messages?limit=50', expect.any(Object))
     expect(fetcher).toHaveBeenNthCalledWith(3, '/api/v1/memories?status=active&limit=20', expect.any(Object))
+  })
+
+  it('reports empty authenticated JSON responses clearly', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response('', { status: 502 }))
+    const api = createAgentApi({ baseUrl: '/api/v1', accessToken: 'token', fetcher })
+
+    await expect(api.currentUser()).rejects.toMatchObject({
+      status: 502,
+      code: 'HTTP_ERROR',
+    } satisfies Partial<ApiClientError>)
+  })
+
+  it('uploads knowledge files through the contract endpoint', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      code: 'OK', message: 'success', request_id: 'request-4',
+      data: {
+        id: 'doc-1',
+        filename: 'guide.md',
+        title: 'guide',
+        source: 'file://uploads/knowledge/guide.md',
+        size_bytes: 12,
+        chunk_count: 1,
+        uploaded_at: '2026-08-02T00:00:00Z',
+      },
+    }), { status: 201 }))
+    const api = createAgentApi({ baseUrl: '/api/v1', accessToken: 'token', fetcher })
+    const file = new File(['# guide'], 'guide.md', { type: 'text/markdown' })
+
+    await expect(api.uploadKnowledgeFile(file)).resolves.toMatchObject({ filename: 'guide.md' })
+    expect(fetcher).toHaveBeenCalledWith(
+      '/api/v1/knowledge/files?filename=guide.md',
+      expect.objectContaining({ method: 'POST', body: file }),
+    )
   })
 })

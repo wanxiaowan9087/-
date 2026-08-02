@@ -12,6 +12,7 @@ from .ports import (
     EmbeddingPort,
     KeywordSearchPort,
     RerankerPort,
+    RetrieverPort,
     VectorStorePort,
 )
 
@@ -126,6 +127,67 @@ class HybridRetriever:
         return await self._vector_store.search(
             query_vector, self._candidate_limit
         )
+
+
+class MergedRetriever:
+    """Merge a primary retriever with a dynamic local corpus retriever.
+
+    Uploaded text/markdown files are intentionally available immediately through
+    lexical retrieval even before they have been embedded into the durable vector
+    store. This keeps the upload workflow useful in local demos and internships.
+    """
+
+    def __init__(
+        self,
+        primary: RetrieverPort,
+        secondary: RetrieverPort,
+        *,
+        result_limit: int = 5,
+    ) -> None:
+        self._primary = primary
+        self._secondary = secondary
+        self._result_limit = result_limit
+
+    async def retrieve(self, query: str) -> RetrievalResult:
+        primary_task = asyncio.create_task(self._primary.retrieve(query))
+        secondary_task = asyncio.create_task(self._secondary.retrieve(query))
+        primary, secondary = await asyncio.gather(
+            primary_task, secondary_task, return_exceptions=True
+        )
+        results: list[RetrievalResult] = []
+        degraded: list[str] = []
+        for name, item in (("primary_retriever", primary), ("local_corpus", secondary)):
+            if isinstance(item, BaseException):
+                degraded.append(name)
+            else:
+                results.append(item)
+                degraded.extend(item.degraded_dependencies)
+        if not results:
+            raise RetrievalUnavailable("all merged retrieval dependencies failed")
+        merged = _merge_hits([hit for result in results for hit in result.hits])
+        return RetrievalResult(
+            hits=merged[: self._result_limit],
+            confidence=max(
+                max(result.confidence for result in results),
+                _evidence_confidence(merged[: self._result_limit]),
+            ),
+            strategy="+".join(dict.fromkeys(result.strategy for result in results)),
+            degraded_dependencies=tuple(dict.fromkeys(degraded)),
+            conflicting_sources=any(result.conflicting_sources for result in results)
+            or _has_conflicts(merged),
+        )
+
+
+def _merge_hits(hits: Sequence[SearchHit]) -> tuple[SearchHit, ...]:
+    merged: dict[str, SearchHit] = {}
+    for hit in hits:
+        key = f"{hit.chunk.document_id}:{hit.chunk.chunk_id}"
+        existing = merged.get(key)
+        if existing is None or hit.score > existing.score:
+            merged[key] = hit
+    ordered = list(merged.values())
+    ordered.sort(key=lambda item: (-item.score, item.chunk.chunk_id))
+    return tuple(ordered)
 
 
 def reciprocal_rank_fusion(

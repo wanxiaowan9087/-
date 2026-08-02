@@ -1,4 +1,4 @@
-import type { ApiErrorBody, AuthSession, AuthUser, ChatRequest, Envelope, Memory, Message, Page, Session, StreamEvent } from './contracts'
+import type { ApiErrorBody, AuthSession, AuthUser, ChatRequest, Envelope, KnowledgeFile, Memory, Message, Page, Session, StreamEvent } from './contracts'
 import { parseSseStream } from './sse'
 
 export class ApiClientError extends Error {
@@ -44,7 +44,20 @@ export function createAgentApi(options: AgentApiOptions) {
   })
 
   async function readJson<T>(response: Response, authenticated = false): Promise<T> {
-    const body = await response.json() as Envelope<T> | ApiErrorBody
+    const raw = await response.text()
+    if (!raw.trim()) {
+      throw new ApiClientError(
+        response.ok ? 'Response body is empty' : `Request failed with status ${response.status}`,
+        response.status,
+        response.ok ? 'EMPTY_RESPONSE' : 'HTTP_ERROR',
+      )
+    }
+    let body: Envelope<T> | ApiErrorBody
+    try {
+      body = JSON.parse(raw) as Envelope<T> | ApiErrorBody
+    } catch {
+      throw new ApiClientError('Response body is not valid JSON', response.status, 'INVALID_JSON')
+    }
     if (!response.ok || !isSuccessEnvelope<T>(body)) {
       const error = body as ApiErrorBody
       throw new ApiClientError(error.message || 'Request failed', response.status, error.code)
@@ -93,6 +106,18 @@ export function createAgentApi(options: AgentApiOptions) {
         body: file,
       })
       return readJson<AuthUser>(response, true)
+    },
+
+    async uploadKnowledgeFile(file: File): Promise<KnowledgeFile> {
+      const response = await fetcher(
+        `${options.baseUrl}/knowledge/files?filename=${encodeURIComponent(file.name)}`,
+        {
+          method: 'POST',
+          headers: headers({ 'Content-Type': file.type || 'text/plain' }),
+          body: file,
+        },
+      )
+      return readJson<KnowledgeFile>(response, true)
     },
 
     async changePassword(input: { current_password: string; new_password: string }): Promise<AuthUser> {

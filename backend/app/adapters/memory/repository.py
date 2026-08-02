@@ -169,6 +169,16 @@ class MemoryPlatformRepository:
         item = self.sessions.get(session_id)
         return item if item and item.owner_id == owner_id else None
 
+    async def update_session_title(
+        self, owner_id: str, session_id: UUID, title: str, now: datetime
+    ) -> SessionRecord | None:
+        item = await self.get_session(owner_id, session_id)
+        if item is None:
+            return None
+        item.title = title
+        item.updated_at = now
+        return item
+
     async def list_messages(
         self, owner_id: str, session_id: UUID, *, limit: int, after: tuple[datetime, UUID] | None
     ) -> list[MessageRecord]:
@@ -200,11 +210,20 @@ class MemoryPlatformRepository:
         session_id: UUID,
         content: str | None,
         original_user_message_id: UUID | None,
+        session_title: str | None,
         now: datetime,
     ) -> tuple[MessageRecord, MessageRecord, RunRecord]:
         session = await self.get_session(owner_id, session_id)
         if session is None:
             raise not_found()
+        if session_title and session.title.strip() in {
+            "",
+            "新会话",
+            "New agent session",
+            "Agent session",
+            "Untitled session",
+        }:
+            session.title = session_title
         if original_user_message_id is None:
             if content is None:
                 raise AppError("BAD_REQUEST", "new chat requires content", 400)

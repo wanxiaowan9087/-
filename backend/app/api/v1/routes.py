@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from backend.app.api.dependencies import get_identity_service, get_service
 from backend.app.application.identity import IdentityService, IdentityUser, IssuedSession
 from backend.app.application.service import PlatformService
+from backend.app.core.config import Settings, get_settings
 from backend.app.core.context import request_id_var
 from backend.app.core.errors import AppError
 from backend.app.core.security import Principal, get_principal, require_reviewer
@@ -24,6 +25,7 @@ from backend.app.schemas.resources import (
     CreateSessionRequest,
     DeleteMemoryResult,
     Feedback,
+    KnowledgeFile,
     LiveStatus,
     LoginRequest,
     Memory,
@@ -212,6 +214,31 @@ async def upload_current_user_avatar(
     )
     user = await identity.update_profile(principal.subject_id, nickname=None, avatar_url=avatar_url)
     return Envelope(data=auth_user(user), request_id=request_id_var.get())
+
+
+@router.post(
+    "/knowledge/files",
+    response_model=Envelope[KnowledgeFile],
+    status_code=201,
+    operation_id="uploadKnowledgeFile",
+    tags=["Knowledge"],
+    responses=error_responses(400, 401, 403, 422, 500),
+)
+async def upload_knowledge_file(
+    request: Request,
+    filename: Annotated[str, Query(min_length=1, max_length=180)],
+    payload: bytes = Body(media_type="text/plain"),
+    principal: Principal = Depends(get_principal),
+    service: PlatformService = Depends(get_service),
+    settings: Settings = Depends(get_settings),
+) -> Envelope[KnowledgeFile]:
+    return await service.upload_knowledge_file(
+        principal,
+        filename=filename,
+        content_type=request.headers.get("content-type", ""),
+        payload=payload,
+        uploads_dir=settings.uploads_dir,
+    )
 
 
 @router.get(

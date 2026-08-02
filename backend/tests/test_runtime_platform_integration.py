@@ -49,6 +49,7 @@ async def _prepared_run() -> tuple[MemoryPlatformRepository, RunExecution]:
             session_id=session.id,
             content="How should I maintain the filter?",
             original_user_message_id=None,
+            session_title=None,
             now=now,
         )
     return repository, RunExecution(

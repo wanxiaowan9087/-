@@ -1,9 +1,10 @@
-import type { AuthSession } from '../../api/contracts'
+import type { AuthSession, AuthUser } from '../../api/contracts'
 
 export const AUTH_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 const ACCESS_TOKEN_KEY = 'agent.access-token'
 const EXPIRES_AT_KEY = 'agent.access-token-expires-at'
+const AUTH_USER_KEY = 'agent.auth-user'
 
 type SessionStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
 
@@ -29,6 +30,20 @@ export function persistAuthSession(
   const expiresAt = Number.isFinite(serverExpiry) ? serverExpiry : now + AUTH_SESSION_TTL_MS
   storage.setItem(ACCESS_TOKEN_KEY, session.access_token)
   storage.setItem(EXPIRES_AT_KEY, String(expiresAt))
+  storage.setItem(AUTH_USER_KEY, JSON.stringify(session.user))
+}
+
+export function loadStoredAuthUser(
+  storage: SessionStorage = globalThis.localStorage,
+): AuthUser | null {
+  const raw = storage.getItem(AUTH_USER_KEY)
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as AuthUser
+  } catch {
+    storage.removeItem(AUTH_USER_KEY)
+    return null
+  }
 }
 
 export function renewStoredAuthSession(
@@ -46,4 +61,5 @@ export function clearStoredAuthSession(
 ): void {
   storage.removeItem(ACCESS_TOKEN_KEY)
   storage.removeItem(EXPIRES_AT_KEY)
+  storage.removeItem(AUTH_USER_KEY)
 }

@@ -123,6 +123,7 @@ def create_app(
             ("get", "/sessions/{session_id}/messages"): "user",
             ("post", "/chat/stream"): "user",
             ("post", "/chat/{message_id}/feedback"): "user",
+            ("post", "/knowledge/files"): "user",
             ("post", "/runs/{run_id}/cancel"): "user",
             ("get", "/runs/{run_id}/trace"): "user-or-linked-reviewer",
             ("get", "/memories"): "user",

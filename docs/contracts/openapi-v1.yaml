@@ -172,6 +172,40 @@ paths:
           $ref: "#/components/responses/ValidationError"
         "500":
           $ref: "#/components/responses/InternalError"
+  /knowledge/files:
+    post:
+      tags: [Knowledge]
+      operationId: uploadKnowledgeFile
+      summary: 上传知识库文本文件
+      x-required-role: user
+      parameters:
+        - name: filename
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 180
+      requestBody:
+        required: true
+        content:
+          text/plain:
+            schema: { type: string, format: binary }
+          text/markdown:
+            schema: { type: string, format: binary }
+      responses:
+        "201":
+          description: 知识文件已上传
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /sessions:
     get:
       tags: [Sessions]

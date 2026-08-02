@@ -66,6 +66,16 @@ export interface Memory {
   updated_at: string
 }
 
+export interface KnowledgeFile {
+  id: string
+  filename: string
+  title: string
+  source: string
+  size_bytes: number
+  chunk_count: number
+  uploaded_at: string
+}
+
 export interface AuthUser {
   id: string
   username: string

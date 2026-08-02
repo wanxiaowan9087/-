@@ -184,6 +184,16 @@ class Memory(ContractModel):
     updated_at: datetime
 
 
+class KnowledgeFile(ContractModel):
+    id: str = Field(min_length=1, max_length=128)
+    filename: str = Field(min_length=1, max_length=180)
+    title: str = Field(min_length=1, max_length=120)
+    source: str = Field(min_length=1, max_length=2048)
+    size_bytes: int = Field(ge=1)
+    chunk_count: int = Field(ge=0)
+    uploaded_at: datetime
+
+
 class CorrectMemoryRequest(ContractModel):
     action: Literal["correct"]
     content: str = Field(min_length=1, max_length=5000)
@@ -264,6 +274,7 @@ CancelRunEnvelope = Envelope[CancelRunResult]
 RunTraceEnvelope = Envelope[RunTrace]
 MemoryEnvelope = Envelope[Memory]
 MemoryPageEnvelope = Envelope[Page[Memory]]
+KnowledgeFileEnvelope = Envelope[KnowledgeFile]
 DeleteMemoryEnvelope = Envelope[DeleteMemoryResult]
 ReviewPageEnvelope = Envelope[Page[ReviewTask]]
 ReviewDecisionEnvelope = Envelope[ReviewDecisionResult]

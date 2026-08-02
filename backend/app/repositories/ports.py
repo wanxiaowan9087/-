@@ -47,6 +47,10 @@ class PlatformTransaction(Protocol):
 
     async def get_session(self, owner_id: str, session_id: UUID) -> SessionRecord | None: ...
 
+    async def update_session_title(
+        self, owner_id: str, session_id: UUID, title: str, now: datetime
+    ) -> SessionRecord | None: ...
+
     async def list_messages(
         self, owner_id: str, session_id: UUID, *, limit: int, after: tuple[datetime, UUID] | None
     ) -> list[MessageRecord]: ...
@@ -60,6 +64,7 @@ class PlatformTransaction(Protocol):
         session_id: UUID,
         content: str | None,
         original_user_message_id: UUID | None,
+        session_title: str | None,
         now: datetime,
     ) -> tuple[MessageRecord, MessageRecord, RunRecord]: ...
 

@@ -3,10 +3,12 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import re
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any, cast
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from backend.app.application.cursor import CursorCodec
 from backend.app.application.ports import HealthProbePort, RunExecution, RunExecutorPort
@@ -15,6 +17,8 @@ from backend.app.core.context import request_id_var
 from backend.app.core.errors import AppError, conflict, not_found
 from backend.app.core.security import Principal
 from backend.app.domain.records import IdempotencyRecord, StreamEventRecord
+from backend.app.rag.chunking import DocumentChunker
+from backend.app.rag.models import DocumentRecord, DocumentType
 from backend.app.repositories.ports import PlatformRepository, PlatformTransaction
 from backend.app.schemas.common import Envelope, Page, PageInfo
 from backend.app.schemas.resources import (
@@ -25,6 +29,7 @@ from backend.app.schemas.resources import (
     DeactivateMemoryRequest,
     DeleteMemoryResult,
     Feedback,
+    KnowledgeFile,
     Memory,
     Message,
     NewChatRequest,
@@ -36,6 +41,38 @@ from backend.app.schemas.resources import (
     RunTrace,
     Session,
 )
+
+DEFAULT_SESSION_TITLES = {"", "新会话", "New agent session", "Agent session", "Untitled session"}
+SUPPORTED_KNOWLEDGE_SUFFIXES = {".txt", ".md", ".markdown"}
+MAX_KNOWLEDGE_FILE_BYTES = 2 * 1024 * 1024
+
+
+def summarize_session_title(content: str, *, max_length: int = 28) -> str:
+    compact = re.sub(r"\s+", " ", content).strip(" \t\r\n。！？!?，,；;：:")
+    if not compact:
+        return "新会话"
+    if len(compact) <= max_length:
+        return compact
+    return compact[: max_length - 1].rstrip() + "…"
+
+
+def is_placeholder_session_title(title: str) -> bool:
+    return title.strip() in DEFAULT_SESSION_TITLES
+
+
+def safe_knowledge_filename(filename: str, payload: bytes) -> str:
+    original = Path(filename).name
+    suffix = Path(original).suffix.lower()
+    if suffix not in SUPPORTED_KNOWLEDGE_SUFFIXES:
+        raise AppError(
+            "UNSUPPORTED_KNOWLEDGE_FILE",
+            "only .txt and .md knowledge files are supported",
+            400,
+        )
+    stem = Path(original).stem.strip() or "knowledge"
+    safe_stem = re.sub(r"[^0-9A-Za-z_\-\u4e00-\u9fff]+", "-", stem).strip("-_") or "knowledge"
+    digest = hashlib.sha256(payload).hexdigest()[:12]
+    return f"{safe_stem[:48]}-{digest}{'.md' if suffix == '.markdown' else suffix}"
 
 
 class PlatformService:
@@ -275,6 +312,11 @@ class PlatformService:
                     original_user_message_id=(
                         request.original_user_message_id
                         if isinstance(request, RetryChatRequest)
+                        else None
+                    ),
+                    session_title=(
+                        summarize_session_title(request.content)
+                        if isinstance(request, NewChatRequest)
                         else None
                     ),
                     now=now,
@@ -519,6 +561,74 @@ class PlatformService:
             data=Page(
                 items=[Memory.model_validate(item) for item in visible],
                 page=PageInfo(next_cursor=next_cursor, has_more=has_more),
+            ),
+            request_id=request_id_var.get(),
+        )
+
+    async def upload_knowledge_file(
+        self,
+        principal: Principal,
+        *,
+        filename: str,
+        content_type: str,
+        payload: bytes,
+        uploads_dir: str,
+    ) -> Envelope[KnowledgeFile]:
+        del principal
+        if not payload:
+            raise AppError("EMPTY_KNOWLEDGE_FILE", "knowledge file must not be empty", 400)
+        if len(payload) > MAX_KNOWLEDGE_FILE_BYTES:
+            raise AppError(
+                "KNOWLEDGE_FILE_TOO_LARGE",
+                "knowledge file must be 2 MB or smaller",
+                400,
+            )
+        if content_type and not (
+            content_type.startswith("text/")
+            or content_type in {"application/octet-stream", "application/x-markdown"}
+        ):
+            raise AppError(
+                "UNSUPPORTED_KNOWLEDGE_FILE",
+                "knowledge upload expects a UTF-8 text or markdown file",
+                400,
+            )
+        try:
+            text = payload.decode("utf-8")
+        except UnicodeDecodeError as error:
+            raise AppError(
+                "INVALID_KNOWLEDGE_FILE",
+                "knowledge file must be encoded as UTF-8 text",
+                400,
+            ) from error
+        if not text.strip():
+            raise AppError("EMPTY_KNOWLEDGE_FILE", "knowledge file must contain text", 400)
+
+        safe_name = safe_knowledge_filename(filename, payload)
+        target_dir = Path(uploads_dir) / "knowledge"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / safe_name
+        target.write_text(text, encoding="utf-8", newline="\n")
+
+        title = summarize_session_title(Path(filename).stem, max_length=120)
+        document = DocumentRecord(
+            document_id=str(uuid5(NAMESPACE_URL, f"knowledge-upload:{safe_name}")),
+            title=title,
+            source=f"file://uploads/knowledge/{safe_name}",
+            document_type=(
+                DocumentType.MARKDOWN if target.suffix.lower() == ".md" else DocumentType.TEXT
+            ),
+            content=text,
+        )
+        chunks = DocumentChunker().split(document)
+        return Envelope(
+            data=KnowledgeFile(
+                id=document.document_id,
+                filename=safe_name,
+                title=title,
+                source=document.source,
+                size_bytes=len(payload),
+                chunk_count=len(chunks),
+                uploaded_at=datetime.now(UTC),
             ),
             request_id=request_id_var.get(),
         )

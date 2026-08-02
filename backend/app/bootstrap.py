@@ -12,7 +12,7 @@ from backend.app.application.ports import RunExecutorPort, UnavailableRunExecuto
 from backend.app.core.config import Settings
 from backend.app.rag.lexical import BM25KeywordIndex
 from backend.app.rag.local_corpus import LocalTextCorpusRetriever
-from backend.app.rag.retrieval import HybridRetriever, IdentityReranker
+from backend.app.rag.retrieval import HybridRetriever, IdentityReranker, MergedRetriever
 from backend.app.repositories.ports import PlatformRepository
 
 
@@ -48,15 +48,19 @@ def build_run_executor(
         )
         vector_store = JsonVectorStore(settings.agent_vector_store_path)
         indexed_chunks = vector_store.load_all_chunks()
+        local_corpus = LocalTextCorpusRetriever(settings.agent_local_corpus_dir)
         retriever = (
-            HybridRetriever(
-                embeddings,
-                vector_store,
-                BM25KeywordIndex(indexed_chunks),
-                IdentityReranker(),
+            MergedRetriever(
+                HybridRetriever(
+                    embeddings,
+                    vector_store,
+                    BM25KeywordIndex(indexed_chunks),
+                    IdentityReranker(),
+                ),
+                local_corpus,
             )
             if indexed_chunks
-            else LocalTextCorpusRetriever(settings.agent_local_corpus_dir)
+            else local_corpus
         )
         react_engine = LangChainReActEngine(
             model=ChatTongyi(model=settings.agent_model_name),

@@ -20,6 +20,7 @@ async def test_platform_memory_runtime_reads_history_and_persists_explicit_prefe
             session_id=session.id,
             content="I prefer concise answers.",
             original_user_message_id=None,
+            session_title=None,
             now=now,
         )
     runtime = PlatformMemoryRuntime(repository)

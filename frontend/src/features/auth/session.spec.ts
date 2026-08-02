@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   AUTH_SESSION_TTL_MS,
   clearStoredAuthSession,
+  loadStoredAuthUser,
   loadStoredAccessToken,
   persistAuthSession,
   renewStoredAuthSession,
@@ -30,6 +31,7 @@ describe('browser authentication session', () => {
     }, storage, Date.parse('2026-08-01T08:00:00Z'))
 
     expect(loadStoredAccessToken(storage, Date.parse('2026-08-08T07:59:59Z'))).toBe('token-1')
+    expect(loadStoredAuthUser(storage)).toMatchObject({ username: 'visitor', nickname: '访客' })
     expect(loadStoredAccessToken(storage, Date.parse('2026-08-08T08:00:00Z'))).toBe('')
   })
 

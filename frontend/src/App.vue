@@ -9,6 +9,7 @@ import type { AuthSession, AuthUser, ChatRequest, Memory, Message, Session } fro
 import {
   clearStoredAuthSession,
   loadStoredAccessToken,
+  loadStoredAuthUser,
   persistAuthSession,
   renewStoredAuthSession,
 } from './features/auth/session'
@@ -29,7 +30,7 @@ const activeAbortController = ref<InstanceType<typeof globalThis.AbortController
 type ProtectedAction = { type: 'agent' } | { type: 'product'; productId: string }
 
 const accessToken = ref(loadStoredAccessToken())
-const authUser = ref<AuthUser | null>(null)
+const authUser = ref<AuthUser | null>(loadStoredAuthUser())
 const authLoading = ref(true)
 const authSubmitting = ref(false)
 const authDialogOpen = ref(false)
@@ -46,6 +47,8 @@ const profileAvatarFile = ref<File | null>(null)
 const profileAvatarPreview = ref('')
 const profileDropActive = ref(false)
 const avatarInput = ref<HTMLInputElement | null>(null)
+const knowledgeInput = ref<HTMLInputElement | null>(null)
+const knowledgeUploading = ref(false)
 const cancelDialogOpen = ref(false)
 const currentView = ref<'showcase' | 'agent'>('showcase')
 const defaultAvatarUrl = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=160&q=80'
@@ -69,6 +72,11 @@ const visibleHistoricalMessages = computed(() => historicalMessages.value.filter
 }))
 
 let revealObserver: IntersectionObserver | undefined
+
+function summarizeSessionTitle(content: string): string {
+  const compact = content.replace(/\s+/g, ' ').trim().replace(/[。！？!?，,；;：:]+$/g, '')
+  return compact.length > 28 ? `${compact.slice(0, 27).trim()}…` : compact || '新会话'
+}
 
 function observeReveals() {
   if (!revealObserver) {
@@ -119,9 +127,14 @@ async function restoreAuthentication() {
   try {
     authUser.value = await api.currentUser()
     await refreshConversationState()
-  } catch {
-    clearStoredAuthSession()
-    accessToken.value = ''
+  } catch (error) {
+    if (error instanceof ApiClientError && error.status === 401) {
+      clearStoredAuthSession()
+      accessToken.value = ''
+      authUser.value = null
+    } else {
+      historyError.value = error instanceof Error ? error.message : '后端暂时不可用，已保留本地登录态'
+    }
   } finally {
     authLoading.value = false
     void nextTick(() => observeReveals())
@@ -358,7 +371,7 @@ async function sendMessage() {
   }
   let sessionId = chat.sessionId
   try {
-    sessionId = sessionId ?? (await api.createSession('New agent session')).id
+    sessionId = sessionId ?? (await api.createSession(summarizeSessionTitle(content))).id
     if (!chat.sessionId) chat.sessionId = sessionId
     void refreshConversationState()
   } catch (error) {
@@ -371,6 +384,35 @@ async function sendMessage() {
     return
   }
   await executeChat({ mode: 'new', session_id: sessionId, content }, content)
+}
+
+async function uploadKnowledgeFile(file: File | undefined) {
+  if (!file || knowledgeUploading.value) return
+  if (!accessToken.value) {
+    openAuthDialog({ type: 'agent' })
+    return
+  }
+  if (!/\.(txt|md|markdown)$/i.test(file.name) || file.size > 2 * 1024 * 1024) {
+    historyError.value = '请上传 2MB 以内的 .txt / .md 知识文件'
+    return
+  }
+  knowledgeUploading.value = true
+  historyError.value = null
+  try {
+    const uploaded = await api.uploadKnowledgeFile(file)
+    chat.errorMessage = ''
+    draft.value = `我已经上传了《${uploaded.title}》，请基于这份资料回答：`
+    chat.setPreviewState('ready')
+  } catch (error) {
+    if (error instanceof ApiClientError && error.status === 401) {
+      expireAuthentication({ type: 'agent' })
+      return
+    }
+    historyError.value = error instanceof Error ? error.message : '知识文件上传失败'
+  } finally {
+    knowledgeUploading.value = false
+    if (knowledgeInput.value) knowledgeInput.value.value = ''
+  }
 }
 
 async function retryLastMessage() {
@@ -493,7 +535,7 @@ async function confirmCancelActiveRun() {
           <button v-if="chat.previewState === 'error' && chat.userMessageId" type="button" @click="retryLastMessage">重试本次运行</button><button v-else-if="chat.previewState === 'error'" type="button" @click="chat.setPreviewState('ready')">返回对话</button>
         </section>
       </section>
-      <footer class="composer-wrap"><div class="state-switcher" aria-label="静态状态预览"><span>审阅状态</span><button v-for="state in states" :key="state.value" type="button" :class="{ selected: chat.previewState === state.value }" @click="chat.setPreviewState(state.value)">{{ state.label }}</button></div><form class="composer" @submit.prevent="sendMessage"><textarea v-model="draft" aria-label="消息输入" placeholder="询问知识库，或输入一条客服处理需求…" :disabled="chat.previewState === 'disabled' || chat.previewState === 'loading'"></textarea><div class="composer-bar"><button type="button" class="attach" aria-label="添加附件">＋</button><span>仅使用受控知识库 · 不发送隐私信息</span><button v-if="chat.previewState === 'loading' && chat.runId" type="button" class="send" @click="requestCancelActiveRun">停止</button><button v-else type="submit" class="send" :disabled="chat.previewState === 'disabled' || chat.previewState === 'loading' || !draft.trim()">发送 <b>↑</b></button></div></form></footer>
+      <footer class="composer-wrap"><div class="state-switcher" aria-label="静态状态预览"><span>审阅状态</span><button v-for="state in states" :key="state.value" type="button" :class="{ selected: chat.previewState === state.value }" @click="chat.setPreviewState(state.value)">{{ state.label }}</button></div><form class="composer" @submit.prevent="sendMessage"><textarea v-model="draft" aria-label="消息输入" placeholder="询问知识库，或输入一条客服处理需求…" :disabled="chat.previewState === 'disabled' || chat.previewState === 'loading'"></textarea><div class="composer-bar"><input ref="knowledgeInput" class="knowledge-file-input" type="file" accept=".txt,.md,.markdown,text/plain,text/markdown" @change="uploadKnowledgeFile(($event.target as HTMLInputElement).files?.item(0) ?? undefined)" /><button type="button" class="attach" :disabled="knowledgeUploading" :aria-label="knowledgeUploading ? '正在上传知识文件' : '上传知识文件'" @click="knowledgeInput?.click()">{{ knowledgeUploading ? '…' : '＋' }}</button><span>可上传 .txt/.md 知识文件 · 回答优先基于受控知识库</span><button v-if="chat.previewState === 'loading' && chat.runId" type="button" class="send" @click="requestCancelActiveRun">停止</button><button v-else type="submit" class="send" :disabled="chat.previewState === 'disabled' || chat.previewState === 'loading' || !draft.trim()">发送 <b>↑</b></button></div></form></footer>
       </template>
     </main>
     <button class="scrim" aria-label="关闭会话列表" @click="chat.closeNav"></button>

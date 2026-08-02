@@ -18,6 +18,7 @@ async def test_internal_memory_and_review_creation_ports() -> None:
             session_id=session.id,
             content="remember this",
             original_user_message_id=None,
+            session_title=None,
             now=now,
         )
         memory = await transaction.create_memory(
