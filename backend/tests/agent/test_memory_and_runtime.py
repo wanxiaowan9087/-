@@ -232,6 +232,16 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(retriever.calls, 0)
         self.assertEqual(engine.requests, [])
 
+    async def test_identity_answer_keeps_knowledge_upload_admin_only(self) -> None:
+        engine = FakeReActEngine()
+        runtime = AgentRuntime(react_engine=engine, retriever=CountingRetriever(self._retrieval()))
+
+        result = await runtime.execute(self._request("你是谁"))
+
+        self.assertIn("联系管理员", result.public_content)
+        self.assertNotIn("上传新的", result.public_content)
+        self.assertNotIn(".txt", result.public_content)
+
     async def test_success_publishes_only_after_citation_policy(self) -> None:
         engine = FakeReActEngine(
             {
