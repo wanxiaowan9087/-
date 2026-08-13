@@ -293,6 +293,11 @@ async function refreshConversationState() {
     memories.value = memoryPage.items
     if (chat.sessionId) {
       await refreshSessionMessages(chat.sessionId)
+    } else if (sessionPage.items.length) {
+      const latest = sessionPage.items[0]
+      chat.sessionId = latest.id
+      await refreshSessionMessages(latest.id)
+      chat.setPreviewState(historicalMessages.value.length ? 'ready' : 'empty')
     }
   } catch (error) {
     historyError.value = error instanceof Error ? error.message : '历史会话加载失败'

@@ -9,6 +9,7 @@ from backend.app.agent.contracts import (
     ConversationMessage,
     ErrorCode,
     LongTermFact,
+    MemoryContext,
     MemoryType,
     ModelDraft,
     RunStatus,
@@ -48,6 +49,16 @@ class StubRetriever:
 
     async def retrieve(self, query: str) -> RetrievalResult:
         return self.result
+
+
+class CountingRetriever(StubRetriever):
+    def __init__(self, result: RetrievalResult) -> None:
+        super().__init__(result)
+        self.calls = 0
+
+    async def retrieve(self, query: str) -> RetrievalResult:
+        self.calls += 1
+        return await super().retrieve(query)
 
 
 class FailingHistory:
@@ -153,6 +164,45 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
             ),
             confidence=confidence,
         )
+
+    async def test_meaningless_input_is_guarded_before_retrieval_and_model(self) -> None:
+        engine = FakeReActEngine()
+        retriever = CountingRetriever(self._retrieval())
+        runtime = AgentRuntime(react_engine=engine, retriever=retriever)
+
+        result = await runtime.execute(self._request("1"))
+
+        self.assertEqual(result.status, RunStatus.COMPLETED)
+        self.assertEqual(result.retrieval_strategy, "input-guard")
+        self.assertEqual(retriever.calls, 0)
+        self.assertEqual(engine.requests, [])
+
+    async def test_profile_intent_uses_current_user_memory_without_retrieval(self) -> None:
+        class Memory:
+            async def build_context(self, session_id: str, subject_id: str) -> MemoryContext:
+                self.subject_id = subject_id
+                return MemoryContext(
+                    summary="用户持续关注设备维护",
+                    facts=(LongTermFact(
+                        memory_id="m1", memory_type=MemoryType.PREFERENCE,
+                        content="我偏好简洁回答", confidence=0.9,
+                        source_message_id="message-1",
+                    ),),
+                )
+
+            async def extract_best_effort(self, subject_id: str, source: ConversationMessage) -> str | None:
+                return None
+
+        engine = FakeReActEngine()
+        retriever = CountingRetriever(self._retrieval())
+        runtime = AgentRuntime(react_engine=engine, retriever=retriever, memory=Memory())
+
+        result = await runtime.execute(self._request("总结我的使用习惯"))
+
+        self.assertEqual(result.status, RunStatus.COMPLETED)
+        self.assertIn("简洁回答", result.public_content)
+        self.assertEqual(retriever.calls, 0)
+        self.assertEqual(engine.requests, [])
 
     async def test_success_publishes_only_after_citation_policy(self) -> None:
         engine = FakeReActEngine(

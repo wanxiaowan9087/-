@@ -30,6 +30,8 @@ class PlatformMemoryRuntime:
         window_messages: int = 8,
         summary_batch_messages: int = 200,
         summary_max_chars: int = 2400,
+        max_fact_chars: int = 280,
+        max_total_fact_chars: int = 2400,
     ) -> None:
         if window_messages < 1:
             raise ValueError("window_messages must be positive")
@@ -41,6 +43,8 @@ class PlatformMemoryRuntime:
         self._window_messages = window_messages
         self._summary_batch_messages = summary_batch_messages
         self._summary_max_chars = summary_max_chars
+        self._max_fact_chars = max_fact_chars
+        self._max_total_fact_chars = max_total_fact_chars
 
     async def build_context(self, session_id: str, subject_id: str) -> MemoryContext:
         session_uuid = UUID(session_id)
@@ -100,7 +104,7 @@ class PlatformMemoryRuntime:
             )
             for message in window_records
         )
-        facts = tuple(
+        raw_facts = tuple(
             LongTermFact(
                 memory_id=str(memory.id),
                 memory_type=MemoryType(memory.memory_type),
@@ -118,11 +122,37 @@ class PlatformMemoryRuntime:
         # repository's recency ordering within each category.
         facts = tuple(
             sorted(
-                facts,
+                raw_facts,
                 key=lambda item: (item.memory_type is not MemoryType.USER_FACT,),
             )
         )
-        return MemoryContext(window=window, summary=summary, facts=facts)
+        bounded_facts: list[LongTermFact] = []
+        fact_chars = 0
+        for fact in facts:
+            content = " ".join(fact.content.split())[: self._max_fact_chars]
+            if fact_chars + len(content) > self._max_total_fact_chars:
+                break
+            bounded_facts.append(
+                LongTermFact(
+                    memory_id=fact.memory_id,
+                    memory_type=fact.memory_type,
+                    content=content,
+                    confidence=fact.confidence,
+                    source_message_id=fact.source_message_id,
+                    version=fact.version,
+                    active=fact.active,
+                )
+            )
+            fact_chars += len(content)
+        return MemoryContext(
+            window=window,
+            summary=(summary or "")[: self._summary_max_chars] or None,
+            facts=tuple(bounded_facts),
+        )
+
+    async def get_context(self, subject_id: str, session_id: str) -> MemoryContext:
+        """User-context tool adapter; keeps repository access behind this port."""
+        return await self.build_context(session_id, subject_id)
 
     async def extract_best_effort(
         self, subject_id: str, source: ConversationMessage

@@ -79,9 +79,10 @@ def build_run_executor(
             MultiQueryRetriever(hybrid, LangChainQueryRewriter(model)),
             local_corpus,
         )
+        memory = PlatformMemoryRuntime(repository) if repository is not None else None
         react_engine = LangChainReActEngine(
             model=model,
-            tool_executor=ToolExecutor(build_customer_tool_registry()),
+            tool_executor=ToolExecutor(build_customer_tool_registry(memory)),
             chat_system_prompt=settings.agent_chat_system_prompt,
             report_system_prompt=settings.agent_report_system_prompt,
             model_name=settings.agent_model_name,
@@ -90,7 +91,6 @@ def build_run_executor(
         raise AgentRuntimeBootstrapError(
             "AI runtime configuration could not be initialized"
         ) from error
-    memory = PlatformMemoryRuntime(repository) if repository is not None else None
     executor = RuntimeRunExecutor(
         AgentRuntime(
             react_engine=react_engine,

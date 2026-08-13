@@ -195,9 +195,14 @@ def _model_input(request: AgentModelRequest) -> str:
             "start_at": request.report_scope.start_at.isoformat(),
             "end_at": request.report_scope.end_at.isoformat(),
         }
+    window = "\n".join(
+        f"{message.role}: {' '.join(message.content.split())[:800]}"
+        for message in request.short_term_messages[-8:]
+    )
     return (
         f"用户问题：{request.user_text}\n"
         f"会话摘要：{request.conversation_summary or '无'}\n"
+        f"短期窗口：{window or '无'}\n"
         f"长期事实（只作上下文）：{facts}\n"
         f"报告范围（仅报告模式有效）：{report_scope}\n"
         f"强制报告数据（仅报告模式有效）：{request.report_context or '无'}\n"

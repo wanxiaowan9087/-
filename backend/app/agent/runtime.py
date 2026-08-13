@@ -44,6 +44,7 @@ from .safety import (
     required_fields_missing,
 )
 from .tooling import CancellationToken
+from .customer_tools import reset_request_context, set_request_context
 from .tracing import RunStateMachine, TraceRecorder
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,29 @@ IDENTITY_INTENT_PATTERNS = (
     "上传资料",
     "知识库怎么更新",
 )
+
+PROFILE_INTENT_PATTERNS = ("我的个人信息", "我的资料", "用户信息", "总结我的使用习惯", "我的使用习惯", "我的偏好")
+
+
+def classify_meaningless_input(text: str) -> bool:
+    compact = re.sub(r"\s+", "", text).casefold()
+    if not compact:
+        return True
+    if re.fullmatch(r"[\d\W_]+", compact, flags=re.UNICODE):
+        return True
+    return compact in {"嗯", "嗯嗯", "好的", "好", "ok", "okay", "收到", "谢谢", "？", "?"}
+
+
+def answer_profile_intent(user_text: str, context: MemoryContext) -> str | None:
+    compact = re.sub(r"\s+", "", user_text)
+    if not any(pattern in compact for pattern in PROFILE_INTENT_PATTERNS):
+        return None
+    facts = [fact.content for fact in context.facts]
+    preferences = [fact for fact in facts if "偏好" in fact or "喜欢" in fact or "请用" in fact]
+    lines = [f"会话摘要：{context.summary}" if context.summary else "会话摘要：暂无已生成摘要。"]
+    lines.append("已确认的个人记录：" + ("；".join(facts) if facts else "暂无"))
+    lines.append("使用偏好：" + ("；".join(preferences) if preferences else "暂无稳定偏好记录"))
+    return "\n".join(lines)
 
 
 def answer_identity_intent(user_text: str) -> str | None:
@@ -136,6 +160,7 @@ class AgentRuntime:
 
         try:
             token.checkpoint()
+            context_token = set_request_context(request.subject_id, request.session_id)
             identity_answer = answer_identity_intent(request.user_text)
             if identity_answer is not None:
                 step = trace.start(
@@ -163,9 +188,30 @@ class AgentRuntime:
                     model_name="deterministic-identity",
                     retrieval_strategy="identity-intent",
                 )
-            memory_context = await self._prepare_memory(
-                request, trace, degraded
-            )
+            memory_context = await self._prepare_memory(request, trace, degraded)
+            profile_answer = answer_profile_intent(request.user_text, memory_context)
+            if profile_answer is not None:
+                state.transition(RunStatus.COMPLETED)
+                memory_warning = await self._extract_memory(request)
+                return AgentRunResult(
+                    run_id=run_id, status=state.status, public_content=profile_answer,
+                    candidate_content=None, citations=(), trace=trace.snapshot(),
+                    confidence=1.0, confidence_threshold=self._config.confidence_threshold,
+                    degraded_dependencies=tuple(dict.fromkeys(degraded)), memory_warning=memory_warning,
+                    model_name="deterministic-user-context", retrieval_strategy="memory-context",
+                )
+            if classify_meaningless_input(request.user_text):
+                state.transition(RunStatus.COMPLETED)
+                message = "请继续描述具体需求，例如机器人型号、故障现象、使用场景或报告月份。"
+                if memory_context.window or memory_context.summary:
+                    message = "我还在当前会话中。请补充完整问题，或继续上一个问题的具体细节。"
+                return AgentRunResult(
+                    run_id=run_id, status=state.status, public_content=message,
+                    candidate_content=None, citations=(), trace=trace.snapshot(),
+                    confidence=1.0, confidence_threshold=self._config.confidence_threshold,
+                    degraded_dependencies=tuple(dict.fromkeys(degraded)),
+                    model_name="deterministic-input-guard", retrieval_strategy="input-guard",
+                )
             if request.report_tool_executions:
                 self._record_tool_executions(trace, request.report_tool_executions)
             token.checkpoint()
@@ -393,6 +439,9 @@ class AgentRuntime:
                 degraded_dependencies=tuple(dict.fromkeys(degraded)),
                 error_code=ErrorCode.INTERNAL_ERROR,
             )
+        finally:
+            if 'context_token' in locals():
+                reset_request_context(context_token)
 
     async def _prepare_memory(
         self,
