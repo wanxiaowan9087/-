@@ -1,0 +1,61 @@
+user_id,profile,cleaning_efficiency,consumables,comparison,month
+1011,75sqm apartment dual occupants wood floor,coverage 91 percent; daily area 42sqm; edge route stable,main brush 70 days; filter 65 percent,small-home cleaning remains stable,2025-01
+1012,110sqm duplex family tile floor,coverage 87 percent; obstacle success 92 percent; dining area miss once weekly,edge brush light wear; refill daily,enable dining-zone priority cleaning,2025-01
+1013,95sqm cat household carpet,pet hair removal 89 percent; carpet boost 13 times monthly,rubber brush medium tangling; filter 35 days,clean rubber brush weekly for pet hair,2025-01
+1014,140sqm elderly household mixed floor,coverage 84 percent; voice tasks 6 weekly,battery wear 18 percent; water tank use 72 percent,retain voice and scheduled tasks,2025-01
+1015,60sqm single occupant laminate floor,coverage 93 percent; daily area 38sqm,filter 80 days; dustbin every three days,performance above comparable small homes,2025-01
+1011,75sqm apartment dual occupants wood floor,coverage 92 percent; daily area 43sqm; edge route stable,main brush 65 days; filter 60 percent,small-home cleaning remains stable,2025-02
+1012,110sqm duplex family tile floor,coverage 88 percent; obstacle success 93 percent; dining area miss once weekly,edge brush light wear; refill daily,enable dining-zone priority cleaning,2025-02
+1013,95sqm cat household carpet,pet hair removal 90 percent; carpet boost 14 times monthly,rubber brush medium tangling; filter 30 days,clean rubber brush weekly for pet hair,2025-02
+1014,140sqm elderly household mixed floor,coverage 85 percent; voice tasks 7 weekly,battery wear 19 percent; water tank use 74 percent,retain voice and scheduled tasks,2025-02
+1015,60sqm single occupant laminate floor,coverage 94 percent; daily area 39sqm,filter 75 days; dustbin every three days,performance above comparable small homes,2025-02
+1011,75sqm apartment dual occupants wood floor,coverage 92 percent; daily area 44sqm; edge route stable,main brush 60 days; filter 55 percent,small-home cleaning remains stable,2025-03
+1012,110sqm duplex family tile floor,coverage 89 percent; obstacle success 94 percent; no dining area misses,edge brush light wear; refill daily,priority cleaning improved dining area,2025-03
+1013,95sqm cat household carpet,pet hair removal 91 percent; carpet boost 15 times monthly,rubber brush light tangling; filter 25 days,plan filter replacement soon,2025-03
+1014,140sqm elderly household mixed floor,coverage 86 percent; voice tasks 8 weekly,battery wear 20 percent; water tank use 76 percent,retain voice and scheduled tasks,2025-03
+1015,60sqm single occupant laminate floor,coverage 94 percent; daily area 40sqm,filter 70 days; dustbin every three days,performance above comparable small homes,2025-03
+1011,75sqm apartment dual occupants wood floor,coverage 93 percent; daily area 44sqm; edge route stable,main brush 55 days; filter 50 percent,small-home cleaning remains stable,2025-04
+1012,110sqm duplex family tile floor,coverage 90 percent; obstacle success 95 percent; no dining area misses,edge brush light wear; refill daily,priority cleaning improved dining area,2025-04
+1013,95sqm cat household carpet,pet hair removal 92 percent; carpet boost 16 times monthly,rubber brush light tangling; filter 55 days,maintenance restored pet hair performance,2025-04
+1014,140sqm elderly household mixed floor,coverage 87 percent; voice tasks 9 weekly,battery wear 21 percent; water tank use 78 percent,retain voice and scheduled tasks,2025-04
+1015,60sqm single occupant laminate floor,coverage 95 percent; daily area 40sqm,filter 65 days; dustbin every three days,performance above comparable small homes,2025-04
+1011,75sqm apartment dual occupants wood floor,coverage 93 percent; daily area 45sqm; edge route stable,main brush 50 days; filter 45 percent,small-home cleaning remains stable,2025-05
+1012,110sqm duplex family tile floor,coverage 90 percent; obstacle success 95 percent; no dining area misses,edge brush light wear; refill daily,priority cleaning improved dining area,2025-05
+1013,95sqm cat household carpet,pet hair removal 93 percent; carpet boost 17 times monthly,rubber brush light tangling; filter 50 days,maintenance restored pet hair performance,2025-05
+1014,140sqm elderly household mixed floor,coverage 88 percent; voice tasks 10 weekly,battery wear 22 percent; water tank use 80 percent,retain voice and scheduled tasks,2025-05
+1015,60sqm single occupant laminate floor,coverage 95 percent; daily area 41sqm,filter 60 days; dustbin every three days,performance above comparable small homes,2025-05
+1011,75sqm apartment dual occupants wood floor,coverage 91 percent; daily area 42sqm; edge route stable,main brush 70 days; filter 65 percent,small-home cleaning remains stable,2025-06
+1012,110sqm duplex family tile floor,coverage 87 percent; obstacle success 92 percent; dining area miss once weekly,edge brush light wear; refill daily,enable dining-zone priority cleaning,2025-06
+1013,95sqm cat household carpet,pet hair removal 89 percent; carpet boost 13 times monthly,rubber brush medium tangling; filter 35 days,clean rubber brush weekly for pet hair,2025-06
+1014,140sqm elderly household mixed floor,coverage 84 percent; voice tasks 6 weekly,battery wear 18 percent; water tank use 72 percent,retain voice and scheduled tasks,2025-06
+1015,60sqm single occupant laminate floor,coverage 93 percent; daily area 38sqm,filter 80 days; dustbin every three days,performance above comparable small homes,2025-06
+1011,75sqm apartment dual occupants wood floor,coverage 90 percent; daily area 40sqm; edge route needs review,main brush 45 days; filter 40 percent,check under-furniture route,2025-07
+1012,110sqm duplex family tile floor,coverage 85 percent; obstacle success 88 percent; dining area miss twice weekly,edge brush medium wear; refill twice daily,increase dining-zone frequency,2025-07
+1013,95sqm cat household carpet,pet hair removal 85 percent; carpet boost 12 times monthly,rubber brush medium tangling; filter 20 days,service brush and filter promptly,2025-07
+1014,140sqm elderly household mixed floor,coverage 81 percent; voice tasks 5 weekly,battery wear 23 percent; water tank use 65 percent,arrange guided voice-control session,2025-07
+1015,60sqm single occupant laminate floor,coverage 90 percent; daily area 35sqm,filter 55 days; dustbin every four days,restore daily scheduled task,2025-07
+1011,75sqm apartment dual occupants wood floor,coverage 89 percent; daily area 39sqm; edge route needs review,main brush 40 days; filter 35 percent,check under-furniture route,2025-08
+1012,110sqm duplex family tile floor,coverage 84 percent; obstacle success 87 percent; dining area miss twice weekly,edge brush medium wear; refill twice daily,increase dining-zone frequency,2025-08
+1013,95sqm cat household carpet,pet hair removal 84 percent; carpet boost 11 times monthly,rubber brush heavy tangling; filter 15 days,service brush and filter promptly,2025-08
+1014,140sqm elderly household mixed floor,coverage 80 percent; voice tasks 4 weekly,battery wear 24 percent; water tank use 62 percent,arrange guided voice-control session,2025-08
+1015,60sqm single occupant laminate floor,coverage 89 percent; daily area 34sqm,filter 50 days; dustbin every four days,restore daily scheduled task,2025-08
+1011,75sqm apartment dual occupants wood floor,coverage 90 percent; daily area 41sqm; edge route stable,main brush 60 days; filter 55 percent,route optimization restored coverage,2025-09
+1012,110sqm duplex family tile floor,coverage 87 percent; obstacle success 91 percent; dining area miss once weekly,edge brush light wear; refill daily,priority cleaning improved dining area,2025-09
+1013,95sqm cat household carpet,pet hair removal 89 percent; carpet boost 14 times monthly,rubber brush light tangling; filter 45 days,maintenance restored pet hair performance,2025-09
+1014,140sqm elderly household mixed floor,coverage 84 percent; voice tasks 8 weekly,battery wear 24 percent; water tank use 70 percent,voice training restored task use,2025-09
+1015,60sqm single occupant laminate floor,coverage 92 percent; daily area 37sqm,filter 70 days; dustbin every three days,schedule restored stable operation,2025-09
+1011,75sqm apartment dual occupants wood floor,coverage 91 percent; daily area 42sqm; edge route stable,main brush 55 days; filter 50 percent,route optimization restored coverage,2025-10
+1012,110sqm duplex family tile floor,coverage 88 percent; obstacle success 92 percent; dining area miss once weekly,edge brush light wear; refill daily,priority cleaning improved dining area,2025-10
+1013,95sqm cat household carpet,pet hair removal 90 percent; carpet boost 15 times monthly,rubber brush light tangling; filter 40 days,maintenance restored pet hair performance,2025-10
+1014,140sqm elderly household mixed floor,coverage 85 percent; voice tasks 9 weekly,battery wear 25 percent; water tank use 74 percent,voice training restored task use,2025-10
+1015,60sqm single occupant laminate floor,coverage 93 percent; daily area 38sqm,filter 65 days; dustbin every three days,schedule restored stable operation,2025-10
+1011,75sqm apartment dual occupants wood floor,coverage 92 percent; daily area 43sqm; edge route stable,main brush 50 days; filter 45 percent,route optimization restored coverage,2025-11
+1012,110sqm duplex family tile floor,coverage 89 percent; obstacle success 93 percent; no dining area misses,edge brush light wear; refill daily,priority cleaning improved dining area,2025-11
+1013,95sqm cat household carpet,pet hair removal 91 percent; carpet boost 16 times monthly,rubber brush light tangling; filter 35 days,maintenance restored pet hair performance,2025-11
+1014,140sqm elderly household mixed floor,coverage 86 percent; voice tasks 10 weekly,battery wear 25 percent; water tank use 78 percent,voice training restored task use,2025-11
+1015,60sqm single occupant laminate floor,coverage 94 percent; daily area 39sqm,filter 60 days; dustbin every three days,schedule restored stable operation,2025-11
+1011,75sqm apartment dual occupants wood floor,coverage 93 percent; daily area 44sqm; edge route stable,main brush 45 days; filter 40 percent,route optimization restored coverage,2025-12
+1012,110sqm duplex family tile floor,coverage 90 percent; obstacle success 94 percent; no dining area misses,edge brush light wear; refill daily,priority cleaning improved dining area,2025-12
+1013,95sqm cat household carpet,pet hair removal 92 percent; carpet boost 17 times monthly,rubber brush light tangling; filter 30 days,maintenance restored pet hair performance,2025-12
+1014,140sqm elderly household mixed floor,coverage 87 percent; voice tasks 11 weekly,battery wear 26 percent; water tank use 82 percent,voice training restored task use,2025-12
+1015,60sqm single occupant laminate floor,coverage 95 percent; daily area 40sqm,filter 55 days; dustbin every three days,schedule restored stable operation,2025-12

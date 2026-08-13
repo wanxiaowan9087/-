@@ -1,0 +1,95 @@
+services:
+  postgres:
+    image: postgres:17.5-bookworm
+    environment:
+      POSTGRES_DB: agent_robot
+      POSTGRES_USER: agent_robot
+      POSTGRES_PASSWORD: agent_robot
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent_robot -d agent_robot"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "15433:5432"
+
+  redis:
+    image: redis:8.0.3-bookworm
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["alembic", "-c", "backend/alembic.ini", "upgrade", "head"]
+    environment:
+      APP_DATABASE_URL: postgresql+asyncpg://agent_robot:agent_robot@postgres:5432/agent_robot
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  volume-init:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    user: root
+    command: ["sh", "-c", "mkdir -p /app/runtime /app/data/uploads && chown -R app:app /app/runtime /app/data/uploads"]
+    volumes:
+      - agent-runtime-data:/app/runtime
+      - agent-uploads:/app/data/uploads
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      APP_DATABASE_URL: postgresql+asyncpg://agent_robot:agent_robot@postgres:5432/agent_robot
+      APP_REDIS_URL: redis://redis:6379/1
+      APP_DEMO_AUTH_ENABLED: "false"
+      APP_AGENT_RUNTIME_ENABLED: "true"
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:?Set DASHSCOPE_API_KEY in the shell before starting Docker Compose}
+      APP_CORS_ORIGINS: '["http://localhost:5174"]'
+      APP_AGENT_VECTOR_STORE_PATH: /app/runtime/vector-store.json
+      APP_AGENT_LOCAL_CORPUS_DIR: /app/data
+      APP_UPLOADS_DIR: /app/data/uploads
+      APP_ADMIN_USERNAME: ${APP_ADMIN_USERNAME:?Set APP_ADMIN_USERNAME in the shell before starting Docker Compose}
+      APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD:?Set APP_ADMIN_PASSWORD in the shell before starting Docker Compose}
+    ports:
+      - "${AGENT_BACKEND_PORT:-8001}:8000"
+    volumes:
+      - agent-runtime-data:/app/runtime
+      - agent-uploads:/app/data/uploads
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      volume-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health/ready')",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  postgres-data:
+    name: agent_robot-postgres-data
+  agent-runtime-data:
+    name: agent_robot-runtime-data
+  agent-uploads:
+    name: agent_robot-uploads
+
