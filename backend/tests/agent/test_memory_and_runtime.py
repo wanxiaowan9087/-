@@ -21,7 +21,7 @@ from backend.app.agent.memory import (
     MemoryCoordinator,
 )
 from backend.app.agent.ports import ModelTimeout, ModelUnavailable
-from backend.app.agent.runtime import AgentRuntime
+from backend.app.agent.runtime import AgentRuntime, classify_meaningless_input
 from backend.app.agent.tooling import CancellationToken
 from backend.app.rag.models import (
     Chunk,
@@ -164,6 +164,21 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
             ),
             confidence=confidence,
         )
+
+    async def test_meaningless_input_is_blocked_before_retrieval_or_model(self) -> None:
+        class FailingRetriever:
+            async def retrieve(self, query: str) -> RetrievalResult:
+                raise AssertionError("meaningless input must not retrieve")
+
+        engine = FakeReActEngine()
+        runtime = AgentRuntime(react_engine=engine, retriever=FailingRetriever())
+        result = await runtime.execute(self._request("1"))
+        self.assertEqual(result.status, RunStatus.COMPLETED)
+        self.assertEqual(result.retrieval_strategy, "input-guard")
+        self.assertIn("具体需求", result.public_content)
+        self.assertEqual(engine.requests, [])
+        self.assertTrue(classify_meaningless_input("？"))
+        self.assertFalse(classify_meaningless_input("机器人怎么选"))
 
     async def test_meaningless_input_is_guarded_before_retrieval_and_model(self) -> None:
         engine = FakeReActEngine()

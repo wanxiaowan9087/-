@@ -69,9 +69,12 @@ def classify_meaningless_input(text: str) -> bool:
     compact = re.sub(r"\s+", "", text).casefold()
     if not compact:
         return True
-    if re.fullmatch(r"[\d\W_]+", compact, flags=re.UNICODE):
+    # Unicode \w is not reliable across clients with mixed encodings. Treat
+    # input as meaningful when it contains a letter, CJK character, or digit;
+    # punctuation-only and numeric-only messages are otherwise ignored.
+    if not re.search(r"[A-Za-z\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]", compact):
         return True
-    return compact in {"嗯", "嗯嗯", "好的", "好", "ok", "okay", "收到", "谢谢", "？", "?"}
+    return compact in {"嗯", "嗯嗯", "好的", "好", "ok", "okay", "收到", "谢谢"}
 
 
 def answer_profile_intent(user_text: str, context: MemoryContext) -> str | None:
