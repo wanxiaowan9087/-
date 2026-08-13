@@ -5,7 +5,7 @@ import { useChatStore, type PreviewState } from './stores/chat'
 import { mockPreview } from './features/chat/mock-data'
 import RobotHero from './features/chat/RobotHero.vue'
 import ProductRecommendations from './features/chat/ProductRecommendations.vue'
-import { commitSessionMessages, type SessionMessageCache } from './features/chat/session-cache'
+import { commitSessionMessages, type SessionMessageCache, type SessionRequestTokens } from './features/chat/session-cache'
 import { ApiClientError, createAgentApi } from './api/client'
 import type { AuthSession, AuthUser, ChatRequest, KnowledgeFile, Memory, Message, Session } from './api/contracts'
 import { toProductRecommendationView } from './stores/chat'
@@ -76,7 +76,7 @@ const visibleHistoricalMessages = computed(() => historicalMessages.value.filter
 
 let revealObserver: IntersectionObserver | undefined
 let conversationLoadVersion = 0
-let messageLoadVersion = 0
+const messageLoadVersions: SessionRequestTokens = {}
 
 function summarizeSessionTitle(content: string): string {
   const compact = content.replace(/\s+/g, ' ').trim().replace(/[。！？!?，,；;：:]+$/g, '')
@@ -321,16 +321,16 @@ async function refreshConversationState() {
 }
 
 async function refreshSessionMessages(sessionId: string) {
-  const loadVersion = ++messageLoadVersion
+  const loadVersion = (messageLoadVersions[sessionId] ?? 0) + 1
+  messageLoadVersions[sessionId] = loadVersion
   const page = await api.listMessages(sessionId)
-  // A user can switch sessions before this request completes. Never allow a
-  // late response from the previous session to replace the active transcript.
+  // Each transcript has an independent request sequence. A background refresh
+  // for one session must never invalidate a switch request for another.
   sessionMessages.value = commitSessionMessages(
     sessionMessages.value,
-    chat.sessionId,
     sessionId,
     loadVersion,
-    messageLoadVersion,
+    messageLoadVersions[sessionId],
     page.items,
   )
 }

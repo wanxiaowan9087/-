@@ -1,15 +1,15 @@
 import type { Message } from '../../api/contracts'
 
 export type SessionMessageCache = Record<string, Message[]>
+export type SessionRequestTokens = Record<string, number>
 
 export function commitSessionMessages(
   cache: SessionMessageCache,
-  activeSessionId: string | null,
   responseSessionId: string,
   requestVersion: number,
-  currentVersion: number,
+  currentSessionVersion: number,
   messages: Message[],
 ): SessionMessageCache {
-  if (requestVersion !== currentVersion || activeSessionId !== responseSessionId) return cache
+  if (requestVersion !== currentSessionVersion) return cache
   return { ...cache, [responseSessionId]: messages }
 }
