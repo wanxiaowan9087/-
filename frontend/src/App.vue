@@ -72,6 +72,8 @@ const visibleHistoricalMessages = computed(() => historicalMessages.value.filter
 }))
 
 let revealObserver: IntersectionObserver | undefined
+let conversationLoadVersion = 0
+let messageLoadVersion = 0
 
 function summarizeSessionTitle(content: string): string {
   const compact = content.replace(/\s+/g, ' ').trim().replace(/[。！？!?，,；;：:]+$/g, '')
@@ -282,6 +284,7 @@ function resetConversation() {
 
 async function refreshConversationState() {
   if (!accessToken.value) return
+  const loadVersion = ++conversationLoadVersion
   historyLoading.value = true
   historyError.value = null
   try {
@@ -289,6 +292,7 @@ async function refreshConversationState() {
       api.listSessions(),
       api.listMemories(),
     ])
+    if (loadVersion !== conversationLoadVersion) return
     sessions.value = sessionPage.items
     memories.value = memoryPage.items
     if (chat.sessionId) {
@@ -297,29 +301,38 @@ async function refreshConversationState() {
       const latest = sessionPage.items[0]
       chat.sessionId = latest.id
       await refreshSessionMessages(latest.id)
-      chat.setPreviewState(historicalMessages.value.length ? 'ready' : 'empty')
+      if (loadVersion === conversationLoadVersion) {
+        chat.setPreviewState(historicalMessages.value.length ? 'ready' : 'empty')
+      }
     }
   } catch (error) {
     historyError.value = error instanceof Error ? error.message : '历史会话加载失败'
   } finally {
-    historyLoading.value = false
+    if (loadVersion === conversationLoadVersion) historyLoading.value = false
   }
 }
 
 async function refreshSessionMessages(sessionId: string) {
+  const loadVersion = ++messageLoadVersion
   const page = await api.listMessages(sessionId)
+  // A user can switch sessions before this request completes. Never allow a
+  // late response from the previous session to replace the active transcript.
+  if (loadVersion !== messageLoadVersion || chat.sessionId !== sessionId) return
   historicalMessages.value = page.items
 }
 
 async function openSession(sessionId: string) {
   if (chat.previewState === 'loading') return
+  conversationLoadVersion += 1
   chat.$reset()
   submittedQuestion.value = ''
   draft.value = ''
   chat.sessionId = sessionId
+  historicalMessages.value = []
   historyError.value = null
   try {
     await refreshSessionMessages(sessionId)
+    if (chat.sessionId !== sessionId) return
     chat.setPreviewState(historicalMessages.value.length ? 'ready' : 'empty')
     chat.closeNav()
   } catch (error) {
