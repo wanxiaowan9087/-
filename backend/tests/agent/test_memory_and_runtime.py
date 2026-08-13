@@ -219,6 +219,19 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(retriever.calls, 0)
         self.assertEqual(engine.requests, [])
 
+    async def test_model_identity_question_is_answered_as_xiaozhi_without_model(self) -> None:
+        engine = FakeReActEngine()
+        retriever = CountingRetriever(self._retrieval())
+        runtime = AgentRuntime(react_engine=engine, retriever=retriever)
+
+        result = await runtime.execute(self._request("你是什么模型"))
+
+        self.assertEqual(result.status, RunStatus.COMPLETED)
+        self.assertIn("小智", result.public_content)
+        self.assertNotIn("Qwen", result.public_content)
+        self.assertEqual(retriever.calls, 0)
+        self.assertEqual(engine.requests, [])
+
     async def test_success_publishes_only_after_citation_policy(self) -> None:
         engine = FakeReActEngine(
             {

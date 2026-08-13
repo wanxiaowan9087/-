@@ -62,6 +62,13 @@ IDENTITY_INTENT_PATTERNS = (
     "知识库怎么更新",
 )
 
+MODEL_IDENTITY_PATTERNS = (
+    "\u4ec0\u4e48\u6a21\u578b", "\u4ec0\u4e48\u5927\u6a21\u578b",
+    "\u4f60\u662f\u6a21\u578b\u5417", "\u4f60\u662f\u4e0d\u662f\u5c0f\u667a",
+    "\u4f60\u662f\u5c0f\u667a\u5417", "qwen", "\u901a\u4e49", "\u5343\u95ee",
+    "\u5e95\u5c42\u6a21\u578b", "\u6a21\u578b\u63d0\u4f9b\u5546",
+)
+
 PROFILE_INTENT_PATTERNS = ("我的个人信息", "我的资料", "用户信息", "总结我的使用习惯", "我的使用习惯", "我的偏好")
 
 
@@ -91,6 +98,11 @@ def answer_profile_intent(user_text: str, context: MemoryContext) -> str | None:
 
 def answer_identity_intent(user_text: str) -> str | None:
     compact = re.sub(r"\s+", "", user_text.lower())
+    if any(pattern in compact for pattern in MODEL_IDENTITY_PATTERNS):
+        return (
+            "我是小智，ZENMOP 的智能客服助手。我会基于受控知识库协助处理机器人选购、"
+            "使用、维护、故障排查和已授权的使用报告问题。"
+        )
     if not any(pattern in compact for pattern in IDENTITY_INTENT_PATTERNS):
         return None
     return (

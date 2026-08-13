@@ -5,6 +5,7 @@ import { useChatStore, type PreviewState } from './stores/chat'
 import { mockPreview } from './features/chat/mock-data'
 import RobotHero from './features/chat/RobotHero.vue'
 import ProductRecommendations from './features/chat/ProductRecommendations.vue'
+import { commitSessionMessages, type SessionMessageCache } from './features/chat/session-cache'
 import { ApiClientError, createAgentApi } from './api/client'
 import type { AuthSession, AuthUser, ChatRequest, KnowledgeFile, Memory, Message, Session } from './api/contracts'
 import { toProductRecommendationView } from './stores/chat'
@@ -59,11 +60,12 @@ const userInitial = computed(() => authUser.value?.nickname.slice(0, 1) || '访'
 const isAdmin = computed(() => authUser.value?.role === 'admin')
 const passwordPattern = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z0-9]).{6,20}$/
 const sessions = ref<Session[]>([])
-const historicalMessages = ref<Message[]>([])
+const sessionMessages = ref<SessionMessageCache>({})
 const memories = ref<Memory[]>([])
 const historyLoading = ref(false)
 const historyError = ref<string | null>(null)
 const activeSessionTitle = computed(() => sessions.value.find(item => item.id === chat.sessionId)?.title || mockPreview.title)
+const historicalMessages = computed(() => chat.sessionId ? sessionMessages.value[chat.sessionId] ?? [] : [])
 const visibleHistoricalMessages = computed(() => historicalMessages.value.filter(message => {
   if (!message.content) return false
   if (message.id === chat.userMessageId) return false
@@ -279,7 +281,6 @@ function resetConversation() {
   chat.$reset()
   submittedQuestion.value = ''
   draft.value = ''
-  historicalMessages.value = []
 }
 
 async function refreshConversationState() {
@@ -317,8 +318,14 @@ async function refreshSessionMessages(sessionId: string) {
   const page = await api.listMessages(sessionId)
   // A user can switch sessions before this request completes. Never allow a
   // late response from the previous session to replace the active transcript.
-  if (loadVersion !== messageLoadVersion || chat.sessionId !== sessionId) return
-  historicalMessages.value = page.items
+  sessionMessages.value = commitSessionMessages(
+    sessionMessages.value,
+    chat.sessionId,
+    sessionId,
+    loadVersion,
+    messageLoadVersion,
+    page.items,
+  )
 }
 
 async function openSession(sessionId: string) {
@@ -328,8 +335,9 @@ async function openSession(sessionId: string) {
   submittedQuestion.value = ''
   draft.value = ''
   chat.sessionId = sessionId
-  historicalMessages.value = []
   historyError.value = null
+  const cachedMessages = sessionMessages.value[sessionId]
+  chat.setPreviewState(cachedMessages?.length ? 'ready' : 'ready')
   try {
     await refreshSessionMessages(sessionId)
     if (chat.sessionId !== sessionId) return
