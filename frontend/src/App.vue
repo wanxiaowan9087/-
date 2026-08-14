@@ -45,7 +45,6 @@ const profileAvatarPreview = ref('')
 const profileDropActive = ref(false)
 const avatarInput = ref<HTMLInputElement | null>(null)
 const knowledgeInput = ref<HTMLInputElement | null>(null)
-const conversationEnd = ref<HTMLElement | null>(null)
 const knowledgeUploading = ref(false)
 const knowledgeReindexing = ref(false)
 const knowledgeFiles = ref<KnowledgeFile[]>([])
@@ -96,7 +95,16 @@ function observeReveals() {
 
 async function scrollConversationToEnd() {
   await nextTick()
-  conversationEnd.value?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  const lastMessage = document.querySelector<HTMLElement>('#agent-desk article.message:last-of-type')
+  const composer = document.querySelector<HTMLElement>('.workspace--agent .composer-wrap')
+  if (!lastMessage || !composer) return
+  const lastBounds = lastMessage.getBoundingClientRect()
+  const composerBounds = composer.getBoundingClientRect()
+  const targetTop = globalThis.scrollY + lastBounds.bottom - composerBounds.top + 24
+  globalThis.scrollTo({
+    top: Math.max(0, targetTop),
+    behavior: globalThis.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+  })
 }
 
 onMounted(() => {
@@ -333,6 +341,10 @@ async function refreshSessionMessages(sessionId: string) {
     messageLoadVersions[sessionId],
     page.items,
   )
+  if (chat.sessionId === sessionId) {
+    await nextTick()
+    observeReveals()
+  }
 }
 
 async function openSession(sessionId: string) {
@@ -654,7 +666,6 @@ async function confirmCancelActiveRun() {
           <p>{{ chat.previewState === 'loading' ? '正在检索知识库并检查策略，请稍候。' : chat.errorMessage || '输入一个问题即可开始新会话。' }}</p>
           <button v-if="chat.previewState === 'error' && chat.userMessageId" type="button" @click="retryLastMessage">重试本次运行</button><button v-else-if="chat.previewState === 'error'" type="button" @click="chat.setPreviewState('ready')">返回对话</button>
         </section>
-        <div ref="conversationEnd" aria-hidden="true"></div>
       </section>
       <footer class="composer-wrap"><form class="composer" @submit.prevent="sendMessage"><textarea v-model="draft" aria-label="消息输入" placeholder="询问知识库，或输入一条客服处理需求…" :disabled="chat.previewState === 'disabled' || chat.previewState === 'loading'" @keydown.enter.exact.prevent="sendMessage"></textarea><div class="composer-bar"><span>回答仅基于受控知识库；需更新资料请联系管理员。</span><button v-if="chat.previewState === 'loading' && chat.runId" type="button" class="send" @click="requestCancelActiveRun">停止</button><button v-else type="submit" class="send" :disabled="chat.previewState === 'disabled' || chat.previewState === 'loading' || !draft.trim()">发送 <b>↑</b></button></div></form></footer>
       </template>
