@@ -753,7 +753,25 @@ textarea:focus-visible {
 }
 
 .message.customer {
-  margin: 0 0 30px;
+  width: min(740px, calc(100% - 48px));
+  margin: 0 0 30px auto;
+}
+
+.message.customer .message-meta {
+  justify-content: flex-end;
+}
+
+.message.customer .message-avatar.user {
+  order: 3;
+}
+
+.message.customer .message-meta b {
+  order: 2;
+}
+
+.message.customer .message-meta time {
+  order: 1;
+  margin-left: 0;
 }
 
 .message-meta {
@@ -798,7 +816,7 @@ textarea:focus-visible {
   margin: 0;
   padding: 15px 17px;
   border: 1px solid var(--line);
-  border-radius: 0 9px 9px 9px;
+  border-radius: 9px 0 9px 9px;
   background: var(--mist-100);
   color: var(--slate-950);
   font-size: 14px;
@@ -1483,7 +1501,7 @@ textarea:disabled {
 
   .message.customer {
     width: calc(100% - 20px);
-    margin-left: 20px;
+    margin: 0 0 30px auto;
   }
 
   .message.customer > p {
