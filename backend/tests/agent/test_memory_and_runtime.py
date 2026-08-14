@@ -23,6 +23,7 @@ from backend.app.agent.memory import (
 from backend.app.agent.ports import ModelTimeout, ModelUnavailable
 from backend.app.agent.runtime import AgentRuntime, classify_meaningless_input
 from backend.app.agent.tooling import CancellationToken
+from backend.app.core.config import Settings
 from backend.app.rag.models import (
     Chunk,
     DocumentType,
@@ -262,6 +263,26 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result.citations)
         self.assertEqual(len(result.trace), 4)
 
+    async def test_model_output_does_not_publish_local_source_paths(self) -> None:
+        engine = FakeReActEngine(
+            {
+                "文档有多少": ModelDraft(
+                    content="当前只有 1 篇资料（文件路径：file://data/catalog/robots.md）。",
+                    model_name="fixed",
+                )
+            }
+        )
+        runtime = AgentRuntime(
+            react_engine=engine,
+            retriever=StubRetriever(self._retrieval()),
+        )
+
+        result = await runtime.execute(self._request("文档有多少"))
+
+        self.assertEqual(result.status, RunStatus.COMPLETED)
+        self.assertNotIn("file://", result.public_content)
+        self.assertIn("1 篇资料", result.public_content)
+
     async def test_prompt_injection_withholds_before_model(self) -> None:
         engine = FakeReActEngine()
         runtime = AgentRuntime(
@@ -315,3 +336,11 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         result = await runtime.execute(self._request("没有资料的问题"))
         self.assertEqual(result.status, RunStatus.COMPLETED)
         self.assertIn("准确型号", result.public_content)
+
+
+class PromptPolicyTests(unittest.TestCase):
+    def test_default_prompts_require_simplified_chinese_output(self) -> None:
+        settings = Settings()
+
+        self.assertIn("简体中文", settings.agent_chat_system_prompt)
+        self.assertIn("简体中文", settings.agent_report_system_prompt)

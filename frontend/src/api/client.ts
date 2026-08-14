@@ -187,6 +187,7 @@ export function createAgentApi(options: AgentApiOptions) {
       if (!response.ok) await readJson<never>(response)
       options.onAuthenticatedResponse?.()
       if (!response.body) throw new ApiClientError('Stream body is missing', response.status)
+      let terminalEventReceived = false
       for await (const frame of parseSseStream(response.body)) {
         let event: StreamEvent
         try {
@@ -195,6 +196,10 @@ export function createAgentApi(options: AgentApiOptions) {
           throw new ApiClientError('Invalid SSE event payload', response.status, 'INVALID_STREAM')
         }
         stream.onEvent(event)
+        if (event.event_type === 'done' || event.event_type === 'error') terminalEventReceived = true
+      }
+      if (!terminalEventReceived) {
+        throw new ApiClientError('Stream ended before a terminal event', response.status, 'STREAM_INCOMPLETE')
       }
     },
 

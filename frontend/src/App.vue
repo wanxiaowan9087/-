@@ -5,6 +5,7 @@ import { useChatStore, type PreviewState } from './stores/chat'
 import { mockPreview } from './features/chat/mock-data'
 import RobotHero from './features/chat/RobotHero.vue'
 import ProductRecommendations from './features/chat/ProductRecommendations.vue'
+import { redactLocalSourcePaths } from './features/chat/content-redaction'
 import { commitSessionMessages, type SessionMessageCache, type SessionRequestTokens } from './features/chat/session-cache'
 import { ApiClientError, createAgentApi } from './api/client'
 import type { AuthSession, AuthUser, ChatRequest, KnowledgeFile, Memory, Message, Session } from './api/contracts'
@@ -76,6 +77,7 @@ const visibleHistoricalMessages = computed(() => historicalMessages.value.filter
 let revealObserver: IntersectionObserver | undefined
 let conversationLoadVersion = 0
 const messageLoadVersions: SessionRequestTokens = {}
+let scrollTimer: ReturnType<typeof globalThis.setTimeout> | undefined
 
 function summarizeSessionTitle(content: string): string {
   const compact = content.replace(/\s+/g, ' ').trim().replace(/[。！？!?，,；;：:]+$/g, '')
@@ -107,6 +109,52 @@ async function scrollConversationToEnd() {
   })
 }
 
+function scheduleConversationScroll() {
+  if (scrollTimer) globalThis.clearTimeout(scrollTimer)
+  scrollTimer = globalThis.setTimeout(() => {
+    void scrollConversationToEnd()
+  }, 80)
+}
+
+function isRetryableStreamError(error: unknown): boolean {
+  if (error instanceof ApiClientError) return [408, 429, 500, 502, 503, 504].includes(error.status) || error.code === 'STREAM_INCOMPLETE'
+  return error instanceof TypeError
+}
+
+async function recoverPersistedChat(sessionId: string, question: string): Promise<boolean> {
+  try {
+    await refreshSessionMessages(sessionId)
+    const messages = sessionMessages.value[sessionId] ?? []
+    let submittedIndex = -1
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      if (messages[index]?.role === 'user' && messages[index]?.content === question) {
+        submittedIndex = index
+        break
+      }
+    }
+    const completedReply = submittedIndex < 0
+      ? undefined
+      : messages.slice(submittedIndex + 1).find(message => message.role === 'assistant' && message.status === 'completed' && message.content)
+    if (!completedReply) return false
+    chat.$reset()
+    chat.sessionId = sessionId
+    submittedQuestion.value = ''
+    draft.value = ''
+    scheduleConversationScroll()
+    return true
+  } catch {
+    return false
+  }
+}
+
+watch(
+  () => [currentView.value, submittedQuestion.value, chat.assistantText, chat.previewState],
+  () => {
+    if (currentView.value === 'agent') scheduleConversationScroll()
+  },
+  { flush: 'post' },
+)
+
 onMounted(() => {
   void restoreAuthentication()
   if (!('IntersectionObserver' in window)) {
@@ -127,7 +175,10 @@ onMounted(() => {
   observeReveals()
 })
 
-onBeforeUnmount(() => revealObserver?.disconnect())
+onBeforeUnmount(() => {
+  revealObserver?.disconnect()
+  if (scrollTimer) globalThis.clearTimeout(scrollTimer)
+})
 
 watch(
   () => [chat.runId, chat.assistantText, chat.previewState],
@@ -425,23 +476,35 @@ function messageRecommendations(message: Message) {
 async function executeChat(request: ChatRequest, question: string) {
   const controller = new globalThis.AbortController()
   activeAbortController.value = controller
+  const idempotencyKey = globalThis.crypto.randomUUID()
   try {
     chat.beginRun(request.session_id)
     submittedQuestion.value = question
-    await api.streamChat(request, {
-      idempotencyKey: globalThis.crypto.randomUUID(),
-      lastEventId: chat.lastEventId ?? undefined,
-      signal: controller.signal,
-      onEvent: event => chat.receiveStreamEvent(event),
-    })
+    scheduleConversationScroll()
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        await api.streamChat(request, {
+          idempotencyKey,
+          lastEventId: chat.lastEventId ?? undefined,
+          signal: controller.signal,
+          onEvent: event => chat.receiveStreamEvent(event),
+        })
+        break
+      } catch (error) {
+        if (attempt === 0 && isRetryableStreamError(error) && !controller.signal.aborted) continue
+        throw error
+      }
+    }
     draft.value = ''
     await refreshConversationState()
+    scheduleConversationScroll()
   } catch (error) {
     if (!controller.signal.aborted) {
       if (error instanceof ApiClientError && error.status === 401) {
         expireAuthentication({ type: 'agent' })
         return
       }
+      if (await recoverPersistedChat(request.session_id, question)) return
       chat.errorMessage = '本次运行未能完成，请检查后端服务与访问令牌后重试。'
       chat.setPreviewState('error')
     }
@@ -635,7 +698,7 @@ async function confirmCancelActiveRun() {
             <time>{{ new Date(message.created_at).toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }}</time>
           </div>
           <p v-if="message.role === 'user'">{{ message.content }}</p>
-          <section v-else class="answer-card">{{ message.content }}</section>
+          <section v-else class="answer-card">{{ redactLocalSourcePaths(message.content) }}</section>
           <section v-if="message.citations?.length" class="sources">
             <div class="sources-head"><span>依据资料</span><small>{{ message.citations.length }} 条可定位引用</small></div>
             <div class="source-grid"><button v-for="citation in message.citations" :key="`${message.id}:${citation.chunk_id}`" class="source-card" type="button"><span class="source-index">#</span><div><b>{{ citation.title }}</b><p>{{ citation.page ? `第 ${citation.page} 页` : '知识库资料' }}</p></div><i>↗</i></button></div>
@@ -652,7 +715,7 @@ async function confirmCancelActiveRun() {
             <div><p class="eyebrow">DRAFT WITHHELD</p><h2>候选答案等待人工审核</h2><p>{{ chat.review.reasonCodes.join(' · ') || '运行策略要求人工审核' }}</p></div>
             <span class="withheld-code">{{ chat.review.reviewId || 'PENDING' }}</span>
           </section>
-          <section v-else-if="chat.assistantText" class="answer-card" aria-live="polite">{{ chat.assistantText }}</section>
+          <section v-else-if="chat.assistantText" class="answer-card" aria-live="polite">{{ redactLocalSourcePaths(chat.assistantText) }}</section>
           <section v-else class="tool-card"><div class="tool-top"><span class="tool-icon">↻</span><div><b>{{ chat.runOutcome === 'cancelled' ? '本次运行已取消' : latestTool ? `工具：${latestTool.toolName}` : '正在调用受控 Agent' }}</b><small>{{ chat.runOutcome === 'cancelled' ? '已通知服务端停止执行，候选内容不会发布。' : latestTool?.detail || chat.lastStatus || '检索、重排与安全策略检查中' }}</small></div><span class="tool-ok">{{ chat.runOutcome === 'cancelled' ? '已取消' : latestTool?.outcome || '运行中' }}</span></div></section>
           <section v-if="chat.citations.length" class="sources"><div class="sources-head"><span>依据资料</span><small>{{ chat.citations.length }} 条可定位引用</small></div><div class="source-grid"><button v-for="(citation, index) in chat.citations" :key="`${citation.documentVersion}:${citation.chunkId}`" class="source-card" type="button"><span class="source-index">{{ String(index + 1).padStart(2, '0') }}</span><div><b>{{ citation.title }}</b><p>{{ citation.locator }}</p></div><i>↗</i></button></div></section>
           <ProductRecommendations :recommendations="chat.productRecommendations" @select="openRecommendedProduct" />

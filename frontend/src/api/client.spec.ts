@@ -43,6 +43,19 @@ describe('SSE API client', () => {
     expect(events).toEqual(['done'])
   })
 
+  it('rejects an SSE stream that closes before a terminal event', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(
+      'id: 1\nevent: status\ndata: {"event_type":"status","sequence":1,"request_id":"req","session_id":"s","run_id":"r","timestamp":"t","payload":{}}\n\n',
+      { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+    ))
+    const api = createAgentApi({ baseUrl: '/api/v1', accessToken: 'demo:user', fetcher })
+
+    await expect(api.streamChat(
+      { mode: 'new', session_id: 'session', content: 'hello' },
+      { idempotencyKey: '0123456789abcdef', onEvent: () => undefined },
+    )).rejects.toMatchObject({ code: 'STREAM_INCOMPLETE' } satisfies Partial<ApiClientError>)
+  })
+
   it('cancels an active run through the contract endpoint', async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       code: 'OK', message: 'success', request_id: 'request-1',

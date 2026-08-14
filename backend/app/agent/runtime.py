@@ -4,7 +4,7 @@ import asyncio
 import logging
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Protocol
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
@@ -48,6 +48,20 @@ from .customer_tools import reset_request_context, set_request_context
 from .tracing import RunStateMachine, TraceRecorder
 
 logger = logging.getLogger(__name__)
+
+_LABELED_LOCAL_PATH = re.compile(
+    r"(?:文件路径|本地路径|file path|source path)\s*[:：]\s*`?file://[^\s`)\]）]+`?",
+    flags=re.IGNORECASE,
+)
+_RAW_LOCAL_PATH = re.compile(r"`?file://[^\s`)\]）]+`?", flags=re.IGNORECASE)
+
+
+def redact_local_source_paths(content: str) -> str:
+    """Keep citations traceable internally without exposing local paths in model text."""
+    redacted = _LABELED_LOCAL_PATH.sub("", content)
+    redacted = _RAW_LOCAL_PATH.sub("受控知识库资料", redacted)
+    redacted = re.sub(r"[（(]\s*[）)]", "", redacted)
+    return re.sub(r"\s{2,}", " ", redacted).strip()
 
 
 IDENTITY_INTENT_PATTERNS = (
@@ -351,6 +365,7 @@ class AgentRuntime:
                     ErrorCode.MODEL_UNAVAILABLE,
                 )
 
+            draft = replace(draft, content=redact_local_source_paths(draft.content))
             self._record_tool_steps(trace, draft)
             citations = self._citations.build(
                 retrieval.hits,
