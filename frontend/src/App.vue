@@ -473,6 +473,15 @@ function messageRecommendations(message: Message) {
   return (message.product_recommendations ?? []).map(toProductRecommendationView)
 }
 
+function messageCitations(message: Message) {
+  const seenDocumentIds = new Set<string>()
+  return (message.citations ?? []).filter((citation) => {
+    if (seenDocumentIds.has(citation.document_id)) return false
+    seenDocumentIds.add(citation.document_id)
+    return true
+  })
+}
+
 async function executeChat(request: ChatRequest, question: string) {
   const controller = new globalThis.AbortController()
   activeAbortController.value = controller
@@ -699,9 +708,9 @@ async function confirmCancelActiveRun() {
           </div>
           <p v-if="message.role === 'user'">{{ message.content }}</p>
           <section v-else class="answer-card">{{ redactLocalSourcePaths(message.content) }}</section>
-          <section v-if="message.citations?.length" class="sources">
-            <div class="sources-head"><span>依据资料</span><small>{{ message.citations.length }} 条可定位引用</small></div>
-            <div class="source-grid"><button v-for="citation in message.citations" :key="`${message.id}:${citation.chunk_id}`" class="source-card" type="button"><span class="source-index">#</span><div><b>{{ citation.title }}</b><p>{{ citation.page ? `第 ${citation.page} 页` : '知识库资料' }}</p></div><i>↗</i></button></div>
+          <section v-if="messageCitations(message).length" class="sources">
+            <div class="sources-head"><span>依据资料</span><small>{{ messageCitations(message).length }} 条可定位引用</small></div>
+            <div class="source-grid"><button v-for="citation in messageCitations(message)" :key="`${message.id}:${citation.document_id}`" class="source-card" type="button"><span class="source-index">#</span><div><b>{{ citation.title }}</b><p>{{ citation.page ? `第 ${citation.page} 页` : '知识库资料' }}</p></div><i>↗</i></button></div>
           </section>
           <ProductRecommendations :recommendations="messageRecommendations(message)" @select="openRecommendedProduct" />
         </article>
