@@ -8,4 +8,12 @@ describe('redactLocalSourcePaths', () => {
     expect(redactLocalSourcePaths(content)).toBe('当前引用 1 篇资料。')
     expect(redactLocalSourcePaths(content)).not.toContain('file://')
   })
+
+  it('removes document IDs and internal versions while retaining the document name', () => {
+    const content = '目前共有 1 篇知识文档，即《ZENMOP 扫地机器人型号目录》（文档 ID：6e241b40-f70f-552e-84ad-e693c9338365，版本：catalog-v1）。'
+    const redacted = redactLocalSourcePaths(content)
+
+    expect(redacted).toContain('《ZENMOP 扫地机器人型号目录》')
+    expect(redacted).not.toMatch(/文档\s*ID|catalog-v1|6e241b40/i)
+  })
 })

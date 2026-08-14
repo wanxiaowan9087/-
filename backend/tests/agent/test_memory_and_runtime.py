@@ -267,7 +267,11 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         engine = FakeReActEngine(
             {
                 "文档有多少": ModelDraft(
-                    content="当前只有 1 篇资料（文件路径：file://data/catalog/robots.md）。",
+                    content=(
+                        "当前只有 1 篇资料《ZENMOP 扫地机器人型号目录》"
+                        "（文档 ID：6e241b40-f70f-552e-84ad-e693c9338365，版本：catalog-v1，"
+                        "文件路径：file://data/catalog/robots.md）。"
+                    ),
                     model_name="fixed",
                 )
             }
@@ -281,6 +285,9 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.status, RunStatus.COMPLETED)
         self.assertNotIn("file://", result.public_content)
+        self.assertNotIn("文档 ID", result.public_content)
+        self.assertNotIn("catalog-v1", result.public_content)
+        self.assertIn("《ZENMOP 扫地机器人型号目录》", result.public_content)
         self.assertIn("1 篇资料", result.public_content)
 
     async def test_prompt_injection_withholds_before_model(self) -> None:

@@ -145,7 +145,7 @@ export const useChatStore = defineStore('chat', {
             // Backend source locations are retained for traceability, but must not expose local paths to users.
             locator: page === null ? '知识库资料' : `第 ${page} 页`,
           }
-          if (!this.citations.some((item) => item.chunkId === citation.chunkId && item.documentVersion === citation.documentVersion)) {
+          if (!this.citations.some((item) => item.documentId === citation.documentId)) {
             this.citations.push(citation)
           }
         }

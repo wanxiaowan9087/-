@@ -30,6 +30,7 @@ describe('chat preview state', () => {
     }
     store.receiveStreamEvent({ ...streamEvent('citation'), sequence: 3, payload: citation })
     store.receiveStreamEvent({ ...streamEvent('citation'), sequence: 4, payload: citation })
+    store.receiveStreamEvent({ ...streamEvent('citation'), sequence: 5, payload: { ...citation, chunk_id: 'chunk-13' } })
 
     expect(store.assistantText).toBe('First answer')
     expect(store.citations).toEqual([{ documentId: 'guide', documentVersion: 'v3', chunkId: 'chunk-12', title: 'Maintenance guide', locator: '第 3 页' }])

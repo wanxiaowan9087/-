@@ -54,13 +54,23 @@ _LABELED_LOCAL_PATH = re.compile(
     flags=re.IGNORECASE,
 )
 _RAW_LOCAL_PATH = re.compile(r"`?file://[^\s`)\]）]+`?", flags=re.IGNORECASE)
+_DOCUMENT_ID = re.compile(
+    r"(?:文档\s*ID|document\s*ID)\s*[:：]\s*`?[0-9a-f-]{8,}`?",
+    flags=re.IGNORECASE,
+)
+_DOCUMENT_VERSION = re.compile(
+    r"(?:文档\s*)?(?:版本|version)\s*[:：]\s*`?[A-Za-z0-9._-]+`?",
+    flags=re.IGNORECASE,
+)
 
 
 def redact_local_source_paths(content: str) -> str:
     """Keep citations traceable internally without exposing local paths in model text."""
     redacted = _LABELED_LOCAL_PATH.sub("", content)
     redacted = _RAW_LOCAL_PATH.sub("受控知识库资料", redacted)
-    redacted = re.sub(r"[（(]\s*[）)]", "", redacted)
+    redacted = _DOCUMENT_ID.sub("", redacted)
+    redacted = _DOCUMENT_VERSION.sub("", redacted)
+    redacted = re.sub(r"[（(]\s*[，,;；\s]*[）)]", "", redacted)
     return re.sub(r"\s{2,}", " ", redacted).strip()
 
 
