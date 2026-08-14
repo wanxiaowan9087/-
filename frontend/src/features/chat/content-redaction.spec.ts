@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { redactLocalSourcePaths } from './content-redaction'
+import { formatAssistantContent, redactLocalSourcePaths } from './content-redaction'
 
 describe('redactLocalSourcePaths', () => {
   it('removes a labeled local source path from persisted assistant content', () => {
@@ -15,5 +15,13 @@ describe('redactLocalSourcePaths', () => {
 
     expect(redacted).toContain('《ZENMOP 扫地机器人型号目录》')
     expect(redacted).not.toMatch(/文档\s*ID|catalog-v1|6e241b40/i)
+  })
+
+  it('splits chained Markdown recommendation items into readable paragraphs', () => {
+    const content = '推荐如下： - **M6-MINI** 适合小户型。 - **S8-AIR** 适合日常清洁。'
+
+    expect(formatAssistantContent(content)).toBe(
+      '推荐如下：\n\n- M6-MINI 适合小户型。\n\n- S8-AIR 适合日常清洁。',
+    )
   })
 })

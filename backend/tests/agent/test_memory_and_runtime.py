@@ -290,6 +290,26 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("《ZENMOP 扫地机器人型号目录》", result.public_content)
         self.assertIn("1 篇资料", result.public_content)
 
+    async def test_model_recommendations_are_split_into_readable_paragraphs(self) -> None:
+        engine = FakeReActEngine(
+            {
+                "推荐一款": ModelDraft(
+                    content="推荐如下： - **M6-MINI** 适合小户型。 - **S8-AIR** 适合日常清洁。",
+                    model_name="fixed",
+                )
+            }
+        )
+        runtime = AgentRuntime(
+            react_engine=engine,
+            retriever=StubRetriever(self._retrieval()),
+        )
+
+        result = await runtime.execute(self._request("推荐一款"))
+
+        self.assertIn("\n\n- M6-MINI", result.public_content)
+        self.assertIn("\n\n- S8-AIR", result.public_content)
+        self.assertNotIn("**", result.public_content)
+
     async def test_prompt_injection_withholds_before_model(self) -> None:
         engine = FakeReActEngine()
         runtime = AgentRuntime(

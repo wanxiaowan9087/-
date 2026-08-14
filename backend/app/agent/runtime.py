@@ -74,6 +74,16 @@ def redact_local_source_paths(content: str) -> str:
     return re.sub(r"\s{2,}", " ", redacted).strip()
 
 
+def format_user_visible_answer(content: str) -> str:
+    """Normalize compact model lists so each recommendation remains scannable."""
+    formatted = re.sub(
+        r"\s+-\s+(?=(?:\*\*)?[A-Z][A-Z0-9-]{1,})",
+        "\n\n- ",
+        content,
+    )
+    return re.sub(r"\*\*(.+?)\*\*", r"\1", formatted)
+
+
 IDENTITY_INTENT_PATTERNS = (
     "你是谁",
     "你能做什么",
@@ -375,7 +385,10 @@ class AgentRuntime:
                     ErrorCode.MODEL_UNAVAILABLE,
                 )
 
-            draft = replace(draft, content=redact_local_source_paths(draft.content))
+            draft = replace(
+                draft,
+                content=format_user_visible_answer(redact_local_source_paths(draft.content)),
+            )
             self._record_tool_steps(trace, draft)
             citations = self._citations.build(
                 retrieval.hits,
