@@ -136,14 +136,14 @@ export const useChatStore = defineStore('chat', {
         const documentVersion = readText(event.payload, 'document_version')
         const chunkId = readText(event.payload, 'chunk_id')
         if (documentId && documentVersion && chunkId) {
-          const source = readText(event.payload, 'source') ?? chunkId
           const page = readNumber(event.payload, 'page')
           const citation = {
             documentId,
             documentVersion,
             chunkId,
             title: readText(event.payload, 'title') ?? documentId,
-            locator: page === null ? source : `${source} · page ${page}`,
+            // Backend source locations are retained for traceability, but must not expose local paths to users.
+            locator: page === null ? '知识库资料' : `第 ${page} 页`,
           }
           if (!this.citations.some((item) => item.chunkId === citation.chunkId && item.documentVersion === citation.documentVersion)) {
             this.citations.push(citation)

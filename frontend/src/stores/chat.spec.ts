@@ -32,7 +32,8 @@ describe('chat preview state', () => {
     store.receiveStreamEvent({ ...streamEvent('citation'), sequence: 4, payload: citation })
 
     expect(store.assistantText).toBe('First answer')
-    expect(store.citations).toEqual([{ documentId: 'guide', documentVersion: 'v3', chunkId: 'chunk-12', title: 'Maintenance guide', locator: 'kb://maintenance · page 3' }])
+    expect(store.citations).toEqual([{ documentId: 'guide', documentVersion: 'v3', chunkId: 'chunk-12', title: 'Maintenance guide', locator: '第 3 页' }])
+    expect(store.citations[0]?.locator).not.toContain('kb://')
   })
 
   it('withholds candidate content when the runtime requires review', () => {

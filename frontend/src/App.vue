@@ -630,7 +630,7 @@ async function confirmCancelActiveRun() {
           <div class="message-meta">
             <span v-if="message.role === 'user'" class="message-avatar user"><img :src="authUser?.avatar_url || defaultAvatarUrl" :alt="`${authUser?.nickname || '用户'}的头像`" /><i>{{ userInitial }}</i></span>
             <span v-else class="message-avatar bot">程</span>
-            <b>{{ message.role === 'user' ? authUser?.nickname || '用户' : '规程台助手' }}</b>
+            <b>{{ message.role === 'user' ? authUser?.nickname || '用户' : '小智' }}</b>
             <span v-if="message.role === 'assistant'" class="model-chip">{{ message.status === 'completed' ? '已完成' : message.status }}</span>
             <time>{{ new Date(message.created_at).toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }}</time>
           </div>
@@ -638,7 +638,7 @@ async function confirmCancelActiveRun() {
           <section v-else class="answer-card">{{ message.content }}</section>
           <section v-if="message.citations?.length" class="sources">
             <div class="sources-head"><span>依据资料</span><small>{{ message.citations.length }} 条可定位引用</small></div>
-            <div class="source-grid"><button v-for="citation in message.citations" :key="`${message.id}:${citation.chunk_id}`" class="source-card" type="button"><span class="source-index">#</span><div><b>{{ citation.title }}</b><p>{{ citation.source }}{{ citation.page ? ` · page ${citation.page}` : '' }}</p></div><i>↗</i></button></div>
+            <div class="source-grid"><button v-for="citation in message.citations" :key="`${message.id}:${citation.chunk_id}`" class="source-card" type="button"><span class="source-index">#</span><div><b>{{ citation.title }}</b><p>{{ citation.page ? `第 ${citation.page} 页` : '知识库资料' }}</p></div><i>↗</i></button></div>
           </section>
           <ProductRecommendations :recommendations="messageRecommendations(message)" @select="openRecommendedProduct" />
         </article>
@@ -646,7 +646,7 @@ async function confirmCancelActiveRun() {
         <article v-if="submittedQuestion" class="message customer" data-reveal><div class="message-meta"><span class="message-avatar user"><img :src="authUser?.avatar_url || defaultAvatarUrl" :alt="`${authUser?.nickname || '用户'}的头像`" /><i>{{ userInitial }}</i></span><b>{{ authUser?.nickname || '用户' }}</b><time>刚刚</time></div><p>{{ submittedQuestion }}</p></article>
 
         <article v-if="chat.runId" class="message agent" data-reveal :class="{ withheld: Boolean(chat.review) }">
-          <div class="message-meta"><span class="message-avatar bot">程</span><b>规程台助手</b><span class="model-chip">{{ chat.previewState === 'loading' ? '正在生成' : chat.review ? '等待审核' : chat.runOutcome === 'cancelled' ? '已取消' : '已完成' }}</span><time>刚刚</time></div>
+          <div class="message-meta"><span class="message-avatar bot">程</span><b>小智</b><span class="model-chip">{{ chat.previewState === 'loading' ? '正在生成' : chat.review ? '等待审核' : chat.runOutcome === 'cancelled' ? '已取消' : '已完成' }}</span><time>刚刚</time></div>
           <section v-if="chat.review" class="withheld-card" aria-label="候选答案已扣留，等待人工审核">
             <div class="withheld-seal" aria-hidden="true"><span></span><span></span><span></span></div>
             <div><p class="eyebrow">DRAFT WITHHELD</p><h2>候选答案等待人工审核</h2><p>{{ chat.review.reasonCodes.join(' · ') || '运行策略要求人工审核' }}</p></div>
@@ -654,7 +654,7 @@ async function confirmCancelActiveRun() {
           </section>
           <section v-else-if="chat.assistantText" class="answer-card" aria-live="polite">{{ chat.assistantText }}</section>
           <section v-else class="tool-card"><div class="tool-top"><span class="tool-icon">↻</span><div><b>{{ chat.runOutcome === 'cancelled' ? '本次运行已取消' : latestTool ? `工具：${latestTool.toolName}` : '正在调用受控 Agent' }}</b><small>{{ chat.runOutcome === 'cancelled' ? '已通知服务端停止执行，候选内容不会发布。' : latestTool?.detail || chat.lastStatus || '检索、重排与安全策略检查中' }}</small></div><span class="tool-ok">{{ chat.runOutcome === 'cancelled' ? '已取消' : latestTool?.outcome || '运行中' }}</span></div></section>
-          <section v-if="chat.citations.length" class="sources"><div class="sources-head"><span>依据资料</span><small>{{ chat.citations.length }} 条可定位引用</small></div><div class="source-grid"><button v-for="(citation, index) in chat.citations" :key="`${citation.documentVersion}:${citation.chunkId}`" class="source-card" type="button"><span class="source-index">{{ String(index + 1).padStart(2, '0') }}</span><div><b>{{ citation.title }}</b><p>{{ citation.locator }} · {{ citation.documentVersion }}</p></div><i>↗</i></button></div></section>
+          <section v-if="chat.citations.length" class="sources"><div class="sources-head"><span>依据资料</span><small>{{ chat.citations.length }} 条可定位引用</small></div><div class="source-grid"><button v-for="(citation, index) in chat.citations" :key="`${citation.documentVersion}:${citation.chunkId}`" class="source-card" type="button"><span class="source-index">{{ String(index + 1).padStart(2, '0') }}</span><div><b>{{ citation.title }}</b><p>{{ citation.locator }}</p></div><i>↗</i></button></div></section>
           <ProductRecommendations :recommendations="chat.productRecommendations" @select="openRecommendedProduct" />
           <section v-if="chat.review" class="review-card"><div class="review-mark">◉</div><div><p class="eyebrow">HUMAN REVIEW</p><b>审核队列已接收</b><small>候选正文不会向普通用户透露；批准后才会发布。</small></div><span class="review-status">待审核</span></section>
         </article>
@@ -667,7 +667,7 @@ async function confirmCancelActiveRun() {
           <button v-if="chat.previewState === 'error' && chat.userMessageId" type="button" @click="retryLastMessage">重试本次运行</button><button v-else-if="chat.previewState === 'error'" type="button" @click="chat.setPreviewState('ready')">返回对话</button>
         </section>
       </section>
-      <footer class="composer-wrap"><form class="composer" @submit.prevent="sendMessage"><textarea v-model="draft" aria-label="消息输入" placeholder="询问知识库，或输入一条客服处理需求…" :disabled="chat.previewState === 'disabled' || chat.previewState === 'loading'" @keydown.enter.exact.prevent="sendMessage"></textarea><div class="composer-bar"><span>回答仅基于受控知识库；需更新资料请联系管理员。</span><button v-if="chat.previewState === 'loading' && chat.runId" type="button" class="send" @click="requestCancelActiveRun">停止</button><button v-else type="submit" class="send" :disabled="chat.previewState === 'disabled' || chat.previewState === 'loading' || !draft.trim()">发送 <b>↑</b></button></div></form></footer>
+      <footer class="composer-wrap"><form class="composer" @submit.prevent="sendMessage"><textarea v-model="draft" aria-label="消息输入" placeholder="询问知识库，或输入一条客服处理需求…" :disabled="chat.previewState === 'disabled' || chat.previewState === 'loading'" @keydown.enter.exact.prevent="sendMessage"></textarea><p v-if="chat.previewState === 'error' && chat.errorMessage" class="composer-error" role="alert">{{ chat.errorMessage }}</p><div class="composer-bar"><span>回答仅基于受控知识库；需更新资料请联系管理员。</span><button v-if="chat.previewState === 'loading' && chat.runId" type="button" class="send" @click="requestCancelActiveRun">停止</button><button v-else type="submit" class="send" :disabled="chat.previewState === 'disabled' || chat.previewState === 'loading' || !draft.trim()">发送 <b>↑</b></button></div></form></footer>
       </template>
       <template v-else>
         <header class="topbar"><button class="menu-button" type="button" aria-label="打开管理导航" @click="chat.toggleNav">☰</button><div class="agent-heading"><span>ADMIN / KNOWLEDGE</span><b>知识库入库管理</b></div><div class="header-actions"><button class="avatar" type="button" :aria-label="`${authUser?.nickname}，打开个人资料`" @click="openProfile"><img :src="authUser?.avatar_url || defaultAvatarUrl" :alt="`${authUser?.nickname}的头像`" /><span>{{ userInitial }}</span></button></div></header>
