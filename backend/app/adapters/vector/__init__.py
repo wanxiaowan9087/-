@@ -2,5 +2,6 @@
 
 from .dashscope import DashScopeEmbeddingAdapter
 from .fake import FixedEmbedding, InMemoryVectorStore
+from .pgvector_store import PgVectorStore
 
-__all__ = ["DashScopeEmbeddingAdapter", "FixedEmbedding", "InMemoryVectorStore"]
+__all__ = ["DashScopeEmbeddingAdapter", "FixedEmbedding", "InMemoryVectorStore", "PgVectorStore"]

@@ -9,6 +9,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.ext.asyncio import AsyncEngine
 from starlette.middleware.base import RequestResponseEndpoint
 
 from backend.app.adapters.auth.memory import MemoryIdentityStore
@@ -47,6 +48,7 @@ def create_app(
 ) -> FastAPI:
     settings = settings or get_settings()
     configure_logging(settings.log_level)
+    engine: AsyncEngine | None = None
     if repository is None:
         engine = create_engine(settings)
         session_factory = create_session_factory(engine)
@@ -61,7 +63,7 @@ def create_app(
         resolved_identity_service = identity_service or IdentityService(
             MemoryIdentityStore(), token_ttl_seconds=settings.auth_token_ttl_seconds
         )
-    executor_adapter = executor or build_run_executor(settings, repository_adapter)
+    executor_adapter = executor or build_run_executor(settings, repository_adapter, engine)
     knowledge_indexer = getattr(executor_adapter, "knowledge_indexer", None)
     redis_adapter = redis_adapter or OptionalRedisAdapter(
         settings.redis_url, settings.redis_timeout_seconds
@@ -73,6 +75,7 @@ def create_app(
         idempotency_ttl_seconds=settings.idempotency_ttl_seconds,
         stream_retention_seconds=settings.stream_retention_seconds,
         redis_probe=redis_adapter,
+        vector_probe=getattr(executor_adapter, "vector_probe", None),
         knowledge_indexer=knowledge_indexer,
     )
 
@@ -84,12 +87,18 @@ def create_app(
                 password=settings.admin_password,
                 nickname=settings.admin_nickname,
             )
+        initialize_knowledge_index = getattr(executor_adapter, "initialize_knowledge_index", None)
+        if initialize_knowledge_index is not None:
+            await initialize_knowledge_index()
         catalog_document = getattr(executor_adapter, "robot_catalog_document", None)
         if catalog_document is not None and knowledge_indexer is not None:
             try:
                 await knowledge_indexer.ingest(catalog_document)
             except Exception:
-                logger.exception("robot catalog indexing failed", extra={"error_code": "CATALOG_INDEX_FAILED"})
+                logger.exception(
+                    "robot catalog indexing failed",
+                    extra={"error_code": "CATALOG_INDEX_FAILED"},
+                )
         yield
         await redis_adapter.close()
         await service.close()

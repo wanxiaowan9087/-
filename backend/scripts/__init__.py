@@ -1,1 +1,1 @@
-"""Explicit operator commands for the Agent platform."""
+"""Operational scripts for the Agent service."""

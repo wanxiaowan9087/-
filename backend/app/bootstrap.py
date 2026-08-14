@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+from uuid import NAMESPACE_URL, uuid5
+
+from sqlalchemy.ext.asyncio import AsyncEngine
+
 from backend.app.adapters.llm.deterministic_executor import DeterministicRunExecutor
 from backend.app.adapters.llm.langchain_react import LangChainReActEngine
 from backend.app.adapters.llm.platform_executor import RuntimeRunExecutor
 from backend.app.adapters.llm.query_rewriter import LangChainQueryRewriter
+from backend.app.adapters.mcp.robot_catalog import recommend_robots
 from backend.app.adapters.memory.platform_runtime import PlatformMemoryRuntime
 from backend.app.adapters.vector.dashscope import DashScopeEmbeddingAdapter
-from backend.app.adapters.vector.json_store import JsonVectorStore
+from backend.app.adapters.vector.pgvector_store import PgVectorStore
 from backend.app.agent.customer_tools import build_customer_tool_registry
 from backend.app.agent.report_tools import ReportWorkflow
 from backend.app.agent.runtime import AgentRuntime
@@ -18,8 +23,6 @@ from backend.app.rag.ingestion import KnowledgeIndexer
 from backend.app.rag.lexical import BM25KeywordIndex
 from backend.app.rag.local_corpus import LocalTextCorpusRetriever
 from backend.app.rag.models import DocumentRecord, DocumentType
-from uuid import NAMESPACE_URL, uuid5
-from backend.app.adapters.mcp.robot_catalog import recommend_robots
 from backend.app.rag.retrieval import (
     HybridRetriever,
     IdentityReranker,
@@ -34,9 +37,11 @@ class AgentRuntimeBootstrapError(RuntimeError):
 
 
 def build_run_executor(
-    settings: Settings, repository: PlatformRepository | None = None
+    settings: Settings,
+    repository: PlatformRepository | None = None,
+    database_engine: AsyncEngine | None = None,
 ) -> RunExecutorPort:
-    """Build the real LangChain/file-vector-store/DashScope runtime when enabled.
+    """Build the real LangChain/pgvector/DashScope runtime when enabled.
 
     Keeping this opt-in makes local API and contract work deterministic. A live
     deployment must set APP_AGENT_RUNTIME_ENABLED=true and supply the
@@ -47,6 +52,8 @@ def build_run_executor(
         return DeterministicRunExecutor()
     if not settings.agent_runtime_enabled:
         return UnavailableRunExecutor()
+    if database_engine is None:
+        raise AgentRuntimeBootstrapError("live Agent runtime requires the PostgreSQL engine")
     try:
         from langchain_community.chat_models import ChatTongyi
         from langchain_community.embeddings import DashScopeEmbeddings
@@ -59,13 +66,12 @@ def build_run_executor(
         embeddings = DashScopeEmbeddingAdapter(
             DashScopeEmbeddings(model=settings.agent_embedding_model_name)
         )
-        vector_store = JsonVectorStore(settings.agent_vector_store_path)
-        indexed_chunks = vector_store.load_all_chunks()
+        vector_store = PgVectorStore(database_engine, settings.agent_vector_dimensions)
         local_corpus = LocalTextCorpusRetriever(
             settings.agent_local_corpus_dir, include_uploaded_files=False
         )
         model = ChatTongyi(model=settings.agent_model_name)
-        keyword_index = BM25KeywordIndex(indexed_chunks)
+        keyword_index = BM25KeywordIndex()
         hybrid = HybridRetriever(
             embeddings,
             vector_store,
@@ -99,12 +105,26 @@ def build_run_executor(
         ),
         report_workflow=ReportWorkflow(
             settings.agent_external_records_path,
-            external_user_id_resolver=(repository_adapter_resolver(repository) if repository is not None else None),
+            external_user_id_resolver=(
+                repository_adapter_resolver(repository) if repository is not None else None
+            ),
         ),
     )
     executor.knowledge_indexer = KnowledgeIndexer(
         DocumentChunker(), embeddings, vector_store, keyword_index
     )
+    executor.vector_probe = vector_store
+
+    async def initialize_knowledge_index() -> None:
+        chunks_by_document: dict[tuple[str, str], list] = {}
+        for chunk in await vector_store.load_all_chunks():
+            chunks_by_document.setdefault(
+                (chunk.document_id, chunk.document_version), []
+            ).append(chunk)
+        for (document_id, document_version), chunks in chunks_by_document.items():
+            await keyword_index.replace_document(document_id, document_version, chunks)
+
+    executor.initialize_knowledge_index = initialize_knowledge_index
     catalog_path = settings.agent_local_corpus_dir + "/catalog/zenmop_robot_catalog.md"
     try:
         with open(catalog_path, encoding="utf-8") as catalog_file:

@@ -81,6 +81,11 @@ class JsonVectorStore:
         self._reload()
         return tuple(chunk for chunk, _ in self._records.values())
 
+    def load_all_records(self) -> tuple[tuple[Chunk, EmbeddingVector], ...]:
+        """Expose durable records for a one-way pgvector migration backup import."""
+        self._reload()
+        return tuple(self._records.values())
+
     def _reload(self) -> None:
         if not self._path.exists():
             return

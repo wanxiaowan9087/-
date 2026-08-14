@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:17.5-bookworm
+    image: pgvector/pgvector:pg17
     environment:
       POSTGRES_DB: agent_robot
       POSTGRES_USER: agent_robot
@@ -45,6 +45,23 @@ services:
       - agent-runtime-data:/app/runtime
       - agent-uploads:/app/data/uploads
 
+  vector-migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["python", "-m", "backend.scripts.migrate_json_vectors"]
+    environment:
+      APP_DATABASE_URL: postgresql+asyncpg://agent_robot:agent_robot@postgres:5432/agent_robot
+      APP_AGENT_VECTOR_STORE_PATH: /app/runtime/vector-store.json
+      APP_AGENT_VECTOR_DIMENSIONS: "1024"
+    volumes:
+      - agent-runtime-data:/app/runtime
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      volume-init:
+        condition: service_completed_successfully
+
   backend:
     build:
       context: .
@@ -57,6 +74,7 @@ services:
       DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:?Set DASHSCOPE_API_KEY in the shell before starting Docker Compose}
       APP_CORS_ORIGINS: '["http://localhost:5174"]'
       APP_AGENT_VECTOR_STORE_PATH: /app/runtime/vector-store.json
+      APP_AGENT_VECTOR_DIMENSIONS: "1024"
       APP_AGENT_LOCAL_CORPUS_DIR: /app/data
       APP_UPLOADS_DIR: /app/data/uploads
       APP_ADMIN_USERNAME: ${APP_ADMIN_USERNAME:?Set APP_ADMIN_USERNAME in the shell before starting Docker Compose}
@@ -70,6 +88,8 @@ services:
       migrate:
         condition: service_completed_successfully
       volume-init:
+        condition: service_completed_successfully
+      vector-migrate:
         condition: service_completed_successfully
       redis:
         condition: service_healthy

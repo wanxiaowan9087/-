@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     agent_runtime_enabled: bool = False
     agent_model_name: str = "qwen3-max"
     agent_embedding_model_name: str = "text-embedding-v4"
+    agent_vector_dimensions: int = Field(default=1024, ge=1, le=65535)
     agent_vector_store_path: str = "data/vector-store.json"
     agent_local_corpus_dir: str = "data"
     uploads_dir: str = "data/uploads"
