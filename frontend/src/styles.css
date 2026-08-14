@@ -753,8 +753,7 @@ textarea:focus-visible {
 }
 
 .message.customer {
-  width: calc(100% - 70px);
-  margin: 0 0 30px 70px;
+  margin: 0 0 30px;
 }
 
 .message-meta {
