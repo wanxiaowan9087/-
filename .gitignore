@@ -19,6 +19,10 @@ frontend/test-results/
 .apifox/*.private.*
 .apifox/
 tests/apifox/**/*.private.*
+deploy/production.env
+deploy/certs/*
+!deploy/certs/.gitkeep
+deploy/backups/
 *.log
 chroma_db/
 **/chroma_db/

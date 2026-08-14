@@ -1,0 +1,9 @@
+services:
+  frontend:
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/https.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certs/fullchain.pem:/etc/nginx/certs/fullchain.pem:ro
+      - ./certs/privkey.pem:/etc/nginx/certs/privkey.pem:ro

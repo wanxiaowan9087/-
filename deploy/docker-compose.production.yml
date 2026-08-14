@@ -1,0 +1,162 @@
+name: agent_robot
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in deploy/production.env}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in deploy/production.env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in deploy/production.env}
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - maintenance_work_mem=64MB
+      - -c
+      - max_connections=50
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 512m
+
+  redis:
+    image: redis:8.0.3-bookworm
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "96mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 128m
+
+  migrate:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    command: ["alembic", "-c", "backend/alembic.ini", "upgrade", "head"]
+    environment:
+      APP_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    mem_limit: 256m
+
+  volume-init:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    user: root
+    command: ["sh", "-c", "mkdir -p /app/runtime /app/data/uploads && chown -R app:app /app/runtime /app/data/uploads"]
+    volumes:
+      - runtime-data:/app/runtime
+      - uploads:/app/data/uploads
+    restart: "no"
+    mem_limit: 128m
+
+  vector-migrate:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    command: ["python", "-m", "backend.scripts.migrate_json_vectors"]
+    environment:
+      APP_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      APP_AGENT_VECTOR_STORE_PATH: /app/runtime/vector-store.json
+      APP_AGENT_VECTOR_DIMENSIONS: "1024"
+    volumes:
+      - runtime-data:/app/runtime
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      volume-init:
+        condition: service_completed_successfully
+    restart: "no"
+    mem_limit: 256m
+
+  backend:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    command:
+      - uvicorn
+      - backend.app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --workers
+      - "1"
+      - --proxy-headers
+      - --forwarded-allow-ips=*
+    environment:
+      APP_ENVIRONMENT: production
+      APP_LOG_LEVEL: ${APP_LOG_LEVEL:-INFO}
+      APP_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      APP_REDIS_URL: redis://redis:6379/1
+      APP_DEMO_AUTH_ENABLED: "false"
+      APP_AGENT_RUNTIME_ENABLED: "true"
+      APP_AGENT_VECTOR_DIMENSIONS: "1024"
+      APP_AGENT_VECTOR_STORE_PATH: /app/runtime/vector-store.json
+      APP_AGENT_LOCAL_CORPUS_DIR: /app/data
+      APP_UPLOADS_DIR: /app/data/uploads
+      APP_CORS_ORIGINS: ${APP_CORS_ORIGINS:?Set APP_CORS_ORIGINS in deploy/production.env}
+      APP_ADMIN_USERNAME: ${APP_ADMIN_USERNAME:?Set APP_ADMIN_USERNAME in deploy/production.env}
+      APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD:?Set APP_ADMIN_PASSWORD in deploy/production.env}
+      APP_ADMIN_NICKNAME: ${APP_ADMIN_NICKNAME:-Administrator}
+      APP_CURSOR_SIGNING_SECRET: ${APP_CURSOR_SIGNING_SECRET:?Set APP_CURSOR_SIGNING_SECRET in deploy/production.env}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:?Set DASHSCOPE_API_KEY in deploy/production.env}
+    expose:
+      - "8000"
+    volumes:
+      - runtime-data:/app/runtime
+      - uploads:/app/data/uploads
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      volume-init:
+        condition: service_completed_successfully
+      vector-migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health/ready')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    mem_limit: 700m
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: deploy/frontend.Dockerfile
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/ >/dev/null 2>&1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    mem_limit: 128m
+
+volumes:
+  postgres-data:
+    name: agent_robot-prod-postgres-data
+  runtime-data:
+    name: agent_robot-prod-runtime-data
+  uploads:
+    name: agent_robot-prod-uploads
