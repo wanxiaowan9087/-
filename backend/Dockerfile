@@ -8,7 +8,12 @@ RUN groupadd --system app && useradd --system --gid app --create-home app
 WORKDIR /app
 
 COPY pyproject.toml requirements.lock ./
-RUN pip install --require-hashes --no-deps -r requirements.lock
+RUN pip install --index-url https://mirrors.aliyun.com/pypi/simple \
+    --timeout 120 \
+    --retries 5 \
+    --require-hashes \
+    --no-deps \
+    -r requirements.lock
 
 COPY backend ./backend
 COPY data ./data
