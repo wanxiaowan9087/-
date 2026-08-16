@@ -1,20 +1,19 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { ProductRecommendationView } from '../../stores/chat'
-import ivoryRobot from '../../assets/robot-ivory.png'
-import graphiteRobot from '../../assets/robot-graphite.png'
-import terracottaRobot from '../../assets/robot-terracotta.png'
+import { robotImages, type RobotImageVariant } from './robotImages'
+import './robotImages.css'
 
 const props = defineProps<{ recommendations: ProductRecommendationView[] }>()
 const emit = defineEmits<{ select: [productId: string] }>()
 
-const productIndex: Record<string, { name: string; subtitle: string; image: string }> = {
-  's8-luna': { name: 'S8 皓月', subtitle: '静音深度清洁', image: ivoryRobot },
-  's8-air': { name: 'S8 Air', subtitle: '小户型轻量方案', image: ivoryRobot },
-  'x9-obsidian': { name: 'X9 曜石', subtitle: '全屋导航旗舰', image: graphiteRobot },
-  'x9-edge': { name: 'X9 Edge', subtitle: '边角强化清洁', image: graphiteRobot },
-  'm6-terra': { name: 'M6 霁陶', subtitle: '地面精细护理', image: terracottaRobot },
-  'm6-mini': { name: 'M6 Mini', subtitle: '木地板温柔护理', image: terracottaRobot },
+const productIndex: Record<string, { name: string; subtitle: string; image: string; imageVariant: RobotImageVariant }> = {
+  's8-luna': { name: 'S8 皓月', subtitle: '静音深度清洁', image: robotImages['s8-luna'].src, imageVariant: robotImages['s8-luna'].variant },
+  's8-air': { name: 'S8 Air', subtitle: '小户型轻量方案', image: robotImages['s8-air'].src, imageVariant: robotImages['s8-air'].variant },
+  'x9-obsidian': { name: 'X9 曜石', subtitle: '全屋导航旗舰', image: robotImages['x9-obsidian'].src, imageVariant: robotImages['x9-obsidian'].variant },
+  'x9-edge': { name: 'X9 Edge', subtitle: '边角强化清洁', image: robotImages['x9-edge'].src, imageVariant: robotImages['x9-edge'].variant },
+  'm6-terra': { name: 'M6 霁陶', subtitle: '地面精细护理', image: robotImages['m6-terra'].src, imageVariant: robotImages['m6-terra'].variant },
+  'm6-mini': { name: 'M6 Mini', subtitle: '木地板温柔护理', image: robotImages['m6-mini'].src, imageVariant: robotImages['m6-mini'].variant },
 }
 
 const products = computed(() => props.recommendations.flatMap(recommendation => {
@@ -28,7 +27,7 @@ const products = computed(() => props.recommendations.flatMap(recommendation => 
     <p>匹配方案</p>
     <div class="recommendations__grid">
       <button v-for="product in products" :key="product.productId" type="button" class="recommendation-card" @click="emit('select', product.productId)">
-        <img :src="product.image" :alt="product.name" />
+        <img :class="['robot-image', `robot-image--${product.imageVariant}`]" :src="product.image" :alt="product.name" />
         <span><b>{{ product.name }}</b><small>{{ product.price ? `¥${product.price.toLocaleString()}` : product.subtitle }}</small><em>{{ product.highlights?.slice(0, 2).join(' · ') || product.subtitle }}</em><em v-if="product.reason">{{ product.reason }}</em></span>
         <i>查看</i>
       </button>

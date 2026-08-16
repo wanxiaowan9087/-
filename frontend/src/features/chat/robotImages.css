@@ -1,0 +1,38 @@
+/* Each catalog entry has a deliberate visual treatment even when it shares a
+   family render. This keeps six simulated SKUs distinguishable until dedicated
+   product photography is supplied. */
+.robot-image--ivory-air {
+  --robot-image-filter: sepia(.18) saturate(.76) brightness(1.08) hue-rotate(-8deg);
+  scale: .9;
+  rotate: -3deg;
+}
+
+.robot-image--ivory-luna {
+  --robot-image-filter: saturate(1.08) brightness(.98) contrast(1.03);
+  scale: 1.02;
+  rotate: 1deg;
+}
+
+.robot-image--graphite-obsidian {
+  --robot-image-filter: contrast(1.12) brightness(.86) saturate(.9);
+  scale: 1.02;
+  rotate: -1deg;
+}
+
+.robot-image--graphite-edge {
+  --robot-image-filter: sepia(.28) saturate(1.45) brightness(1.04) hue-rotate(150deg);
+  scale: .94;
+  rotate: 2deg;
+}
+
+.robot-image--terracotta-mini {
+  --robot-image-filter: saturate(.62) brightness(1.14) hue-rotate(8deg);
+  scale: .88;
+  rotate: -2deg;
+}
+
+.robot-image--terracotta-terra {
+  --robot-image-filter: saturate(1.18) brightness(.92) contrast(1.04);
+  scale: 1.02;
+  rotate: 1deg;
+}
