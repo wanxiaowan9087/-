@@ -10,5 +10,6 @@ describe('robot image catalog', () => {
 
   it('keeps every product image source non-empty', () => {
     expect(Object.values(robotImages).every((image) => image.src.length > 0)).toBe(true)
+    expect(new Set(Object.values(robotImages).map((image) => image.src))).toHaveLength(6)
   })
 })
