@@ -5,8 +5,7 @@ import homeImage from '../../assets/warm-home-hero.png'
 import assistantImage from '../../assets/assistant-xiaozhi.png'
 import assistantWaveImage from '../../assets/assistant-xiaozhi-wave.png'
 import assistantPointImage from '../../assets/assistant-xiaozhi-point.png'
-import { robotImages, type RobotImageVariant } from './robotImages'
-import './robotImages.css'
+import { robotImages } from './robotImages'
 
 const props = defineProps<{
   authenticated: boolean
@@ -21,7 +20,6 @@ const emit = defineEmits<{
 type RobotProduct = {
   id: string
   image: string
-  imageVariant: RobotImageVariant
   name: string
   subtitle: string
   description: string
@@ -39,32 +37,32 @@ type RobotProduct = {
 
 const products: RobotProduct[] = [
   {
-    id: 's8-luna', image: robotImages['s8-luna'].src, imageVariant: robotImages['s8-luna'].variant, name: 'S8 皓月', subtitle: '静音深度清洁',
+    id: 's8-luna', image: robotImages['s8-luna'].src, name: 'S8 皓月', subtitle: '静音深度清洁',
     description: '面向一居室、儿童房与夜间清扫；56 dB 静音运行，双线激光识别桌腿、电线和低矮障碍。', stat: '56 dB', accent: '#d9b07a', price: 3499, priceNote: '含基础上门安装与一年质保',
     features: ['双线激光避障', '零缠绕主刷', '静音夜航模式'], scene: '一居室、儿童房、夜间清扫', floor: '木地板 / 瓷砖 / 短毛地毯', care: '避障优先，降低夜间噪声', heroIndex: 0, featured: true,
   },
   {
-    id: 'x9-obsidian', image: robotImages['x9-obsidian'].src, imageVariant: robotImages['x9-obsidian'].variant, name: 'X9 曜石', subtitle: '全屋导航旗舰',
+    id: 'x9-obsidian', image: robotImages['x9-obsidian'].src, name: 'X9 曜石', subtitle: '全屋导航旗舰',
     description: '面向三居及复式大户型；12,000 Pa 吸力搭配多层地图，能按房间、楼层与清洁顺序自动重规划。', stat: '12,000 Pa', accent: '#7ec5d7', price: 4999, priceNote: '含自动集尘基站与两年质保',
     features: ['D 型边角贴合', '多层地图记忆', '12,000 Pa 强劲吸力'], scene: '三居、复式与开放式客餐厅', floor: '瓷砖 / 木地板 / 中短毛地毯', care: '大面积高频吸尘与分区管理', heroIndex: 1, featured: true,
   },
   {
-    id: 'm6-terra', image: robotImages['m6-terra'].src, imageVariant: robotImages['m6-terra'].variant, name: 'M6 霞陶', subtitle: '地面精细护理',
+    id: 'm6-terra', image: robotImages['m6-terra'].src, name: 'M6 霞陶', subtitle: '地面精细护理',
     description: '面向地毯与硬质地面混铺家庭；双旋拖布遇地毯自动抬升，180 分钟续航覆盖大面积拖洗。', stat: '180 min', accent: '#c9825d', price: 4599, priceNote: '含旋转拖布套件与两年质保',
     features: ['双旋拖布升降', '地毯自动增压', '180 分钟续航'], scene: '地毯混铺、餐桌区与高频拖洗', floor: '木地板 / 瓷砖 / 地毯混铺', care: '拖布抬升，避免湿拖地毯', heroIndex: 2, featured: true,
   },
   {
-    id: 's8-air', image: robotImages['s8-air'].src, imageVariant: robotImages['s8-air'].variant, name: 'S8 Air', subtitle: '小户型轻量方案',
+    id: 's8-air', image: robotImages['s8-air'].src, name: 'S8 Air', subtitle: '小户型轻量方案',
     description: '面向租房、一居与书房；纤薄机身可进入沙发、床底，宠物毛发模式减少毛发缠绕和重复回扫。', stat: '0.4 L', accent: '#b9996d', price: 2799, priceNote: '含耗材礼包与一年质保',
     features: ['纤薄机身', '宠物毛发模式', '一键分区清洁'], scene: '租房、一居、书房与养宠家庭', floor: '木地板 / 瓷砖 / 低矮家具底部', care: '轻量日常维护与毛发收集', heroIndex: 0,
   },
   {
-    id: 'x9-edge', image: robotImages['x9-edge'].src, imageVariant: robotImages['x9-edge'].variant, name: 'X9 Edge', subtitle: '边角强化清洁',
+    id: 'x9-edge', image: robotImages['x9-edge'].src, name: 'X9 Edge', subtitle: '边角强化清洁',
     description: '面向桌椅多、墙根多的户型；D 型机身与伸缩边刷贴近踢脚线，重点补扫墙角和餐桌腿周边。', stat: '99.2%', accent: '#679fb1', price: 4299, priceNote: '含边角清洁套件与两年质保',
     features: ['毫米级贴边', '伸缩边刷', '家具识别建图'], scene: '餐桌区、桌椅密集与复杂墙角', floor: '瓷砖 / 木地板 / 踢脚线边缘', care: '贴边补扫，减少转角遗漏', heroIndex: 1,
   },
   {
-    id: 'm6-mini', image: robotImages['m6-mini'].src, imageVariant: robotImages['m6-mini'].variant, name: 'M6 Mini', subtitle: '木地板温柔护理',
+    id: 'm6-mini', image: robotImages['m6-mini'].src, name: 'M6 Mini', subtitle: '木地板温柔护理',
     description: '面向原木地板、婴幼儿活动区；三档电子控水避免积水，低压拖洗适合日常浮灰与轻污渍。', stat: '3 档水量', accent: '#ad7057', price: 3299, priceNote: '含地板护理拖布与一年质保',
     features: ['电子水量控制', '可拆洗拖布盘', '低噪缓行模式'], scene: '原木地板、儿童活动区与轻污渍', floor: '原木 / 复合木地板 / 瓷砖', care: '控水湿拖，降低地板受潮风险', heroIndex: 2,
   },
@@ -179,7 +177,7 @@ function releaseTarget(event: PointerEvent) {
 
     <div class="robot-hero__carousel" aria-label="机器人型号轮播">
       <button v-for="(robot, index) in robots" :key="robot.id" class="robot-hero__robot" :class="[`is-${roleFor(index)}`, { 'is-active': index === activeIndex }]" type="button" :aria-label="`查看 ${robot.name}`" @mouseenter="selectRobot(index)" @focus="selectRobot(index)" @click="index === activeIndex ? openProduct(robot) : selectRobot(index)">
-        <img :class="['robot-image', `robot-image--${robot.imageVariant}`]" :src="robot.image" :alt="`${robot.name} 扫地机器人`" draggable="false" />
+        <img :src="robot.image" :alt="`${robot.name} 扫地机器人`" draggable="false" />
         <span class="robot-hero__model">{{ robot.name }} · 查看价格</span>
       </button>
     </div>
@@ -212,7 +210,7 @@ function releaseTarget(event: PointerEvent) {
     <div class="robot-lineup__catalog">
       <button v-for="(robot, index) in products" :key="robot.id" class="robot-lineup__card" :class="{ 'is-targeted': targetProductId === robot.id }" :style="{ '--card-accent': robot.accent, '--card-order': index }" type="button" @mouseenter="selectRobot(robot.heroIndex); highlightProduct(robot)" @pointerenter="lockTarget($event, robot)" @pointermove="lockTarget($event, robot)" @pointerleave="releaseTarget" @focus="selectRobot(robot.heroIndex); highlightProduct(robot)" @click="openProduct(robot)">
         <div class="robot-lineup__head"><p>0{{ index + 1 }} / SERIES</p><h3>{{ robot.name }}</h3><b>{{ robot.subtitle }}</b></div>
-         <div class="robot-lineup__image" :class="`robot-lineup__image--shape-${robot.heroIndex}`"><img :class="['robot-image', `robot-image--${robot.imageVariant}`]" :src="robot.image" :alt="`${robot.name} 机身细节`" /><span class="robot-lineup__focus-zone" aria-hidden="true"></span></div>
+         <div class="robot-lineup__image" :class="`robot-lineup__image--shape-${robot.heroIndex}`"><img :src="robot.image" :alt="`${robot.name} 机身细节`" /><span class="robot-lineup__focus-zone" aria-hidden="true"></span></div>
         <div class="robot-lineup__foot"><small>适用：{{ robot.scene }}</small><span>{{ robot.description }}</span><i>查看配置与价格 <strong>→</strong></i></div>
       </button>
     </div>
@@ -223,7 +221,7 @@ function releaseTarget(event: PointerEvent) {
     <div v-if="selectedProduct" class="robot-dialog" role="presentation" @click.self="selectedProduct = null">
       <section class="robot-dialog__panel" role="dialog" aria-modal="true" :aria-labelledby="`product-${selectedProduct.id}`">
         <button class="robot-dialog__close" type="button" aria-label="关闭产品详情" @click="selectedProduct = null">×</button>
-         <div class="robot-dialog__visual" :style="{ '--dialog-accent': selectedProduct.accent }"><img :class="['robot-image', `robot-image--${selectedProduct.imageVariant}`]" :src="selectedProduct.image" :alt="selectedProduct.name" /></div>
+         <div class="robot-dialog__visual" :style="{ '--dialog-accent': selectedProduct.accent }"><img :src="selectedProduct.image" :alt="selectedProduct.name" /></div>
         <div class="robot-dialog__content">
           <p>ZENMOP / SMART HOME</p><h2 :id="`product-${selectedProduct.id}`">{{ selectedProduct.name }}</h2><b>{{ selectedProduct.subtitle }}</b>
           <span class="robot-dialog__price">¥ {{ selectedProduct.price.toLocaleString('zh-CN') }}</span><small>模拟起售价 · {{ selectedProduct.priceNote }}</small>
@@ -320,5 +318,5 @@ function releaseTarget(event: PointerEvent) {
 /* Keep each catalog variant visible in every presentation surface. */
 .robot-hero__robot img,
 .robot-lineup__image img,
-.robot-dialog__visual img { filter: var(--robot-image-filter, none) drop-shadow(0 24px 18px rgba(43, 25, 11, .24)); }
+.robot-dialog__visual img { filter: drop-shadow(0 24px 18px rgba(43, 25, 11, .24)); }
 </style>

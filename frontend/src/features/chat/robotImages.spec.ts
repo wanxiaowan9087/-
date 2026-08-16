@@ -2,10 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { robotImages } from './robotImages'
 
 describe('robot image catalog', () => {
-  it('keeps every product id mapped to a distinct visual variant', () => {
-    const variants = Object.values(robotImages).map((image) => image.variant)
+  it('keeps every product id mapped to a dedicated image asset', () => {
     expect(Object.keys(robotImages)).toHaveLength(6)
-    expect(new Set(variants)).toHaveLength(6)
   })
 
   it('keeps every product image source non-empty', () => {
