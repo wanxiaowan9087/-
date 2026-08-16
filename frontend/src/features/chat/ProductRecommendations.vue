@@ -41,7 +41,7 @@ const products = computed(() => props.recommendations.flatMap(recommendation => 
 .recommendations__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; }
 .recommendation-card { min-height: 92px; padding: 10px; display: grid; grid-template-columns: 66px minmax(0, 1fr) auto; align-items: center; gap: 10px; border: 1px solid rgba(78, 104, 120, .28); border-radius: 2px; background: rgba(255, 255, 255, .72); color: #173043; text-align: left; transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease; }
 .recommendation-card:hover { border-color: #4f89aa; box-shadow: 0 8px 18px rgba(31, 74, 98, .12); transform: translateY(-1px); }
-.recommendation-card img { width: 62px; height: 62px; object-fit: contain; filter: drop-shadow(0 8px 8px rgba(22, 47, 62, .16)); }
+.recommendation-card img { width: 62px; height: 62px; object-fit: contain; filter: var(--robot-image-filter, none) drop-shadow(0 8px 8px rgba(22, 47, 62, .16)); }
 .recommendation-card span { min-width: 0; display: grid; gap: 3px; }
 .recommendation-card b { font-size: 12px; }.recommendation-card small, .recommendation-card em { color: #627483; font-size: 10px; font-style: normal; line-height: 1.35; }.recommendation-card i { color: #2c6d91; font-size: 10px; font-style: normal; white-space: nowrap; }
 </style>
