@@ -156,8 +156,9 @@ function lockTarget(event: PointerEvent, product: RobotProduct) {
     visible: true,
     x: target.left - rootBounds.left + target.width / 2,
     y: target.top - rootBounds.top + target.height / 2,
-    width: target.width + 4,
-    height: target.height + 4,
+    // Keep the interaction cue compact so it never covers the product render.
+    width: 44,
+    height: 44,
     locked: true,
   }
 }
