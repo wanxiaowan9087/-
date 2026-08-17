@@ -11,8 +11,10 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@types/three": "^0.185.4",
     "@vitejs/plugin-vue": "latest",
     "pinia": "latest",
+    "three": "^0.185.1",
     "vite": "latest",
     "vue": "latest"
   },

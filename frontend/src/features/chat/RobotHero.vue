@@ -1,11 +1,12 @@
 <script setup lang="ts">
-/* global PointerEvent, HTMLElement */
 import { computed, ref, watch } from 'vue'
 import homeImage from '../../assets/warm-home-hero.png'
 import assistantImage from '../../assets/assistant-xiaozhi.png'
 import assistantWaveImage from '../../assets/assistant-xiaozhi-wave.png'
 import assistantPointImage from '../../assets/assistant-xiaozhi-point.png'
 import { robotImages } from './robotImages'
+import { robotModels } from './robotModels'
+import Product3DViewer from './Product3DViewer.vue'
 
 const props = defineProps<{
   authenticated: boolean
@@ -20,6 +21,7 @@ const emit = defineEmits<{
 type RobotProduct = {
   id: string
   image: string
+  modelUrl: string
   name: string
   subtitle: string
   description: string
@@ -37,32 +39,32 @@ type RobotProduct = {
 
 const products: RobotProduct[] = [
   {
-    id: 's8-luna', image: robotImages['s8-luna'].src, name: 'S8 皓月', subtitle: '静音深度清洁',
+    id: 's8-luna', image: robotImages['s8-luna'].src, modelUrl: robotModels['s8-luna'], name: 'S8 皓月', subtitle: '静音深度清洁',
     description: '面向一居室、儿童房与夜间清扫；56 dB 静音运行，双线激光识别桌腿、电线和低矮障碍。', stat: '56 dB', accent: '#d9b07a', price: 3499, priceNote: '含基础上门安装与一年质保',
     features: ['双线激光避障', '零缠绕主刷', '静音夜航模式'], scene: '一居室、儿童房、夜间清扫', floor: '木地板 / 瓷砖 / 短毛地毯', care: '避障优先，降低夜间噪声', heroIndex: 0, featured: true,
   },
   {
-    id: 'x9-obsidian', image: robotImages['x9-obsidian'].src, name: 'X9 曜石', subtitle: '全屋导航旗舰',
+    id: 'x9-obsidian', image: robotImages['x9-obsidian'].src, modelUrl: robotModels['x9-obsidian'], name: 'X9 曜石', subtitle: '全屋导航旗舰',
     description: '面向三居及复式大户型；12,000 Pa 吸力搭配多层地图，能按房间、楼层与清洁顺序自动重规划。', stat: '12,000 Pa', accent: '#7ec5d7', price: 4999, priceNote: '含自动集尘基站与两年质保',
     features: ['D 型边角贴合', '多层地图记忆', '12,000 Pa 强劲吸力'], scene: '三居、复式与开放式客餐厅', floor: '瓷砖 / 木地板 / 中短毛地毯', care: '大面积高频吸尘与分区管理', heroIndex: 1, featured: true,
   },
   {
-    id: 'm6-terra', image: robotImages['m6-terra'].src, name: 'M6 霞陶', subtitle: '地面精细护理',
+    id: 'm6-terra', image: robotImages['m6-terra'].src, modelUrl: robotModels['m6-terra'], name: 'M6 霞陶', subtitle: '地面精细护理',
     description: '面向地毯与硬质地面混铺家庭；双旋拖布遇地毯自动抬升，180 分钟续航覆盖大面积拖洗。', stat: '180 min', accent: '#c9825d', price: 4599, priceNote: '含旋转拖布套件与两年质保',
     features: ['双旋拖布升降', '地毯自动增压', '180 分钟续航'], scene: '地毯混铺、餐桌区与高频拖洗', floor: '木地板 / 瓷砖 / 地毯混铺', care: '拖布抬升，避免湿拖地毯', heroIndex: 2, featured: true,
   },
   {
-    id: 's8-air', image: robotImages['s8-air'].src, name: 'S8 Air', subtitle: '小户型轻量方案',
+    id: 's8-air', image: robotImages['s8-air'].src, modelUrl: robotModels['s8-air'], name: 'S8 Air', subtitle: '小户型轻量方案',
     description: '面向租房、一居与书房；纤薄机身可进入沙发、床底，宠物毛发模式减少毛发缠绕和重复回扫。', stat: '0.4 L', accent: '#b9996d', price: 2799, priceNote: '含耗材礼包与一年质保',
     features: ['纤薄机身', '宠物毛发模式', '一键分区清洁'], scene: '租房、一居、书房与养宠家庭', floor: '木地板 / 瓷砖 / 低矮家具底部', care: '轻量日常维护与毛发收集', heroIndex: 0,
   },
   {
-    id: 'x9-edge', image: robotImages['x9-edge'].src, name: 'X9 Edge', subtitle: '边角强化清洁',
+    id: 'x9-edge', image: robotImages['x9-edge'].src, modelUrl: robotModels['x9-edge'], name: 'X9 Edge', subtitle: '边角强化清洁',
     description: '面向桌椅多、墙根多的户型；D 型机身与伸缩边刷贴近踢脚线，重点补扫墙角和餐桌腿周边。', stat: '99.2%', accent: '#679fb1', price: 4299, priceNote: '含边角清洁套件与两年质保',
     features: ['毫米级贴边', '伸缩边刷', '家具识别建图'], scene: '餐桌区、桌椅密集与复杂墙角', floor: '瓷砖 / 木地板 / 踢脚线边缘', care: '贴边补扫，减少转角遗漏', heroIndex: 1,
   },
   {
-    id: 'm6-mini', image: robotImages['m6-mini'].src, name: 'M6 Mini', subtitle: '木地板温柔护理',
+    id: 'm6-mini', image: robotImages['m6-mini'].src, modelUrl: robotModels['m6-mini'], name: 'M6 Mini', subtitle: '木地板温柔护理',
     description: '面向原木地板、婴幼儿活动区；三档电子控水避免积水，低压拖洗适合日常浮灰与轻污渍。', stat: '3 档水量', accent: '#ad7057', price: 3299, priceNote: '含地板护理拖布与一年质保',
     features: ['电子水量控制', '可拆洗拖布盘', '低噪缓行模式'], scene: '原木地板、儿童活动区与轻污渍', floor: '原木 / 复合木地板 / 瓷砖', care: '控水湿拖，降低地板受潮风险', heroIndex: 2,
   },
@@ -72,12 +74,9 @@ const robots = products.filter((product) => product.featured)
 const activeIndex = ref(1)
 const isAnimating = ref(false)
 const selectedProduct = ref<RobotProduct | null>(null)
+const detailMode = ref<'image' | '3d'>('image')
 const assistantActing = ref(false)
-const lineupElement = ref<HTMLElement | null>(null)
-const targetCursor = ref({ visible: false, x: 0, y: 0, width: 38, height: 38, locked: false })
-const targetProductId = ref<string | null>(null)
 const activeRobot = computed(() => robots[activeIndex.value])
-const targetProduct = computed(() => products.find(product => product.id === targetProductId.value) ?? null)
 
 function navigate(direction: 'next' | 'previous') {
   if (isAnimating.value) return
@@ -106,6 +105,7 @@ function openProduct(product: RobotProduct) {
     return
   }
   selectedProduct.value = product
+  detailMode.value = 'image'
 }
 
 watch(
@@ -113,6 +113,7 @@ watch(
   (productId) => {
     if (!props.authenticated || !productId) return
     selectedProduct.value = products.find(product => product.id === productId) ?? null
+    detailMode.value = 'image'
   },
 )
 
@@ -127,45 +128,6 @@ function activateAssistant() {
   globalThis.setTimeout(() => emit('consult'), 460)
 }
 
-function trackTarget(event: PointerEvent) {
-  if (targetCursor.value.locked) return
-  const element = lineupElement.value ?? event.currentTarget as HTMLElement
-  const bounds = element.getBoundingClientRect()
-  targetCursor.value = { visible: true, x: event.clientX - bounds.left, y: event.clientY - bounds.top, width: 38, height: 38, locked: false }
-}
-
-function hideTarget() {
-  targetCursor.value = { ...targetCursor.value, visible: false, locked: false }
-  targetProductId.value = null
-}
-
-function highlightProduct(product: RobotProduct) {
-  targetProductId.value = product.id
-}
-
-function lockTarget(event: PointerEvent, product: RobotProduct) {
-  const rootBounds = lineupElement.value?.getBoundingClientRect()
-  const card = event.currentTarget as HTMLElement
-  const focusZone = card.querySelector<HTMLElement>('.robot-lineup__focus-zone')
-  const target = focusZone?.getBoundingClientRect() ?? card.getBoundingClientRect()
-  if (!rootBounds) return
-  targetProductId.value = product.id
-  targetCursor.value = {
-    visible: true,
-    x: target.left - rootBounds.left + target.width / 2,
-    y: target.top - rootBounds.top + target.height / 2,
-    // Keep the interaction cue compact so it never covers the product render.
-    width: 44,
-    height: 44,
-    locked: true,
-  }
-}
-
-function releaseTarget(event: PointerEvent) {
-  targetProductId.value = null
-  targetCursor.value = { ...targetCursor.value, locked: false, width: 38, height: 38 }
-  trackTarget(event)
-}
 </script>
 
 <template>
@@ -205,25 +167,29 @@ function releaseTarget(event: PointerEvent) {
     <a class="robot-hero__discover" href="#robot-lineup">探索全系 <span>↓</span></a>
   </section>
 
-  <section id="robot-lineup" ref="lineupElement" class="robot-lineup" aria-labelledby="robot-lineup-title" @pointermove="trackTarget" @pointerleave="hideTarget">
+  <section id="robot-lineup" class="robot-lineup" aria-labelledby="robot-lineup-title">
     <div class="robot-lineup__intro"><p class="eyebrow">SIX WAYS TO CARE</p><h2 id="robot-lineup-title">每一种居住方式，<br />都有一台恰好的机器人。</h2><p>六款模拟产品覆盖静音日常、边角强化、地板护理等不同场景。悬停查看动态反馈，点击任意产品卡即可查看价格与配置。</p></div>
     <div class="robot-lineup__catalog">
-      <button v-for="(robot, index) in products" :key="robot.id" class="robot-lineup__card" :class="{ 'is-targeted': targetProductId === robot.id }" :style="{ '--card-accent': robot.accent, '--card-order': index }" type="button" @mouseenter="selectRobot(robot.heroIndex); highlightProduct(robot)" @pointerenter="lockTarget($event, robot)" @pointermove="lockTarget($event, robot)" @pointerleave="releaseTarget" @focus="selectRobot(robot.heroIndex); highlightProduct(robot)" @click="openProduct(robot)">
+      <button v-for="(robot, index) in products" :key="robot.id" class="robot-lineup__card" :style="{ '--card-accent': robot.accent, '--card-order': index }" type="button" @mouseenter="selectRobot(robot.heroIndex)" @focus="selectRobot(robot.heroIndex)" @click="openProduct(robot)">
         <div class="robot-lineup__head"><p>0{{ index + 1 }} / SERIES</p><h3>{{ robot.name }}</h3><b>{{ robot.subtitle }}</b></div>
-         <div class="robot-lineup__image" :class="`robot-lineup__image--shape-${robot.heroIndex}`"><img :src="robot.image" :alt="`${robot.name} 机身细节`" /><span class="robot-lineup__focus-zone" aria-hidden="true"></span></div>
+         <div class="robot-lineup__image" :class="`robot-lineup__image--shape-${robot.heroIndex}`"><img :src="robot.image" :alt="`${robot.name} 机身细节`" /><span class="robot-lineup__focus-frame" aria-hidden="true"><b>{{ robot.name }}</b></span></div>
         <div class="robot-lineup__foot"><small>适用：{{ robot.scene }}</small><span>{{ robot.description }}</span><i>查看配置与价格 <strong>→</strong></i></div>
       </button>
     </div>
-    <div class="robot-lineup__target" :class="{ visible: targetCursor.visible, 'is-locked': targetCursor.locked }" :style="{ transform: `translate3d(${targetCursor.x}px, ${targetCursor.y}px, 0) translate(-50%, -50%)`, width: `${targetCursor.width}px`, height: `${targetCursor.height}px` }" aria-hidden="true"><i></i><b></b><em></em><span>{{ targetProduct?.name || 'VIEW' }}</span></div>
   </section>
 
   <Teleport to="body">
     <div v-if="selectedProduct" class="robot-dialog" role="presentation" @click.self="selectedProduct = null">
-      <section class="robot-dialog__panel" role="dialog" aria-modal="true" :aria-labelledby="`product-${selectedProduct.id}`">
+      <section class="robot-dialog__panel" :class="{ 'is-3d': detailMode === '3d' }" role="dialog" aria-modal="true" :aria-labelledby="`product-${selectedProduct.id}`">
         <button class="robot-dialog__close" type="button" aria-label="关闭产品详情" @click="selectedProduct = null">×</button>
-         <div class="robot-dialog__visual" :style="{ '--dialog-accent': selectedProduct.accent }"><img :src="selectedProduct.image" :alt="selectedProduct.name" /></div>
+        <div v-if="detailMode === 'image'" class="robot-dialog__visual" :style="{ '--dialog-accent': selectedProduct.accent }"><img :src="selectedProduct.image" :alt="selectedProduct.name" /></div>
+        <Product3DViewer v-else :model-url="selectedProduct.modelUrl" :product-name="selectedProduct.name" :accent="selectedProduct.accent" :fallback-image="selectedProduct.image" />
         <div class="robot-dialog__content">
           <p>ZENMOP / SMART HOME</p><h2 :id="`product-${selectedProduct.id}`">{{ selectedProduct.name }}</h2><b>{{ selectedProduct.subtitle }}</b>
+          <div class="robot-dialog__modes" role="tablist" aria-label="产品展示方式">
+            <button type="button" role="tab" :aria-selected="detailMode === 'image'" :class="{ active: detailMode === 'image' }" @click="detailMode = 'image'">产品图</button>
+            <button type="button" role="tab" :aria-selected="detailMode === '3d'" :class="{ active: detailMode === '3d' }" @click="detailMode = '3d'">3D 效果</button>
+          </div>
           <span class="robot-dialog__price">¥ {{ selectedProduct.price.toLocaleString('zh-CN') }}</span><small>模拟起售价 · {{ selectedProduct.priceNote }}</small>
           <p class="robot-dialog__description">{{ selectedProduct.description }}</p>
           <dl class="robot-dialog__facts"><div><dt>适用场景</dt><dd>{{ selectedProduct.scene }}</dd></div><div><dt>推荐地面</dt><dd>{{ selectedProduct.floor }}</dd></div><div><dt>清洁重点</dt><dd>{{ selectedProduct.care }}</dd></div></dl>
@@ -285,9 +251,19 @@ function releaseTarget(event: PointerEvent) {
 .robot-dialog { position: fixed; z-index: 1000; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(38, 27, 18, .58); backdrop-filter: blur(12px); }.robot-dialog__panel { width: min(770px, 100%); min-height: 438px; position: relative; overflow: hidden; display: grid; grid-template-columns: minmax(245px, .92fr) 1.08fr; border: 1px solid rgba(255, 248, 236, .55); background: #fffaf1; box-shadow: 0 38px 96px rgba(30, 18, 10, .38); animation: dialog-in .24s ease both; }.robot-dialog__close { width: 37px; height: 37px; position: absolute; z-index: 2; top: 14px; right: 14px; border: 1px solid rgba(57, 40, 26, .2); border-radius: 50%; background: rgba(255, 250, 241, .76); color: #37291f; font-size: 24px; line-height: 1; }.robot-dialog__visual { min-height: 100%; display: grid; place-items: center; overflow: hidden; background: radial-gradient(circle at 50% 44%, #fffaf0 0, color-mix(in srgb, var(--dialog-accent) 30%, #d5c1a3) 70%, #c8ad8d 100%); }.robot-dialog__visual img { width: 93%; max-height: 410px; object-fit: contain; filter: drop-shadow(0 30px 20px rgba(61, 38, 20, .3)); animation: product-float 3.8s ease-in-out infinite; }.robot-dialog__content { padding: clamp(34px, 6vw, 64px) clamp(28px, 5vw, 52px) 36px; color: #30241b; }.robot-dialog__content > p:first-child { margin: 0; color: #977555; font: 11px var(--font-mono); letter-spacing: .12em; }.robot-dialog__content h2 { margin: 10px 0 4px; font: 600 clamp(37px, 5vw, 56px)/1 var(--font-display); }.robot-dialog__content > b { color: #8a614b; font-size: 14px; }.robot-dialog__price { display: block; margin-top: 29px; color: #1e514f; font: 600 clamp(30px, 4vw, 42px)/1 var(--font-mono); letter-spacing: -.06em; }.robot-dialog__content small { display: block; margin-top: 8px; color: #846d5b; font-size: 12px; }.robot-dialog__description { margin: 21px 0 0 !important; color: #705947; font-size: 14px; line-height: 1.8; }.robot-dialog__content ul { margin: 18px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 7px; list-style: none; }.robot-dialog__content li { padding: 7px 9px; border: 1px solid rgba(124, 93, 68, .17); border-radius: 999px; color: #594737; font-size: 12px; }.robot-dialog__consult { margin-top: 27px; padding: 12px 17px; border: 0; background: #234d50; color: #fff9ee; font: 600 13px var(--font-ui); letter-spacing: .04em; transition: transform .18s ease, background .18s ease; }.robot-dialog__consult:hover { transform: translateY(-2px); background: #173a3d; }
 .robot-hero__assistant { overflow: visible; }.robot-hero__assistant img { transform-origin: 50% 82%; animation: assistant-idle 4.8s cubic-bezier(.45,0,.25,1) infinite; transition: transform .18s ease, filter .18s ease; }.robot-hero__assistant:hover img { animation-play-state: paused; transform: translateY(-2px) rotate(-4deg) scale(1.08); filter: saturate(1.08) brightness(1.05); }.robot-hero__assistant > i { width: 17px; height: 17px; position: absolute; top: -6px; left: 31px; display: grid; place-items: center; border-radius: 50%; background: #e5b46e; color: #2e241b; font-size: 10px; font-style: normal; box-shadow: 0 0 0 4px rgba(229,180,110,.18); animation: assistant-spark 3.6s ease-in-out infinite; }.robot-hero__assistant:active { transform: translateY(-1px) scale(.98); }
 .robot-lineup__image { position: relative; }.robot-lineup__focus-zone { position: absolute; z-index: 2; left: 50%; top: 52%; transform: translate(-50%, -50%); pointer-events: none; }.robot-lineup__image--shape-0 .robot-lineup__focus-zone { width: 58%; height: 48%; }.robot-lineup__image--shape-1 .robot-lineup__focus-zone { width: 53%; height: 62%; top: 54%; }.robot-lineup__image--shape-2 .robot-lineup__focus-zone { width: 56%; height: 68%; top: 54%; }
+.robot-lineup__focus-frame { position: absolute; z-index: 2; inset: 10px 12px; display: block; border: 1px solid color-mix(in srgb, var(--card-accent) 72%, #245c65); box-shadow: inset 0 0 0 1px rgba(255, 250, 238, .46), 0 8px 20px rgba(39, 62, 58, .08); opacity: 0; pointer-events: none; transition: opacity .2s ease, inset .2s ease; }
+.robot-lineup__focus-frame::before, .robot-lineup__focus-frame::after { content: ''; position: absolute; width: 16px; height: 16px; border-color: #245c65; border-style: solid; }
+.robot-lineup__focus-frame::before { left: -2px; top: -2px; border-width: 2px 0 0 2px; }.robot-lineup__focus-frame::after { right: -2px; bottom: -2px; border-width: 0 2px 2px 0; }
+.robot-lineup__focus-frame b { position: absolute; left: 11px; top: 0; padding: 6px 9px 5px; background: #234f4e; color: #fff7e9; font: 700 10px var(--font-mono); letter-spacing: .06em; white-space: nowrap; }
+.robot-lineup__card:hover .robot-lineup__focus-frame, .robot-lineup__card:focus-visible .robot-lineup__focus-frame { opacity: 1; inset: 7px 9px; }
 .robot-lineup__card { border: 0; box-shadow: 0 0 0 1px rgba(105,76,48,.1), 0 8px 24px rgba(90,60,32,.055); }.robot-lineup__card.is-targeted { border-color: transparent; box-shadow: 0 13px 35px color-mix(in srgb, var(--card-accent) 17%, transparent); }.robot-lineup__card:hover, .robot-lineup__card:focus-visible { transform: translateY(-6px); }.robot-lineup__card:active { transform: translateY(-3px) scale(.985); transition-duration: 120ms; }.robot-lineup__foot i strong { display: inline-block; transition: transform 180ms ease; }.robot-lineup__card:hover .robot-lineup__foot i strong { transform: translateX(6px); }
 .robot-hero__consult:active, .robot-dialog__consult:active, .topbar-agent-entry:active { transform: scale(.98); transition-duration: 120ms; }
 .robot-dialog__facts { margin: 18px 0 0; display: grid; gap: 8px; }.robot-dialog__facts div { padding: 9px 0; display: grid; grid-template-columns: 72px 1fr; gap: 10px; border-top: 1px solid rgba(124, 93, 68, .14); }.robot-dialog__facts dt { color: #96765b; font: 10px var(--font-mono); letter-spacing: .06em; }.robot-dialog__facts dd { margin: 0; color: #4d3c2f; font: 12px/1.5 var(--font-ui); }
+.robot-dialog__panel.is-3d { width: min(1120px, 100%); grid-template-columns: minmax(0, 1.28fr) minmax(300px, .72fr); }
+.robot-dialog__panel.is-3d .robot-dialog__content { padding-top: clamp(34px, 5vw, 52px); }
+.robot-dialog__modes { margin-top: 24px; display: inline-flex; gap: 3px; padding: 3px; border: 1px solid rgba(124, 93, 68, .18); background: rgba(244, 234, 220, .72); }
+.robot-dialog__modes button { min-width: 76px; padding: 8px 11px; border: 0; background: transparent; color: #876e5c; font: 11px var(--font-ui); cursor: pointer; }
+.robot-dialog__modes button.active { background: #234d50; color: #fff9ee; }
 .robot-hero__assistant { width: 190px; min-height: 72px; padding: 6px 15px 6px 6px; gap: 10px; border-radius: 20px; }
 .robot-hero__assistant .robot-hero__assistant-character { width: 60px; height: 60px; position: relative; flex: 0 0 60px; display: block; overflow: hidden; border: 1px solid rgba(255, 243, 223, .72); border-radius: 17px; background: #eee3d0; box-shadow: inset 0 0 0 1px rgba(255,255,255,.24); }
 .robot-hero__assistant .assistant-frame { width: 100%; height: 100%; position: absolute; inset: 0; border: 0; border-radius: 0; object-fit: cover; object-position: center; opacity: 0; transform: none; filter: none; transition: none; }
@@ -314,7 +290,7 @@ function releaseTarget(event: PointerEvent) {
 @keyframes assistant-idle { 0%, 72%, 100% { transform: translateY(0) rotate(0); } 78% { transform: translateY(-3px) rotate(-3deg); } 84% { transform: translateY(-1px) rotate(3deg); } 90% { transform: translateY(-2px) rotate(-1deg); } } @keyframes assistant-spark { 0%, 68%, 100% { opacity: .45; transform: scale(.78) rotate(0); } 76% { opacity: 1; transform: scale(1.14) rotate(18deg); } 86% { opacity: .7; transform: scale(.94) rotate(-8deg); } } @keyframes reveal-title { from { opacity: .18; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } } @keyframes target-spin { to { rotate: 360deg; } } @keyframes target-breathe { 50% { opacity: .72; box-shadow: 0 0 0 11px rgba(60, 167, 170, .05), 0 15px 32px rgba(13, 63, 66, .24); } } @keyframes product-float { 50% { transform: translateY(-9px) rotate(-1deg); } } @keyframes dialog-in { from { opacity: 0; transform: translateY(12px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @media (max-width: 1080px) { .robot-lineup { grid-template-columns: 1fr; }.robot-lineup__intro { max-width: 570px; }.robot-lineup__catalog { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 900px) { .robot-hero__copy { width: min(315px, 44vw); }.robot-hero__robot.is-left { left: 23%; }.robot-hero__robot.is-right { left: 77%; }.robot-lineup__catalog { grid-template-columns: repeat(2, minmax(0, 1fr)); }.robot-dialog__panel { grid-template-columns: .85fr 1.15fr; } }
-@media (max-width: 640px) { .robot-hero { min-height: 700px; }.robot-hero__header { padding: 20px; }.robot-hero__header > span:last-child { display: none; }.robot-hero__ghost { top: 22%; font-size: 24vw; }.robot-hero__robot { width: 260px; height: 260px; bottom: 30%; }.robot-hero__robot.is-center { transform: translateX(-50%) scale(1.22); }.robot-hero__robot.is-left { left: 18%; transform: translateX(-50%) scale(.46); }.robot-hero__robot.is-right { left: 82%; transform: translateX(-50%) scale(.46); }.robot-hero__copy { width: auto; right: 24px; left: 24px; bottom: 93px; }.robot-hero__copy h1 { font-size: 35px; }.robot-hero__copy > p:not(.robot-hero__eyebrow) { max-width: 330px; }.robot-hero__navigation { left: 24px; bottom: 24px; }.robot-hero__assistant { top: 64px; right: 18px; transform: scale(.88); transform-origin: top right; }.robot-hero__discover { right: 24px; bottom: 35px; }.robot-lineup { padding: 64px 20px; }.robot-lineup__catalog { grid-template-columns: 1fr; }.robot-lineup__card { min-height: 366px; }.robot-lineup__target { display: none; }.robot-dialog { padding: 14px; align-items: end; }.robot-dialog__panel { max-height: calc(100vh - 28px); overflow: auto; grid-template-columns: 1fr; }.robot-dialog__visual { min-height: 245px; }.robot-dialog__visual img { max-height: 240px; }.robot-dialog__content { padding: 29px 25px 31px; } }
+@media (max-width: 640px) { .robot-hero { min-height: 700px; }.robot-hero__header { padding: 20px; }.robot-hero__header > span:last-child { display: none; }.robot-hero__ghost { top: 22%; font-size: 24vw; }.robot-hero__robot { width: 260px; height: 260px; bottom: 30%; }.robot-hero__robot.is-center { transform: translateX(-50%) scale(1.22); }.robot-hero__robot.is-left { left: 18%; transform: translateX(-50%) scale(.46); }.robot-hero__robot.is-right { left: 82%; transform: translateX(-50%) scale(.46); }.robot-hero__copy { width: auto; right: 24px; left: 24px; bottom: 93px; }.robot-hero__copy h1 { font-size: 35px; }.robot-hero__copy > p:not(.robot-hero__eyebrow) { max-width: 330px; }.robot-hero__navigation { left: 24px; bottom: 24px; }.robot-hero__assistant { top: 64px; right: 18px; transform: scale(.88); transform-origin: top right; }.robot-hero__discover { right: 24px; bottom: 35px; }.robot-lineup { padding: 64px 20px; }.robot-lineup__catalog { grid-template-columns: 1fr; }.robot-lineup__card { min-height: 366px; }.robot-lineup__target { display: none; }.robot-dialog { padding: 14px; align-items: end; }.robot-dialog__panel, .robot-dialog__panel.is-3d { max-height: calc(100vh - 28px); overflow: auto; grid-template-columns: 1fr; }.robot-dialog__visual { min-height: 245px; }.robot-dialog__visual img { max-height: 240px; }.robot-dialog__content { padding: 29px 25px 31px; } }
 /* Keep each catalog variant visible in every presentation surface. */
 .robot-hero__robot img,
 .robot-lineup__image img,
