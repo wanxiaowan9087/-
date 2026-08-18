@@ -223,4 +223,8 @@ def _month_bounds(month: str) -> tuple[datetime, datetime]:
 
 def _is_robot_recommendation_intent(text: str) -> bool:
     compact = text.replace(" ", "").lower()
-    return any(term in compact for term in ("推荐机器人", "推荐扫地机器人", "买什么机器人", "机器人推荐", "选什么扫地机"))
+    robot_subject = any(term in compact for term in ("机器人", "扫地机", "扫拖机", "扫拖机器人", "型号", "机型"))
+    recommendation_request = any(term in compact for term in (
+        "推荐", "建议买", "选购", "买什么", "买哪款", "哪个型号", "什么型号", "适合我",
+    ))
+    return robot_subject and recommendation_request

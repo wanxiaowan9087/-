@@ -77,6 +77,9 @@ services:
       APP_AGENT_VECTOR_DIMENSIONS: "1024"
       APP_AGENT_LOCAL_CORPUS_DIR: /app/data
       APP_UPLOADS_DIR: /app/data/uploads
+      # Synthetic demo records map the seeded admin (xiaow) to account 1001.
+      # Real user accounts require an explicit admin identity mapping.
+      APP_AGENT_REPORT_DEFAULT_EXTERNAL_USER_ID: "1001"
       APP_ADMIN_USERNAME: ${APP_ADMIN_USERNAME:?Set APP_ADMIN_USERNAME in the shell before starting Docker Compose}
       APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD:?Set APP_ADMIN_PASSWORD in the shell before starting Docker Compose}
     ports:

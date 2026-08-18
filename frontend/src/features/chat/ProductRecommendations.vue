@@ -11,13 +11,13 @@ const productIndex: Record<string, { name: string; subtitle: string; image: stri
   's8-air': { name: 'S8 Air', subtitle: '小户型轻量方案', image: robotImages['s8-air'].src },
   'x9-obsidian': { name: 'X9 曜石', subtitle: '全屋导航旗舰', image: robotImages['x9-obsidian'].src },
   'x9-edge': { name: 'X9 Edge', subtitle: '边角强化清洁', image: robotImages['x9-edge'].src },
-  'm6-terra': { name: 'M6 霁陶', subtitle: '地面精细护理', image: robotImages['m6-terra'].src },
+  'm6-terra': { name: 'M6 霞陶', subtitle: '地面精细护理', image: robotImages['m6-terra'].src },
   'm6-mini': { name: 'M6 Mini', subtitle: '木地板温柔护理', image: robotImages['m6-mini'].src },
 }
 
 const products = computed(() => props.recommendations.flatMap(recommendation => {
   const product = productIndex[recommendation.productId]
-  return product ? [{ ...product, ...recommendation, name: recommendation.name || product.name }] : []
+  return product ? [{ ...product, ...recommendation, name: product.name }] : []
 }))
 </script>
 

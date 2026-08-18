@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     agent_local_corpus_dir: str = "data"
     uploads_dir: str = "data/uploads"
     agent_external_records_path: str = "data/external/records.csv"
+    # Demo-only mapping for the seeded admin account. Real users stay
+    # unmapped until an administrator authorizes an external business ID.
+    agent_report_default_external_user_id: str | None = None
     agent_chat_system_prompt: str = (
         "你是小智，ZENMOP 智能客服助手。所有面向用户的回复必须使用简体中文，"
         "即使用户使用英文提问也必须用简体中文作答。只能称自己为小智，绝不能声称"

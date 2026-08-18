@@ -136,21 +136,22 @@ class IdentityService:
         )
         return await self._issue(await self._store.create_user(user), now)
 
-    async def ensure_admin(self, *, username: str, password: str, nickname: str) -> None:
+    async def ensure_admin(self, *, username: str, password: str, nickname: str) -> IdentityUser:
         _validate_password(password)
         normalized_username = username.strip().lower()
         existing = await self._store.find_user_by_username(normalized_username)
         if existing is None:
-            await self._store.create_user(IdentityUser(
+            return await self._store.create_user(IdentityUser(
                 id=uuid4(), username=normalized_username,
                 nickname=nickname.strip() or "系统管理员", avatar_url=DEFAULT_AVATAR_URL,
                 password_hash=self._hasher.hash(password), role="admin", created_at=self._clock(),
             ))
-        else:
-            if existing.role != "admin":
-                await self._store.set_role(existing.id, "admin")
-            if not self._hasher.verify(password, existing.password_hash):
-                await self._store.update_password(existing.id, self._hasher.hash(password))
+        if existing.role != "admin":
+            await self._store.set_role(existing.id, "admin")
+        if not self._hasher.verify(password, existing.password_hash):
+            await self._store.update_password(existing.id, self._hasher.hash(password))
+        refreshed = await self._store.find_user_by_id(existing.id)
+        return refreshed or existing
 
     async def login(self, *, username: str, password: str) -> IssuedSession:
         user = await self._store.find_user_by_username(username.strip().lower())

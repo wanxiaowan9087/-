@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from time import perf_counter
 
 from fastapi import FastAPI, Request, Response
@@ -81,12 +82,26 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        admin_user = None
         if settings.admin_username and settings.admin_password:
-            await resolved_identity_service.ensure_admin(
+            admin_user = await resolved_identity_service.ensure_admin(
                 username=settings.admin_username,
                 password=settings.admin_password,
                 nickname=settings.admin_nickname,
             )
+            # The bundled records are synthetic demo data. Seed only the
+            # configured admin mapping so the report flow works out of the
+            # box; normal accounts still require an explicit admin mapping.
+            if settings.agent_report_default_external_user_id:
+                async with repository_adapter.transaction() as tx:
+                    existing_mapping = await tx.resolve_external_user_id(str(admin_user.id))
+                    if existing_mapping is None:
+                        await tx.upsert_external_identity_mapping(
+                            admin_user.id,
+                            settings.agent_report_default_external_user_id,
+                            admin_user.id,
+                            datetime.now(UTC),
+                        )
         initialize_knowledge_index = getattr(executor_adapter, "initialize_knowledge_index", None)
         if initialize_knowledge_index is not None:
             await initialize_knowledge_index()
