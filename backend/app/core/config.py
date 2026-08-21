@@ -60,6 +60,17 @@ class Settings(BaseSettings):
     sms_verify_max_attempts: int = Field(default=5, ge=1, le=10)
     sms_verify_attempt_window_seconds: int = Field(default=900, ge=60, le=3_600)
     sms_verify_lock_seconds: int = Field(default=900, ge=60, le=3_600)
+    auth_rate_window_seconds: int = Field(default=900, ge=60, le=3_600)
+    auth_login_ip_limit: int = Field(default=15, ge=1, le=100)
+    auth_login_phone_limit: int = Field(default=8, ge=1, le=50)
+    auth_register_ip_limit: int = Field(default=10, ge=1, le=100)
+    auth_sms_ip_limit: int = Field(default=5, ge=1, le=50)
+    auth_password_reset_ip_limit: int = Field(default=10, ge=1, le=100)
+    chat_ip_per_minute_limit: int = Field(default=12, ge=1, le=100)
+    chat_user_per_minute_limit: int = Field(default=6, ge=1, le=100)
+    chat_user_daily_limit: int = Field(default=80, ge=1, le=1_000)
+    agent_max_concurrent_runs: int = Field(default=4, ge=1, le=20)
+    agent_max_concurrent_runs_per_user: int = Field(default=1, ge=1, le=5)
     test_executor_enabled: bool = False
     cursor_signing_secret: str = "development-only-cursor-secret"
     idempotency_ttl_seconds: int = Field(default=86_400, ge=86_400)

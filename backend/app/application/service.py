@@ -29,9 +29,9 @@ from backend.app.schemas.resources import (
     CreateSessionRequest,
     DeactivateMemoryRequest,
     DeleteMemoryResult,
+    ExternalIdentityMapping,
     Feedback,
     KnowledgeFile,
-    ExternalIdentityMapping,
     Memory,
     Message,
     NewChatRequest,
@@ -42,9 +42,9 @@ from backend.app.schemas.resources import (
     ReviewTask,
     RunTrace,
     Session,
-    UsageSummary,
     UsageEvent,
     UsageEventRequest,
+    UsageSummary,
 )
 
 DEFAULT_SESSION_TITLES = {"", "新会话", "New agent session", "Agent session", "Untitled session"}
@@ -89,6 +89,8 @@ class PlatformService:
         cursor_secret: str,
         idempotency_ttl_seconds: int,
         stream_retention_seconds: int,
+        max_concurrent_runs: int = 4,
+        max_concurrent_runs_per_user: int = 1,
         redis_probe: HealthProbePort | None = None,
         vector_probe: HealthProbePort | None = None,
         knowledge_indexer: KnowledgeIndexer | None = None,
@@ -101,7 +103,12 @@ class PlatformService:
         self.redis_probe = redis_probe
         self.vector_probe = vector_probe
         self.knowledge_indexer = knowledge_indexer
-        self.coordinator = RunCoordinator(repository, executor)
+        self.coordinator = RunCoordinator(
+            repository,
+            executor,
+            max_concurrent_runs=max_concurrent_runs,
+            max_concurrent_runs_per_user=max_concurrent_runs_per_user,
+        )
 
     @staticmethod
     def _canonical(value: Any) -> str:
@@ -264,112 +271,119 @@ class PlatformService:
     ) -> tuple[UUID, UUID, bool, AsyncIterator[bytes]]:
         now = datetime.now(UTC)
         canonical = request.model_dump(mode="json")
-        async with self.repository.transaction() as tx:
-            idem, replay = await self._claim(
-                tx,
-                principal=principal,
-                operation_id="streamChat",
-                path="/chat/stream",
-                key=key,
-                request=canonical,
-                now=now,
-            )
-            replayed = replay is not None
-            if replayed:
-                if idem.run_id is None:
-                    raise AppError("INTERNAL_ERROR", "stream replay record is invalid", 500)
-                run = await tx.get_run(principal.subject_id, idem.run_id)
-                if run is None:
-                    raise not_found()
-                user_message = await tx.get_message(principal.subject_id, run.user_message_id)
-                if user_message is None:
-                    raise not_found()
-                retained_events = await tx.list_events(run.id, 0)
-                latest_sequence = retained_events[-1].sequence if retained_events else 0
-                if last_event_id > latest_sequence:
-                    raise AppError(
-                        "BAD_REQUEST",
-                        "Last-Event-ID is ahead of the run event stream",
-                        400,
-                    )
-                replay_expired = bool(
-                    run.ended_at
-                    and now - run.ended_at > self.stream_retention
-                    and last_event_id < latest_sequence
-                )
-                replay_gap = bool(
-                    last_event_id > 0
-                    and (
-                        not retained_events
-                        or retained_events[0].sequence > last_event_id + 1
-                    )
-                )
-                if replay_expired or replay_gap:
-                    raise AppError(
-                        "STREAM_REPLAY_EXPIRED",
-                        "the requested stream replay window has expired",
-                        410,
-                        {"retryable": False},
-                    )
-            else:
-                user_message, assistant, run = await tx.prepare_chat(
-                    owner_id=principal.subject_id,
-                    session_id=request.session_id,
-                    content=request.content if isinstance(request, NewChatRequest) else None,
-                    original_user_message_id=(
-                        request.original_user_message_id
-                        if isinstance(request, RetryChatRequest)
-                        else None
-                    ),
-                    session_title=(
-                        summarize_session_title(request.content)
-                        if isinstance(request, NewChatRequest)
-                        else None
-                    ),
+        reservation = await self.coordinator.reserve(principal.subject_id)
+        try:
+            async with self.repository.transaction() as tx:
+                idem, replay = await self._claim(
+                    tx,
+                    principal=principal,
+                    operation_id="streamChat",
+                    path="/chat/stream",
+                    key=key,
+                    request=canonical,
                     now=now,
                 )
-                meta = {
-                    "event_type": "meta",
-                    "sequence": 1,
-                    "request_id": request_id_var.get(),
-                    "session_id": str(run.session_id),
-                    "run_id": str(run.id),
-                    "timestamp": now.isoformat(),
-                    "payload": {
-                        "user_message_id": str(user_message.id),
-                        "assistant_message_id": str(assistant.id),
-                        "attempt": run.attempt,
-                        "retry_of_user_message_id": (
-                            str(run.retry_of_user_message_id)
-                            if run.retry_of_user_message_id
+                replayed = replay is not None
+                if replayed:
+                    if idem.run_id is None:
+                        raise AppError("INTERNAL_ERROR", "stream replay record is invalid", 500)
+                    run = await tx.get_run(principal.subject_id, idem.run_id)
+                    if run is None:
+                        raise not_found()
+                    user_message = await tx.get_message(principal.subject_id, run.user_message_id)
+                    if user_message is None:
+                        raise not_found()
+                    retained_events = await tx.list_events(run.id, 0)
+                    latest_sequence = retained_events[-1].sequence if retained_events else 0
+                    if last_event_id > latest_sequence:
+                        raise AppError(
+                            "BAD_REQUEST",
+                            "Last-Event-ID is ahead of the run event stream",
+                            400,
+                        )
+                    replay_expired = bool(
+                        run.ended_at
+                        and now - run.ended_at > self.stream_retention
+                        and last_event_id < latest_sequence
+                    )
+                    replay_gap = bool(
+                        last_event_id > 0
+                        and (not retained_events or retained_events[0].sequence > last_event_id + 1)
+                    )
+                    if replay_expired or replay_gap:
+                        raise AppError(
+                            "STREAM_REPLAY_EXPIRED",
+                            "the requested stream replay window has expired",
+                            410,
+                            {"retryable": False},
+                        )
+                else:
+                    user_message, assistant, run = await tx.prepare_chat(
+                        owner_id=principal.subject_id,
+                        session_id=request.session_id,
+                        content=request.content if isinstance(request, NewChatRequest) else None,
+                        original_user_message_id=(
+                            request.original_user_message_id
+                            if isinstance(request, RetryChatRequest)
                             else None
                         ),
-                        "replayed": False,
-                    },
-                }
-                await tx.add_event(StreamEventRecord(run.id, 1, meta, now))
-                await tx.finish_idempotency(
-                    idem,
-                    status_code=200,
-                    response_body={
-                        "run_id": str(run.id),
+                        session_title=(
+                            summarize_session_title(request.content)
+                            if isinstance(request, NewChatRequest)
+                            else None
+                        ),
+                        now=now,
+                    )
+                    meta = {
+                        "event_type": "meta",
+                        "sequence": 1,
+                        "request_id": request_id_var.get(),
                         "session_id": str(run.session_id),
-                        "user_message_id": str(user_message.id),
-                    },
-                    run_id=run.id,
-                )
-        execution = RunExecution(
-            request_id=request_id_var.get(),
-            subject_id=principal.subject_id,
-            session_id=run.session_id,
-            run_id=run.id,
-            user_message_id=run.user_message_id,
-            assistant_message_id=run.assistant_message_id,
-            input_content=user_message.content,
-            attempt=run.attempt,
-            retry_of_user_message_id=run.retry_of_user_message_id,
-        )
-        await self.coordinator.ensure_started(execution)
+                        "run_id": str(run.id),
+                        "timestamp": now.isoformat(),
+                        "payload": {
+                            "user_message_id": str(user_message.id),
+                            "assistant_message_id": str(assistant.id),
+                            "attempt": run.attempt,
+                            "retry_of_user_message_id": (
+                                str(run.retry_of_user_message_id)
+                                if run.retry_of_user_message_id
+                                else None
+                            ),
+                            "replayed": False,
+                        },
+                    }
+                    await tx.add_event(StreamEventRecord(run.id, 1, meta, now))
+                    await tx.finish_idempotency(
+                        idem,
+                        status_code=200,
+                        response_body={
+                            "run_id": str(run.id),
+                            "session_id": str(run.session_id),
+                            "user_message_id": str(user_message.id),
+                        },
+                        run_id=run.id,
+                    )
+            if replayed:
+                await self.coordinator.release_reservation(reservation)
+                reservation = None
+            execution = RunExecution(
+                request_id=request_id_var.get(),
+                subject_id=principal.subject_id,
+                session_id=run.session_id,
+                run_id=run.id,
+                user_message_id=run.user_message_id,
+                assistant_message_id=run.assistant_message_id,
+                input_content=user_message.content,
+                attempt=run.attempt,
+                retry_of_user_message_id=run.retry_of_user_message_id,
+            )
+            await self.coordinator.ensure_started(execution, reservation)
+            reservation = None
+        except Exception:
+            if reservation is not None:
+                await self.coordinator.release_reservation(reservation)
+            raise
 
         async def follow() -> AsyncIterator[bytes]:
             next_sequence = last_event_id
@@ -583,7 +597,11 @@ class PlatformService:
                 now=now,
             )
             if replay is not None:
-                return cast(int, idem.status_code), Envelope[UsageEvent].model_validate(replay), True
+                return (
+                    cast(int, idem.status_code),
+                    Envelope[UsageEvent].model_validate(replay),
+                    True,
+                )
             event = await tx.record_usage_event(
                 owner_id=principal.subject_id,
                 event_type=request.event_type,
@@ -726,13 +744,17 @@ class PlatformService:
             request_id=request_id_var.get(),
         )
 
-    async def upsert_external_identity_mapping(self, principal: Principal, platform_user_id: UUID, external_user_id: str) -> Envelope[ExternalIdentityMapping]:
+    async def upsert_external_identity_mapping(
+        self, principal: Principal, platform_user_id: UUID, external_user_id: str
+    ) -> Envelope[ExternalIdentityMapping]:
         try:
             admin_id = UUID(principal.subject_id)
         except ValueError as error:
             raise AppError("UNAUTHORIZED", "invalid administrator identity", 401) from error
         async with self.repository.transaction() as tx:
-            mapping = await tx.upsert_external_identity_mapping(platform_user_id, external_user_id, admin_id, datetime.now(UTC))
+            mapping = await tx.upsert_external_identity_mapping(
+                platform_user_id, external_user_id, admin_id, datetime.now(UTC)
+            )
         return Envelope(
             data=ExternalIdentityMapping(
                 platform_user_id=mapping.platform_user_id,

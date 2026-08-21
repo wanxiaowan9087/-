@@ -7,14 +7,17 @@ from fastapi import APIRouter, Body, Depends, Header, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from backend.app.api.dependencies import (
+    get_client_ip,
     get_identity_service,
     get_phone_protector,
+    get_security_rate_limiter,
     get_service,
     get_sms_service,
 )
 from backend.app.application.identity import IdentityService, IdentityUser, IssuedSession
 from backend.app.application.legal import CURRENT_LEGAL_DOCUMENTS
 from backend.app.application.phone_crypto import PhoneProtector
+from backend.app.application.security_rate_limit import RateLimit, SecurityRateLimiter
 from backend.app.application.service import PlatformService
 from backend.app.application.sms_verification import SmsPurpose, SmsVerificationService
 from backend.app.core.config import Settings, get_settings
@@ -121,21 +124,26 @@ def auth_session(grant: IssuedSession) -> AuthSession:
     status_code=201,
     operation_id="registerUser",
     tags=["Authentication"],
-    responses=error_responses(409, 422, 500),
+    responses=error_responses(401, 409, 422, 429, 500),
 )
 async def register(
     request: RegisterRequest,
     identity: IdentityService = Depends(get_identity_service),
     sms: SmsVerificationService = Depends(get_sms_service),
     phone_protector: PhoneProtector = Depends(get_phone_protector),
+    client_ip: str = Depends(get_client_ip),
+    limiter: SecurityRateLimiter = Depends(get_security_rate_limiter),
+    settings: Settings = Depends(get_settings),
 ) -> Envelope[AuthSession]:
-    valid_versions = {
-        item.document_type: item.version for item in CURRENT_LEGAL_DOCUMENTS
-    }
-    if (
-        request.user_agreement_version != valid_versions.get("user_agreement")
-        or request.privacy_policy_version != valid_versions.get("privacy_policy")
-    ):
+    await limiter.enforce(
+        scope="auth-register-ip",
+        identifier=client_ip,
+        limit=RateLimit(settings.auth_register_ip_limit, settings.auth_rate_window_seconds),
+    )
+    valid_versions = {item.document_type: item.version for item in CURRENT_LEGAL_DOCUMENTS}
+    if request.user_agreement_version != valid_versions.get(
+        "user_agreement"
+    ) or request.privacy_policy_version != valid_versions.get("privacy_policy"):
         raise AppError("VALIDATION_ERROR", "legal agreement version is unavailable", 422)
     if not await sms.check(
         phone=request.phone,
@@ -162,13 +170,26 @@ async def register(
     response_model=Envelope[AuthSession],
     operation_id="loginUser",
     tags=["Authentication"],
-    responses=error_responses(401, 422, 500),
+    responses=error_responses(401, 422, 429, 500),
 )
 async def login(
     request: LoginRequest,
     identity: IdentityService = Depends(get_identity_service),
     phone_protector: PhoneProtector = Depends(get_phone_protector),
+    client_ip: str = Depends(get_client_ip),
+    limiter: SecurityRateLimiter = Depends(get_security_rate_limiter),
+    settings: Settings = Depends(get_settings),
 ) -> Envelope[AuthSession]:
+    await limiter.enforce(
+        scope="auth-login-ip",
+        identifier=client_ip,
+        limit=RateLimit(settings.auth_login_ip_limit, settings.auth_rate_window_seconds),
+    )
+    await limiter.enforce(
+        scope="auth-login-phone",
+        identifier=phone_protector.lookup_digest(request.phone),
+        limit=RateLimit(settings.auth_login_phone_limit, settings.auth_rate_window_seconds),
+    )
     grant = await identity.login_phone(
         phone=request.phone,
         phone_protector=phone_protector,
@@ -177,35 +198,97 @@ async def login(
     return Envelope(data=auth_session(grant), request_id=request_id_var.get())
 
 
-@router.post("/auth/sms-codes", response_model=Envelope[SmsCodeResult], operation_id="sendSmsCode", tags=["Authentication"], responses=error_responses(422, 429, 500, 503))
-async def send_sms_code(request: SmsCodeRequest, sms: SmsVerificationService = Depends(get_sms_service)) -> Envelope[SmsCodeResult]:
+@router.post(
+    "/auth/sms-codes",
+    response_model=Envelope[SmsCodeResult],
+    operation_id="sendSmsCode",
+    tags=["Authentication"],
+    responses=error_responses(422, 429, 500, 503),
+)
+async def send_sms_code(
+    request: SmsCodeRequest,
+    sms: SmsVerificationService = Depends(get_sms_service),
+    client_ip: str = Depends(get_client_ip),
+    limiter: SecurityRateLimiter = Depends(get_security_rate_limiter),
+    settings: Settings = Depends(get_settings),
+) -> Envelope[SmsCodeResult]:
+    await limiter.enforce(
+        scope="auth-sms-ip",
+        identifier=client_ip,
+        limit=RateLimit(settings.auth_sms_ip_limit, settings.auth_rate_window_seconds),
+    )
     await sms.send(phone=request.phone, purpose=SmsPurpose(request.purpose))
-    return Envelope(data=SmsCodeResult(accepted=True, retry_after_seconds=60), request_id=request_id_var.get())
+    return Envelope(
+        data=SmsCodeResult(accepted=True, retry_after_seconds=60), request_id=request_id_var.get()
+    )
 
 
-@router.post("/auth/password-resets", response_model=Envelope[PasswordResetResult], operation_id="resetPassword", tags=["Authentication"], responses=error_responses(401, 422, 429, 500, 503))
-async def reset_password(request: PasswordResetRequest, identity: IdentityService = Depends(get_identity_service), sms: SmsVerificationService = Depends(get_sms_service), phone_protector: PhoneProtector = Depends(get_phone_protector)) -> Envelope[PasswordResetResult]:
-    valid = await sms.check(phone=request.phone, purpose=SmsPurpose.PASSWORD_RESET, code=request.verification_code)
+@router.post(
+    "/auth/password-resets",
+    response_model=Envelope[PasswordResetResult],
+    operation_id="resetPassword",
+    tags=["Authentication"],
+    responses=error_responses(401, 422, 429, 500, 503),
+)
+async def reset_password(
+    request: PasswordResetRequest,
+    identity: IdentityService = Depends(get_identity_service),
+    sms: SmsVerificationService = Depends(get_sms_service),
+    phone_protector: PhoneProtector = Depends(get_phone_protector),
+    client_ip: str = Depends(get_client_ip),
+    limiter: SecurityRateLimiter = Depends(get_security_rate_limiter),
+    settings: Settings = Depends(get_settings),
+) -> Envelope[PasswordResetResult]:
+    await limiter.enforce(
+        scope="auth-password-reset-ip",
+        identifier=client_ip,
+        limit=RateLimit(settings.auth_password_reset_ip_limit, settings.auth_rate_window_seconds),
+    )
+    valid = await sms.check(
+        phone=request.phone, purpose=SmsPurpose.PASSWORD_RESET, code=request.verification_code
+    )
     if not valid:
         raise AppError("UNAUTHORIZED", "invalid or expired verification code", 401)
-    await identity.reset_password(phone=request.phone, phone_protector=phone_protector, new_password=request.new_password)
+    await identity.reset_password(
+        phone=request.phone, phone_protector=phone_protector, new_password=request.new_password
+    )
     return Envelope(data=PasswordResetResult(), request_id=request_id_var.get())
 
 
 def _legal_document(document_type: str) -> LegalDocument:
-    document = next((item for item in CURRENT_LEGAL_DOCUMENTS if item.document_type == document_type), None)
+    document = next(
+        (item for item in CURRENT_LEGAL_DOCUMENTS if item.document_type == document_type), None
+    )
     if document is None:
         raise AppError("NOT_FOUND", "legal document not found", 404)
     from datetime import UTC, datetime
-    return LegalDocument(document_type=document.document_type, version=document.version, title=document.title, content=document.content, content_sha256=document.content_digest, effective_at=datetime.now(UTC))
+
+    return LegalDocument(
+        document_type=document.document_type,
+        version=document.version,
+        title=document.title,
+        content=document.content,
+        content_sha256=document.content_digest,
+        effective_at=datetime.now(UTC),
+    )
 
 
-@router.get("/legal/user-agreement", response_model=Envelope[LegalDocument], operation_id="getUserAgreement", tags=["Authentication"])
+@router.get(
+    "/legal/user-agreement",
+    response_model=Envelope[LegalDocument],
+    operation_id="getUserAgreement",
+    tags=["Authentication"],
+)
 async def get_user_agreement() -> Envelope[LegalDocument]:
     return Envelope(data=_legal_document("user_agreement"), request_id=request_id_var.get())
 
 
-@router.get("/legal/privacy-policy", response_model=Envelope[LegalDocument], operation_id="getPrivacyPolicy", tags=["Authentication"])
+@router.get(
+    "/legal/privacy-policy",
+    response_model=Envelope[LegalDocument],
+    operation_id="getPrivacyPolicy",
+    tags=["Authentication"],
+)
 async def get_privacy_policy() -> Envelope[LegalDocument]:
     return Envelope(data=_legal_document("privacy_policy"), request_id=request_id_var.get())
 
@@ -492,7 +575,26 @@ async def stream_chat(
     last_event_id: Annotated[int, Header(alias="Last-Event-ID", ge=0)] = 0,
     principal: Principal = Depends(get_principal),
     service: PlatformService = Depends(get_service),
+    client_ip: str = Depends(get_client_ip),
+    limiter: SecurityRateLimiter = Depends(get_security_rate_limiter),
+    settings: Settings = Depends(get_settings),
 ) -> StreamingResponse:
+    if last_event_id == 0:
+        await limiter.enforce(
+            scope="chat-ip-minute",
+            identifier=client_ip,
+            limit=RateLimit(settings.chat_ip_per_minute_limit, 60),
+        )
+        await limiter.enforce(
+            scope="chat-user-minute",
+            identifier=principal.subject_id,
+            limit=RateLimit(settings.chat_user_per_minute_limit, 60),
+        )
+        await limiter.enforce(
+            scope="chat-user-day",
+            identifier=principal.subject_id,
+            limit=RateLimit(settings.chat_user_daily_limit, 86_400),
+        )
     session_id, run_id, replayed, stream = await service.prepare_stream(
         principal, key, request, last_event_id
     )

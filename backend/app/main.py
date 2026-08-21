@@ -23,6 +23,11 @@ from backend.app.api.v1.routes import router
 from backend.app.application.identity import IdentityService
 from backend.app.application.phone_crypto import PhoneProtector
 from backend.app.application.ports import RunExecutorPort
+from backend.app.application.security_rate_limit import (
+    InMemorySecurityRateLimiter,
+    RedisSecurityRateLimiter,
+    SecurityRateLimiter,
+)
 from backend.app.application.service import PlatformService
 from backend.app.application.sms_verification import (
     InMemoryRateLimiter,
@@ -64,9 +69,7 @@ def create_app(
     if repository is None:
         engine = create_engine(settings)
         session_factory = create_session_factory(engine)
-        repository_adapter: PlatformRepository = SqlPlatformRepository(
-            session_factory, engine
-        )
+        repository_adapter: PlatformRepository = SqlPlatformRepository(session_factory, engine)
         resolved_identity_service = identity_service or IdentityService(
             SqlIdentityStore(session_factory), token_ttl_seconds=settings.auth_token_ttl_seconds
         )
@@ -86,6 +89,8 @@ def create_app(
         cursor_secret=settings.cursor_signing_secret,
         idempotency_ttl_seconds=settings.idempotency_ttl_seconds,
         stream_retention_seconds=settings.stream_retention_seconds,
+        max_concurrent_runs=settings.agent_max_concurrent_runs,
+        max_concurrent_runs_per_user=settings.agent_max_concurrent_runs_per_user,
         redis_probe=redis_adapter,
         vector_probe=getattr(executor_adapter, "vector_probe", None),
         knowledge_indexer=knowledge_indexer,
@@ -115,6 +120,8 @@ def create_app(
         settings.sms_verify_lock_seconds,
     )
     redis_client = redis_adapter.client()
+    if settings.environment == "production" and redis_client is None:
+        raise ValueError("production security rate limiting requires Redis")
     if (
         settings.environment == "production"
         and settings.sms_provider == "aliyun"
@@ -133,6 +140,11 @@ def create_app(
     )
     sms_service = SmsVerificationService(
         build_sms_provider(settings), sms_limiter, sms_attempt_limiter
+    )
+    security_rate_limiter = SecurityRateLimiter(
+        RedisSecurityRateLimiter(redis_client)
+        if redis_client is not None
+        else InMemorySecurityRateLimiter()
     )
     usage_worker = UsageSummaryWorker(repository_adapter)
 
@@ -255,6 +267,7 @@ def create_app(
     app.state.identity_service = resolved_identity_service
     app.state.phone_protector = phone_protector
     app.state.sms_service = sms_service
+    app.state.security_rate_limiter = security_rate_limiter
     app.state.avatar_store = AvatarStore(settings.uploads_dir)
     app.state.knowledge_catalog = KnowledgeCatalog(settings.uploads_dir, knowledge_indexer)
     app.state.usage_summary_worker = usage_worker

@@ -6,8 +6,8 @@ import pytest
 from httpx import AsyncClient
 
 from backend.app.adapters.auth.memory import MemoryIdentityStore
-from backend.app.application.legal import CURRENT_LEGAL_DOCUMENTS
 from backend.app.application.identity import IdentityService
+from backend.app.application.legal import CURRENT_LEGAL_DOCUMENTS
 from backend.app.core.errors import AppError
 
 
@@ -99,6 +99,8 @@ async def test_profile_password_change_requires_current_password(
         json={"current_password": "Safe@123", "new_password": "New@456"},
     )
     assert changed.status_code == 200
+    old_token = await identity_client.get("/api/v1/auth/me", headers=headers)
+    assert old_token.status_code == 401
     login = await identity_client.post(
         "/api/v1/auth/login",
         json={"phone": "13800138005", "password": "New@456"},
@@ -161,8 +163,12 @@ async def test_ensure_admin_synchronizes_bootstrap_password() -> None:
     store = MemoryIdentityStore()
     service = IdentityService(store, token_ttl_seconds=3600)
     await service.ensure_admin(username="xiaow", password="Old@123", nickname="Admin")
+    old_session = await service.login(username="xiaow", password="Old@123")
     await service.ensure_admin(username="xiaow", password="New@456", nickname="Admin")
 
     session = await service.login(username="xiaow", password="New@456")
 
     assert session.user.role == "admin"
+    with pytest.raises(AppError) as error:
+        await service.authenticate(old_session.access_token)
+    assert error.value.code == "UNAUTHORIZED"

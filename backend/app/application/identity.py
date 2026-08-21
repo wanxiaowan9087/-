@@ -13,8 +13,7 @@ from uuid import UUID, uuid4
 from backend.app.core.errors import AppError, conflict, not_found
 
 DEFAULT_AVATAR_URL = (
-    "https://images.unsplash.com/photo-1534528741775-53994a69daeb"
-    "?auto=format&fit=crop&w=160&q=80"
+    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=160&q=80"
 )
 
 
@@ -56,7 +55,9 @@ class IdentityStore(Protocol):
 
     async def update_password(self, user_id: UUID, password_hash: str) -> IdentityUser | None: ...
 
-    async def update_phone_password(self, user_id: UUID, password_hash: str, *, tokens_revoked_after: datetime) -> IdentityUser | None: ...
+    async def update_phone_password(
+        self, user_id: UUID, password_hash: str, *, tokens_revoked_after: datetime
+    ) -> IdentityUser | None: ...
 
     async def save_token(
         self, user_id: UUID, token_digest: str, created_at: datetime, expires_at: datetime
@@ -152,15 +153,25 @@ class IdentityService:
         normalized_username = username.strip().lower()
         existing = await self._store.find_user_by_username(normalized_username)
         if existing is None:
-            return await self._store.create_user(IdentityUser(
-                id=uuid4(), username=normalized_username,
-                nickname=nickname.strip() or "系统管理员", avatar_url=DEFAULT_AVATAR_URL,
-                password_hash=self._hasher.hash(password), role="admin", created_at=self._clock(),
-            ))
+            return await self._store.create_user(
+                IdentityUser(
+                    id=uuid4(),
+                    username=normalized_username,
+                    nickname=nickname.strip() or "系统管理员",
+                    avatar_url=DEFAULT_AVATAR_URL,
+                    password_hash=self._hasher.hash(password),
+                    role="admin",
+                    created_at=self._clock(),
+                )
+            )
         if existing.role != "admin":
             await self._store.set_role(existing.id, "admin")
         if not self._hasher.verify(password, existing.password_hash):
-            await self._store.update_password(existing.id, self._hasher.hash(password))
+            await self._store.update_phone_password(
+                existing.id,
+                self._hasher.hash(password),
+                tokens_revoked_after=self._clock(),
+            )
         refreshed = await self._store.find_user_by_id(existing.id)
         return refreshed or existing
 
@@ -170,17 +181,34 @@ class IdentityService:
             raise AppError("UNAUTHORIZED", "invalid username or password", 401)
         return await self._issue(user, self._clock())
 
-    async def register_phone(self, *, phone: str, phone_protector, password: str, nickname: str,
-                             avatar_url: str | None = None, consent_versions: dict[str, object] | None = None) -> IssuedSession:
+    async def register_phone(
+        self,
+        *,
+        phone: str,
+        phone_protector,
+        password: str,
+        nickname: str,
+        avatar_url: str | None = None,
+        consent_versions: dict[str, object] | None = None,
+    ) -> IssuedSession:
         _validate_password(password)
         digest = phone_protector.lookup_digest(phone)
         if await self._store.find_user_by_phone_digest(digest):
             raise conflict("phone is already registered")
         now = self._clock()
-        user = IdentityUser(id=uuid4(), username=f"phone_{digest[:16]}", nickname=nickname.strip(),
-            avatar_url=(avatar_url or DEFAULT_AVATAR_URL).strip(), password_hash=self._hasher.hash(password), role="user",
-            created_at=now, phone_ciphertext=phone_protector.encrypt(phone), phone_lookup_digest=digest,
-            phone_key_version=phone_protector.key_version, phone_verified_at=now)
+        user = IdentityUser(
+            id=uuid4(),
+            username=f"phone_{digest[:16]}",
+            nickname=nickname.strip(),
+            avatar_url=(avatar_url or DEFAULT_AVATAR_URL).strip(),
+            password_hash=self._hasher.hash(password),
+            role="user",
+            created_at=now,
+            phone_ciphertext=phone_protector.encrypt(phone),
+            phone_lookup_digest=digest,
+            phone_key_version=phone_protector.key_version,
+            phone_verified_at=now,
+        )
         created = await self._store.create_user(user)
         save_consents = getattr(self._store, "save_consents", None)
         if consent_versions and save_consents is not None:
@@ -193,12 +221,16 @@ class IdentityService:
             raise AppError("UNAUTHORIZED", "invalid phone or password", 401)
         return await self._issue(user, self._clock())
 
-    async def reset_password(self, *, phone: str, phone_protector, new_password: str) -> IdentityUser:
+    async def reset_password(
+        self, *, phone: str, phone_protector, new_password: str
+    ) -> IdentityUser:
         _validate_password(new_password)
         user = await self._store.find_user_by_phone_digest(phone_protector.lookup_digest(phone))
         if user is None:
             raise AppError("UNAUTHORIZED", "invalid phone or password", 401)
-        updated = await self._store.update_phone_password(user.id, self._hasher.hash(new_password), tokens_revoked_after=self._clock())
+        updated = await self._store.update_phone_password(
+            user.id, self._hasher.hash(new_password), tokens_revoked_after=self._clock()
+        )
         if updated is None:
             raise AppError("UNAUTHORIZED", "invalid phone or password", 401)
         return updated
@@ -257,7 +289,11 @@ class IdentityService:
             raise AppError(
                 "VALIDATION_ERROR", "new password must differ from current password", 422
             )
-        updated = await self._store.update_password(user_id, self._hasher.hash(new_password))
+        updated = await self._store.update_phone_password(
+            user_id,
+            self._hasher.hash(new_password),
+            tokens_revoked_after=self._clock(),
+        )
         if updated is None:
             raise not_found()
         return updated

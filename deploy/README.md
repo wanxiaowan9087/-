@@ -62,6 +62,26 @@ check clears the counter. The existing send limits remain 60 seconds between sen
 five per hour, and ten per day. These values may be changed through the corresponding
 `APP_SMS_VERIFY_*` variables in `deploy/production.env`.
 
+The API also applies Redis-backed fixed-window limits before expensive work starts:
+
+- Login: 15 attempts per IP and 8 attempts per phone in 15 minutes.
+- Registration: 10 attempts per IP in 15 minutes.
+- SMS and password reset: 5 and 10 attempts per IP in 15 minutes.
+- Chat: 12 requests per IP per minute, 6 requests per user per minute, and 80 per
+  user per day.
+- Agent execution: at most 4 active runs globally and 1 active run per user on the
+  single production worker.
+
+All rate-limit responses use the standard error envelope with HTTP `429` and a
+`Retry-After` header. Redis is required in production; the in-memory adapter is
+available only for local development and isolated tests. Redis keys contain a
+SHA-256 digest of the IP, phone lookup digest, or user ID rather than the raw value.
+
+Nginx is the only public process. It applies an additional request, connection, and
+body-size limit, sets `X-Real-IP` from the connected client address, and the backend
+does not trust arbitrary forwarded-IP headers. Keep port `8000` private to the Docker
+network so clients cannot bypass these controls.
+
 Run the non-destructive configuration check before startup:
 
 ```bash
