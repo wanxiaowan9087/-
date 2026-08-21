@@ -99,11 +99,51 @@ export interface AuthUser {
   created_at: string
 }
 
+export interface UsageSummary {
+  status: 'ready' | 'updating' | 'empty'
+  version: number
+  conversation_overview: {
+    session_count: number
+    message_count: number
+    active_days: number
+    top_topics: Array<{ name: string; count: number }>
+  }
+  facts: Array<{ content: string; confidence: number; source_message_id: string }>
+  preferences: Array<{ content: string; confidence: number; source_message_id: string }>
+  product_activity: {
+    recommended_models: Array<{ product_id: string | null; model_code: string; recommendation_count: number }>
+    detail_view_count: number
+    three_d_view_count: number
+  }
+  device_usage: { status: 'available' | 'unavailable'; reason: string | null }
+  generated_at: string | null
+  data_through_at: string | null
+}
+
+export interface UsageEvent {
+  id: string
+  event_type: 'product_detail_viewed' | 'product_3d_viewed' | 'product_recommended'
+  product_id: string | null
+  model_code: string | null
+  occurred_at: string
+}
+
 export interface AuthSession {
   access_token: string
   token_type: 'Bearer'
   expires_at: string
   user: AuthUser
+}
+
+export type SmsPurpose = 'register' | 'password_reset'
+
+export interface LegalDocument {
+  document_type: 'user_agreement' | 'privacy_policy'
+  version: string
+  title: string
+  content: string
+  content_sha256: string
+  effective_at: string
 }
 
 export type ChatRequest =

@@ -54,6 +54,79 @@ async def _stream_new(
     return response.headers["x-run-id"]
 
 
+@pytest.mark.asyncio
+async def test_usage_event_is_scoped_to_authenticated_user_and_idempotent(
+    scenario_harness: ScenarioHarness,
+) -> None:
+    client = scenario_harness.client
+    payload = {
+        "event_type": "product_detail_viewed",
+        "product_id": "m6-mini",
+        "model_code": "M6 Mini",
+    }
+    headers = _headers("usage-event-key-0001")
+
+    created = await client.post("/api/v1/me/usage-events", headers=headers, json=payload)
+    assert created.status_code == 201
+    _assert_envelope(created)
+    replayed = await client.post("/api/v1/me/usage-events", headers=headers, json=payload)
+    assert replayed.status_code == 201
+    assert replayed.headers["idempotency-replayed"] == "true"
+    conflict_response = await client.post(
+        "/api/v1/me/usage-events",
+        headers=headers,
+        json={**payload, "event_type": "product_3d_viewed"},
+    )
+    assert conflict_response.status_code == 409
+
+    async with scenario_harness.repository.transaction() as tx:
+        alice_events = await tx.list_usage_events("alice", limit=20)
+        bob_events = await tx.list_usage_events("bob", limit=20)
+    assert [(event.product_id, event.model_code) for event in alice_events] == [
+        ("m6-mini", "M6 Mini")
+    ]
+    assert bob_events == []
+
+
+@pytest.mark.asyncio
+async def test_usage_summary_empty_state_is_isolated_per_user(
+    scenario_harness: ScenarioHarness,
+) -> None:
+    client = scenario_harness.client
+    for headers in (USER, OTHER_USER):
+        response = await client.get("/api/v1/me/usage-summary", headers=headers)
+        assert response.status_code == 200
+        _assert_envelope(response)
+        assert response.json()["data"]["status"] == "empty"
+        assert response.json()["data"]["conversation_overview"]["session_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_completed_chat_generates_user_usage_summary_snapshot(
+    scenario_harness: ScenarioHarness,
+) -> None:
+    client = scenario_harness.client
+    session_id = await _create_session(client, "usage-summary-chat-session")
+    await _stream_new(client, session_id, "usage-summary-chat-stream", "我想了解安静的扫地机器人")
+
+    updating = await client.get("/api/v1/me/usage-summary", headers=USER)
+    assert updating.status_code == 200
+    assert updating.json()["data"]["status"] == "updating"
+
+    # ASGITransport does not drive application lifespan/background polling, so
+    # explicitly advance the same durable worker used by production.
+    assert await scenario_harness.usage_summary_worker.run_once() >= 1
+    summary = await client.get("/api/v1/me/usage-summary", headers=USER)
+
+    assert summary.status_code == 200
+    _assert_envelope(summary)
+    data = summary.json()["data"]
+    assert data["status"] == "ready"
+    assert data["conversation_overview"]["session_count"] == 1
+    assert data["conversation_overview"]["message_count"] == 2
+    assert data["device_usage"]["status"] == "unavailable"
+
+
 async def _streamed_ids(client: AsyncClient, session_id: str, key: str) -> tuple[str, str, str]:
     run_id = await _stream_new(client, session_id, key)
     messages = await client.get(f"/api/v1/sessions/{session_id}/messages", headers=USER)

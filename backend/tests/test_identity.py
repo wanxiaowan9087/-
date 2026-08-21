@@ -6,14 +6,30 @@ import pytest
 from httpx import AsyncClient
 
 from backend.app.adapters.auth.memory import MemoryIdentityStore
+from backend.app.application.legal import CURRENT_LEGAL_DOCUMENTS
 from backend.app.application.identity import IdentityService
 from backend.app.core.errors import AppError
 
 
-async def register(client: AsyncClient, username: str, nickname: str) -> str:
+async def register(client: AsyncClient, phone: str, nickname: str) -> str:
+    versions = {item.document_type: item.version for item in CURRENT_LEGAL_DOCUMENTS}
+    code_response = await client.post(
+        "/api/v1/auth/sms-codes", json={"phone": phone, "purpose": "register"}
+    )
+    assert code_response.status_code == 200
+    provider = client._transport.app.state.sms_service.provider  # type: ignore[attr-defined]
     response = await client.post(
         "/api/v1/auth/register",
-        json={"username": username, "password": "Safe@123", "nickname": nickname},
+        json={
+            "phone": phone,
+            "password": "Safe@123",
+            "nickname": nickname,
+            "verification_code": provider.last_code,
+            "user_agreement_version": versions["user_agreement"],
+            "privacy_policy_version": versions["privacy_policy"],
+            "agree_user_agreement": True,
+            "agree_privacy_policy": True,
+        },
     )
     assert response.status_code == 201
     assert response.json()["data"]["user"]["nickname"] == nickname
@@ -23,14 +39,14 @@ async def register(client: AsyncClient, username: str, nickname: str) -> str:
 
 @pytest.mark.asyncio
 async def test_registered_identity_isolated_sessions(identity_client: AsyncClient) -> None:
-    alice_token = await register(identity_client, "alice_01", "Alice")
-    bob_token = await register(identity_client, "bob_01", "Bob")
+    alice_token = await register(identity_client, "13800138001", "Alice")
+    bob_token = await register(identity_client, "13800138002", "Bob")
     alice = {"Authorization": f"Bearer {alice_token}"}
     bob = {"Authorization": f"Bearer {bob_token}"}
 
     profile = await identity_client.get("/api/v1/auth/me", headers=alice)
     assert profile.status_code == 200
-    assert profile.json()["data"]["username"] == "alice_01"
+    assert profile.json()["data"]["username"].startswith("phone_")
 
     created = await identity_client.post(
         "/api/v1/sessions",
@@ -49,10 +65,10 @@ async def test_registered_identity_isolated_sessions(identity_client: AsyncClien
 
 @pytest.mark.asyncio
 async def test_login_rejects_wrong_password(identity_client: AsyncClient) -> None:
-    await register(identity_client, "login_user", "登录用户")
+    await register(identity_client, "13800138003", "登录用户")
     response = await identity_client.post(
         "/api/v1/auth/login",
-        json={"username": "login_user", "password": "wrong-password"},
+        json={"phone": "13800138003", "password": "wrong-password"},
     )
     assert response.status_code == 401
     assert response.json()["code"] == "UNAUTHORIZED"
@@ -60,7 +76,7 @@ async def test_login_rejects_wrong_password(identity_client: AsyncClient) -> Non
 
 @pytest.mark.asyncio
 async def test_profile_can_update_nickname_and_avatar(identity_client: AsyncClient) -> None:
-    token = await register(identity_client, "profile_01", "原昵称")
+    token = await register(identity_client, "13800138004", "原昵称")
     response = await identity_client.patch(
         "/api/v1/auth/me",
         headers={"Authorization": f"Bearer {token}"},
@@ -75,7 +91,7 @@ async def test_profile_can_update_nickname_and_avatar(identity_client: AsyncClie
 async def test_profile_password_change_requires_current_password(
     identity_client: AsyncClient,
 ) -> None:
-    token = await register(identity_client, "password_01", "Password user")
+    token = await register(identity_client, "13800138005", "Password user")
     headers = {"Authorization": f"Bearer {token}"}
     changed = await identity_client.patch(
         "/api/v1/auth/me/password",
@@ -85,7 +101,7 @@ async def test_profile_password_change_requires_current_password(
     assert changed.status_code == 200
     login = await identity_client.post(
         "/api/v1/auth/login",
-        json={"username": "password_01", "password": "New@456"},
+        json={"phone": "13800138005", "password": "New@456"},
     )
     assert login.status_code == 200
 
@@ -125,7 +141,16 @@ async def test_password_requires_letter_number_and_special_character(
 ) -> None:
     response = await identity_client.post(
         "/api/v1/auth/register",
-        json={"username": "weak_password", "password": "letters123", "nickname": "弱密码"},
+        json={
+            "phone": "13800138006",
+            "password": "letters123",
+            "nickname": "弱密码",
+            "verification_code": "123456",
+            "user_agreement_version": CURRENT_LEGAL_DOCUMENTS[0].version,
+            "privacy_policy_version": CURRENT_LEGAL_DOCUMENTS[1].version,
+            "agree_user_agreement": True,
+            "agree_privacy_policy": True,
+        },
     )
     assert response.status_code == 422
     assert response.json()["code"] == "VALIDATION_ERROR"

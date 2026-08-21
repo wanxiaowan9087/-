@@ -58,7 +58,9 @@ class IdentityStore(Protocol):
 
     async def update_phone_password(self, user_id: UUID, password_hash: str, *, tokens_revoked_after: datetime) -> IdentityUser | None: ...
 
-    async def save_token(self, user_id: UUID, token_digest: str, expires_at: datetime) -> None: ...
+    async def save_token(
+        self, user_id: UUID, token_digest: str, created_at: datetime, expires_at: datetime
+    ) -> None: ...
 
     async def authenticate_token(
         self, token_digest: str, now: datetime, refreshed_expires_at: datetime
@@ -263,7 +265,7 @@ class IdentityService:
     async def _issue(self, user: IdentityUser, now: datetime) -> IssuedSession:
         token = secrets.token_urlsafe(32)
         expires_at = now + self._token_ttl
-        await self._store.save_token(user.id, _token_digest(token), expires_at)
+        await self._store.save_token(user.id, _token_digest(token), now, expires_at)
         return IssuedSession(access_token=token, expires_at=expires_at, user=user)
 
 

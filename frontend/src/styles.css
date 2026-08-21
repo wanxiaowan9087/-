@@ -648,6 +648,19 @@ textarea:focus-visible {
 .auth-browse { padding: 7px; color: #8d7561; }
 .auth-browse:hover { color: #4f3a2b; }
 .auth-password-note { margin: -4px 0 14px; color: #7d6857; font-size: 11px; line-height: 1.55; }
+.auth-code-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.auth-code-row input { min-width: 0; }
+.auth-code-button { min-width: 112px; padding: 0 11px; border: 1px solid rgba(40, 90, 89, .38); background: #eef6f3; color: #285a59; font-size: 11px; cursor: pointer; }
+.auth-code-button:hover:not(:disabled) { border-color: #285a59; background: #e2f0eb; }
+.auth-code-button:disabled { opacity: .56; cursor: wait; }
+.auth-consents { display: grid; gap: 8px; margin-top: 15px; }
+.auth-consent { display: flex !important; grid-template-columns: none !important; align-items: flex-start; gap: 8px !important; margin-top: 0 !important; color: #756352 !important; font-size: 11px !important; line-height: 1.55; letter-spacing: 0 !important; }
+.auth-consent input { width: 15px !important; height: 15px; flex: 0 0 15px; margin: 1px 0 0; accent-color: #285a59; }
+.auth-consent button { padding: 0; border: 0; background: transparent; color: #285a59; text-decoration: underline; cursor: pointer; font: inherit; }
+.legal-card { position: relative; width: min(720px, 100%); max-height: min(82vh, 760px); overflow: auto; padding: 42px 44px 34px; color: #28231e; background: #fffaf1; border: 1px solid rgba(153, 113, 73, .3); box-shadow: 0 24px 80px rgba(37, 29, 21, .28); }
+.legal-card h2 { margin: 8px 0; font: 600 28px/1.2 var(--font-display); }
+.legal-meta { margin: 0 0 22px; color: #8d7561; font-size: 11px; }
+.legal-content { white-space: pre-wrap; color: #5e4b38; font-size: 13px; line-height: 1.85; }
 .profile-overlay { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 24px; background: rgba(34, 29, 24, .48); backdrop-filter: blur(14px); }
 .profile-card { position: relative; width: min(460px, 100%); padding: 42px 42px 30px; color: #28231e; background: #fffaf1; border: 1px solid rgba(153, 113, 73, .3); box-shadow: 0 24px 80px rgba(37, 29, 21, .28); }
 .profile-card h2 { margin: 8px 0; font: 600 30px/1.2 var(--font-display); }

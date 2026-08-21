@@ -12,7 +12,16 @@ class MemoryIdentityStore(IdentityStore):
         self._users: dict[UUID, IdentityUser] = {}
         self._usernames: dict[str, UUID] = {}
         self._phones: dict[str, UUID] = {}
-        self._tokens: dict[str, tuple[UUID, datetime]] = {}
+        self._tokens: dict[str, tuple[UUID, datetime, datetime]] = {}
+        self.consents: dict[UUID, dict[str, tuple[str, datetime]]] = {}
+
+    async def save_consents(
+        self, user_id: UUID, versions: dict[str, object], now: datetime
+    ) -> None:
+        """Mirror SQL consent persistence for deterministic local/test stores."""
+        current = self.consents.setdefault(user_id, {})
+        for document_type, version in versions.items():
+            current[document_type] = (str(version), now)
 
     async def create_user(self, user: IdentityUser) -> IdentityUser:
         if user.username in self._usernames:
@@ -87,19 +96,23 @@ class MemoryIdentityStore(IdentityStore):
         self._users[user_id] = updated
         return updated
 
-    async def save_token(self, user_id: UUID, token_digest: str, expires_at: datetime) -> None:
-        self._tokens[token_digest] = (user_id, expires_at)
+    async def save_token(
+        self, user_id: UUID, token_digest: str, created_at: datetime, expires_at: datetime
+    ) -> None:
+        self._tokens[token_digest] = (user_id, created_at, expires_at)
 
     async def authenticate_token(
         self, token_digest: str, now: datetime, refreshed_expires_at: datetime
     ) -> IdentityUser | None:
         token = self._tokens.get(token_digest)
-        if token is None or token[1] <= now:
+        if token is None or token[2] <= now:
             return None
         user = self._users.get(token[0])
-        if user is None or (user.tokens_revoked_after is not None and token[1] <= user.tokens_revoked_after):
+        if user is None or (
+            user.tokens_revoked_after is not None and token[1] <= user.tokens_revoked_after
+        ):
             return None
-        self._tokens[token_digest] = (token[0], refreshed_expires_at)
+        self._tokens[token_digest] = (token[0], token[1], refreshed_expires_at)
         return user
 
     async def set_role(self, user_id: UUID, role: str) -> IdentityUser | None:

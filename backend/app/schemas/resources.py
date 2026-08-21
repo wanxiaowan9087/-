@@ -23,7 +23,7 @@ class ReadyStatus(ContractModel):
 
 class AuthUser(ContractModel):
     id: UUID
-    username: str = Field(min_length=3, max_length=32)
+    username: str = Field(min_length=3, max_length=64)
     nickname: str = Field(min_length=1, max_length=40)
     avatar_url: str = Field(min_length=8, max_length=2048)
     role: Literal["user", "reviewer", "admin"]
@@ -31,9 +31,14 @@ class AuthUser(ContractModel):
 
 
 class RegisterRequest(ContractModel):
-    username: str = Field(min_length=3, max_length=32, pattern=r"^[A-Za-z0-9_]+$")
+    phone: str = Field(min_length=11, max_length=16)
     password: str = Field(min_length=6, max_length=20)
     nickname: str = Field(min_length=1, max_length=40)
+    verification_code: str = Field(min_length=6, max_length=6, pattern=r"^[0-9]{6}$")
+    user_agreement_version: str = Field(min_length=1, max_length=32)
+    privacy_policy_version: str = Field(min_length=1, max_length=32)
+    agree_user_agreement: Literal[True]
+    agree_privacy_policy: Literal[True]
     avatar_url: str | None = Field(default=None, min_length=8, max_length=2048)
 
     @field_validator("password")
@@ -49,8 +54,44 @@ class RegisterRequest(ContractModel):
 
 
 class LoginRequest(ContractModel):
-    username: str = Field(min_length=3, max_length=32, pattern=r"^[A-Za-z0-9_]+$")
+    phone: str = Field(min_length=11, max_length=16)
     password: str = Field(min_length=6, max_length=20)
+
+
+class SmsCodeRequest(ContractModel):
+    phone: str = Field(min_length=11, max_length=16)
+    purpose: Literal["register", "password_reset"]
+
+
+class SmsCodeResult(ContractModel):
+    accepted: bool = True
+    retry_after_seconds: int = Field(ge=0)
+
+
+class PasswordResetRequest(ContractModel):
+    phone: str = Field(min_length=11, max_length=16)
+    verification_code: str = Field(min_length=6, max_length=6, pattern=r"^[0-9]{6}$")
+    new_password: str = Field(min_length=6, max_length=20)
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_reset_password(cls, value: str) -> str:
+        if not any(char.isalpha() for char in value) or not any(char.isdigit() for char in value) or not any(not char.isalnum() for char in value):
+            raise ValueError("password must contain a letter, number, and special character")
+        return value
+
+
+class LegalDocument(ContractModel):
+    document_type: Literal["user_agreement", "privacy_policy"]
+    version: str
+    title: str
+    content: str
+    content_sha256: str
+    effective_at: datetime
+
+
+class PasswordResetResult(ContractModel):
+    reset: bool = True
 
 
 class UpdateProfileRequest(ContractModel):
@@ -233,6 +274,67 @@ class ExternalIdentityMapping(ContractModel):
     updated_at: datetime
 
 
+class UsageSummaryTopic(ContractModel):
+    name: str = Field(min_length=1, max_length=80)
+    count: int = Field(ge=1)
+
+
+class UsageSummaryMemory(ContractModel):
+    content: str = Field(min_length=1, max_length=5000)
+    confidence: float = Field(ge=0, le=1)
+    source_message_id: UUID
+
+
+class UsageSummaryProduct(ContractModel):
+    product_id: str | None = Field(default=None, max_length=128)
+    model_code: str = Field(min_length=1, max_length=128)
+    recommendation_count: int = Field(ge=1)
+
+
+class UsageSummaryDeviceUsage(ContractModel):
+    status: Literal["available", "unavailable"]
+    reason: str | None = Field(default=None, max_length=200)
+
+
+class UsageSummaryConversationOverview(ContractModel):
+    session_count: int = Field(ge=0)
+    message_count: int = Field(ge=0)
+    active_days: int = Field(ge=0)
+    top_topics: list[UsageSummaryTopic] = Field(default_factory=list, max_length=10)
+
+
+class UsageSummaryProductActivity(ContractModel):
+    recommended_models: list[UsageSummaryProduct] = Field(default_factory=list, max_length=20)
+    detail_view_count: int = Field(ge=0)
+    three_d_view_count: int = Field(ge=0)
+
+
+class UsageSummary(ContractModel):
+    status: Literal["ready", "updating", "empty"]
+    version: int = Field(ge=0)
+    conversation_overview: UsageSummaryConversationOverview
+    facts: list[UsageSummaryMemory] = Field(default_factory=list, max_length=50)
+    preferences: list[UsageSummaryMemory] = Field(default_factory=list, max_length=50)
+    product_activity: UsageSummaryProductActivity
+    device_usage: UsageSummaryDeviceUsage
+    generated_at: datetime | None
+    data_through_at: datetime | None
+
+
+class UsageEventRequest(ContractModel):
+    event_type: Literal["product_detail_viewed", "product_3d_viewed"]
+    product_id: str = Field(min_length=1, max_length=128)
+    model_code: str | None = Field(default=None, max_length=128)
+
+
+class UsageEvent(ContractModel):
+    id: UUID
+    event_type: Literal["product_detail_viewed", "product_3d_viewed", "product_recommended"]
+    product_id: str | None
+    model_code: str | None
+    occurred_at: datetime
+
+
 class CorrectMemoryRequest(ContractModel):
     action: Literal["correct"]
     content: str = Field(min_length=1, max_length=5000)
@@ -317,3 +419,5 @@ KnowledgeFileEnvelope = Envelope[KnowledgeFile]
 DeleteMemoryEnvelope = Envelope[DeleteMemoryResult]
 ReviewPageEnvelope = Envelope[Page[ReviewTask]]
 ReviewDecisionEnvelope = Envelope[ReviewDecisionResult]
+UsageSummaryEnvelope = Envelope[UsageSummary]
+UsageEventEnvelope = Envelope[UsageEvent]

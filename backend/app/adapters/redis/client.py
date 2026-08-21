@@ -23,6 +23,10 @@ class OptionalRedisAdapter:
             )
         return self._client
 
+    def client(self) -> redis.Redis | None:
+        """Return the lazily-created client for shared ephemeral services."""
+        return self._get_client()
+
     async def health(self) -> str:
         client = self._get_client()
         if client is None:

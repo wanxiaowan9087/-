@@ -14,6 +14,9 @@ from backend.app.domain.records import (
     RunRecord,
     SessionRecord,
     StreamEventRecord,
+    SummaryUpdateJobRecord,
+    UsageEventRecord,
+    UserSummarySnapshotRecord,
 )
 
 
@@ -115,6 +118,72 @@ class PlatformTransaction(Protocol):
         citations: list[dict[str, Any]] | None = None,
         product_recommendations: list[dict[str, Any]] | None = None,
     ) -> RunRecord | None: ...
+
+    async def enqueue_summary_update(
+        self,
+        *,
+        owner_id: str,
+        session_id: UUID,
+        trigger_message_id: UUID,
+        now: datetime,
+    ) -> SummaryUpdateJobRecord: ...
+
+    async def claim_summary_update_jobs(
+        self, *, now: datetime, limit: int
+    ) -> list[SummaryUpdateJobRecord]: ...
+
+    async def complete_summary_update_job(
+        self,
+        job_id: UUID,
+        *,
+        summary: dict[str, Any],
+        display_summary: str,
+        data_through_at: datetime | None,
+        generator_version: str,
+        now: datetime,
+    ) -> UserSummarySnapshotRecord | None: ...
+
+    async def fail_summary_update_job(
+        self,
+        job_id: UUID,
+        *,
+        error_code: str,
+        error_summary: str,
+        retry_at: datetime | None,
+        now: datetime,
+    ) -> None: ...
+
+    async def get_latest_usage_summary(
+        self, owner_id: str
+    ) -> UserSummarySnapshotRecord | None: ...
+
+    async def has_pending_summary_update(self, owner_id: str) -> bool: ...
+
+    async def record_product_recommendations(
+        self,
+        *,
+        owner_id: str,
+        session_id: UUID,
+        message_id: UUID,
+        recommendations: list[dict[str, Any]],
+        now: datetime,
+    ) -> None: ...
+
+    async def record_usage_event(
+        self,
+        *,
+        owner_id: str,
+        event_type: str,
+        product_id: str | None,
+        model_code: str | None,
+        now: datetime,
+    ) -> UsageEventRecord: ...
+
+    async def list_usage_events(
+        self, owner_id: str, *, limit: int
+    ) -> list[UsageEventRecord]: ...
+
+    async def purge_expired_usage_data(self, *, now: datetime) -> dict[str, int]: ...
 
     async def create_feedback(
         self,

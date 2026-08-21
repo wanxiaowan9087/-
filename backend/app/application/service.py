@@ -42,6 +42,9 @@ from backend.app.schemas.resources import (
     ReviewTask,
     RunTrace,
     Session,
+    UsageSummary,
+    UsageEvent,
+    UsageEventRequest,
 )
 
 DEFAULT_SESSION_TITLES = {"", "新会话", "New agent session", "Agent session", "Untitled session"}
@@ -532,6 +535,78 @@ class PlatformService:
             ended_at=run.ended_at,
         )
         return Envelope(data=trace, request_id=request_id_var.get())
+
+    async def get_usage_summary(self, principal: Principal) -> Envelope[UsageSummary]:
+        async with self.repository.transaction() as tx:
+            snapshot = await tx.get_latest_usage_summary(principal.subject_id)
+            updating = await tx.has_pending_summary_update(principal.subject_id)
+        if snapshot is None:
+            from backend.app.application.usage_summary import empty_usage_summary
+
+            data = empty_usage_summary()
+            data.update(
+                {
+                    "status": "updating" if updating else "empty",
+                    "version": 0,
+                    "generated_at": None,
+                    "data_through_at": None,
+                }
+            )
+        else:
+            data = dict(snapshot.summary)
+            data.update(
+                {
+                    "status": "updating" if updating else "ready",
+                    "version": snapshot.version,
+                    "generated_at": snapshot.generated_at,
+                    "data_through_at": snapshot.data_through_at,
+                }
+            )
+        return Envelope(data=UsageSummary.model_validate(data), request_id=request_id_var.get())
+
+    async def record_usage_event(
+        self,
+        principal: Principal,
+        key: str,
+        request: UsageEventRequest,
+    ) -> tuple[int, Envelope[UsageEvent], bool]:
+        now = datetime.now(UTC)
+        canonical = request.model_dump(mode="json")
+        async with self.repository.transaction() as tx:
+            idem, replay = await self._claim(
+                tx,
+                principal=principal,
+                operation_id="recordUsageEvent",
+                path="/me/usage-events",
+                key=key,
+                request=canonical,
+                now=now,
+            )
+            if replay is not None:
+                return cast(int, idem.status_code), Envelope[UsageEvent].model_validate(replay), True
+            event = await tx.record_usage_event(
+                owner_id=principal.subject_id,
+                event_type=request.event_type,
+                product_id=request.product_id,
+                model_code=request.model_code,
+                now=now,
+            )
+            body: Envelope[UsageEvent] = Envelope(
+                data=UsageEvent(
+                    id=event.id,
+                    event_type=event.event_type,
+                    product_id=event.product_id,
+                    model_code=event.model_code,
+                    occurred_at=event.occurred_at,
+                ),
+                request_id=request_id_var.get(),
+            )
+            await tx.finish_idempotency(
+                idem,
+                status_code=201,
+                response_body=body.model_dump(mode="json"),
+            )
+            return 201, body, False
 
     async def list_memories(
         self,

@@ -1,14 +1,14 @@
 <script setup lang="ts">
 /* global document, window, IntersectionObserver, HTMLElement, File, HTMLInputElement, URL, DragEvent */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useChatStore, type PreviewState } from './stores/chat'
+import { useChatStore } from './stores/chat'
 import { mockPreview } from './features/chat/mock-data'
 import RobotHero from './features/chat/RobotHero.vue'
 import ProductRecommendations from './features/chat/ProductRecommendations.vue'
 import { formatAssistantContent } from './features/chat/content-redaction'
 import { commitSessionMessages, type SessionMessageCache, type SessionRequestTokens } from './features/chat/session-cache'
 import { ApiClientError, createAgentApi } from './api/client'
-import type { AuthSession, AuthUser, ChatRequest, KnowledgeFile, Memory, Message, Session } from './api/contracts'
+import type { AuthSession, AuthUser, ChatRequest, KnowledgeFile, LegalDocument, Memory, Message, Session } from './api/contracts'
 import { toProductRecommendationView } from './stores/chat'
 import {
   clearStoredAuthSession,
@@ -33,10 +33,16 @@ const authSubmitting = ref(false)
 const authDialogOpen = ref(false)
 const pendingAuthAction = ref<ProtectedAction | null>(null)
 const requestedProductId = ref<string | null>(null)
-const authMode = ref<'login' | 'register'>('login')
+const authMode = ref<'login' | 'register' | 'reset'>('login')
 const loginScope = ref<'user' | 'admin'>('user')
 const authError = ref<string | null>(null)
-const authForm = ref({ username: '', password: '', nickname: '' })
+const authForm = ref({ phone: '', password: '', nickname: '', verificationCode: '', agreeUserAgreement: false, agreePrivacyPolicy: false })
+const smsCountdown = ref(0)
+const smsSending = ref(false)
+const legalDocument = ref<LegalDocument | null>(null)
+const legalDialogOpen = ref(false)
+const legalLoading = ref(false)
+let smsTimer: ReturnType<typeof globalThis.setInterval> | undefined
 const profileDialogOpen = ref(false)
 const profileSubmitting = ref(false)
 const profileError = ref<string | null>(null)
@@ -178,6 +184,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   revealObserver?.disconnect()
   if (scrollTimer) globalThis.clearTimeout(scrollTimer)
+  if (smsTimer) globalThis.clearInterval(smsTimer)
 })
 
 watch(
@@ -223,6 +230,7 @@ function acceptAuthentication(session: AuthSession) {
   const action = pendingAuthAction.value
   pendingAuthAction.value = null
   authForm.value.password = ''
+  authForm.value.verificationCode = ''
   if (loginScope.value === 'admin' && session.user.role === 'admin') {
     currentView.value = 'admin'
     void refreshKnowledgeFiles()
@@ -239,15 +247,29 @@ async function submitAuthentication() {
   authError.value = null
   authSubmitting.value = true
   try {
-    if (authMode.value === 'register' && !passwordPattern.test(authForm.value.password)) {
+    if (authMode.value !== 'login' && !passwordPattern.test(authForm.value.password)) {
       throw new Error('密码需为 6-20 位，且同时包含字母、数字和特殊符号。')
     }
+    if (!/^1[3-9]\d{9}$/.test(authForm.value.phone)) throw new Error('请输入有效的 11 位手机号。')
+    if (authMode.value === 'register' && (!authForm.value.agreeUserAgreement || !authForm.value.agreePrivacyPolicy)) {
+      throw new Error('请先阅读并同意用户协议和隐私政策。')
+    }
+    if (authMode.value !== 'login' && !/^\d{6}$/.test(authForm.value.verificationCode)) {
+      throw new Error('请输入 6 位短信验证码。')
+    }
     const session = authMode.value === 'login'
-      ? await api.login({ username: authForm.value.username, password: authForm.value.password })
-      : await api.register({
-          username: authForm.value.username,
+      ? await api.login({ phone: authForm.value.phone, password: authForm.value.password })
+      : authMode.value === 'reset'
+        ? (await api.resetPassword({ phone: authForm.value.phone, verification_code: authForm.value.verificationCode, new_password: authForm.value.password }), await api.login({ phone: authForm.value.phone, password: authForm.value.password }))
+        : await api.register({
+          phone: authForm.value.phone,
           password: authForm.value.password,
           nickname: authForm.value.nickname,
+          verification_code: authForm.value.verificationCode,
+          user_agreement_version: '2026.08.21',
+          privacy_policy_version: '2026.08.21',
+          agree_user_agreement: true,
+          agree_privacy_policy: true,
         })
     if (authMode.value === 'login' && loginScope.value === 'admin' && session.user.role !== 'admin') {
       throw new Error('该账号不是管理员，无法进入知识库管理台。')
@@ -258,6 +280,61 @@ async function submitAuthentication() {
   } finally {
     authSubmitting.value = false
   }
+}
+
+function beginSmsCountdown(seconds: number) {
+  smsCountdown.value = Math.max(1, seconds || 60)
+  if (smsTimer) globalThis.clearInterval(smsTimer)
+  smsTimer = globalThis.setInterval(() => {
+    smsCountdown.value -= 1
+    if (smsCountdown.value <= 0 && smsTimer) {
+      globalThis.clearInterval(smsTimer)
+      smsTimer = undefined
+    }
+  }, 1000)
+}
+
+async function sendAuthenticationCode() {
+  authError.value = null
+  if (!/^1[3-9]\d{9}$/.test(authForm.value.phone)) {
+    authError.value = '请先输入有效的 11 位手机号。'
+    return
+  }
+  if (smsCountdown.value > 0 || smsSending.value) return
+  smsSending.value = true
+  try {
+    const result = await api.sendSmsCode({ phone: authForm.value.phone, purpose: authMode.value === 'reset' ? 'password_reset' : 'register' })
+    beginSmsCountdown(result.retry_after_seconds)
+  } catch (error) {
+    authError.value = error instanceof Error ? error.message : '验证码发送失败，请稍后重试。'
+  } finally {
+    smsSending.value = false
+  }
+}
+
+async function openLegalDocument(type: 'user-agreement' | 'privacy-policy') {
+  legalLoading.value = true
+  legalDialogOpen.value = true
+  try {
+    legalDocument.value = await api.getLegalDocument(type)
+  } catch (error) {
+    authError.value = error instanceof Error ? error.message : '协议暂时无法加载。'
+    legalDialogOpen.value = false
+  } finally {
+    legalLoading.value = false
+  }
+}
+
+function switchAuthMode(mode: 'login' | 'register' | 'reset') {
+  authMode.value = mode
+  authError.value = null
+  authForm.value.password = ''
+  authForm.value.verificationCode = ''
+  authForm.value.agreeUserAgreement = false
+  authForm.value.agreePrivacyPolicy = false
+  if (smsTimer) globalThis.clearInterval(smsTimer)
+  smsTimer = undefined
+  smsCountdown.value = 0
 }
 
 function openProfile() {
@@ -466,6 +543,13 @@ function openRecommendedProduct(productId: string) {
   chat.closeNav()
   void nextTick(() => {
     document.querySelector('#robot-lineup')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
+}
+
+function recordProductUsageEvent(eventType: 'product_detail_viewed' | 'product_3d_viewed', productId: string) {
+  if (!accessToken.value) return
+  void api.recordUsageEvent({ event_type: eventType, product_id: productId }).catch(() => {
+    // Usage analytics are best-effort and must never block product browsing.
   })
 }
 
@@ -693,7 +777,7 @@ async function confirmCancelActiveRun() {
         <div class="header-actions"><span class="secure-dot">已登录</span><button type="button" class="avatar" :aria-label="`${authUser?.nickname || '用户'}，打开个人资料`" @click="openProfile"><img :src="authUser?.avatar_url || defaultAvatarUrl" :alt="`${authUser?.nickname || '用户'}的头像`" /><span>{{ userInitial }}</span></button></div>
       </header>
 
-      <RobotHero v-if="currentView === 'showcase'" :authenticated="Boolean(authUser)" :requested-product-id="requestedProductId" @consult="openAgentDesk" @auth-required="requestProductAccess" />
+      <RobotHero v-if="currentView === 'showcase'" :authenticated="Boolean(authUser)" :requested-product-id="requestedProductId" @consult="openAgentDesk" @auth-required="requestProductAccess" @usage-event="recordProductUsageEvent" />
       <template v-else-if="currentView === 'agent'">
       <section id="agent-desk" class="stage" aria-label="聊天工作区">
         <div class="thread-head" data-reveal><div><p class="eyebrow">CASE · {{ mockPreview.caseId }}</p><h1>{{ mockPreview.title }}</h1><p>{{ mockPreview.summary }}</p></div><button class="trace-link" type="button"><span>◉</span>运行追踪 <b>{{ chat.runId || '尚未运行' }}</b><i>↗</i></button></div>
@@ -754,7 +838,7 @@ async function confirmCancelActiveRun() {
     <button class="scrim" aria-label="关闭会话列表" @click="chat.closeNav"></button>
   </div>
   <Teleport to="body">
-    <section v-if="authDialogOpen" class="auth-overlay" aria-label="账号登录" @click.self="closeAuthDialog">
+    <section v-if="authDialogOpen" class="auth-overlay" :aria-label="authMode === 'register' ? '注册账号' : authMode === 'reset' ? '重置密码' : '账号登录'" @click.self="closeAuthDialog">
       <div class="auth-shell" role="dialog" aria-modal="true" :aria-labelledby="`auth-title-${authMode}`">
         <button class="auth-close" type="button" aria-label="关闭登录窗口" :disabled="authSubmitting" @click="closeAuthDialog">×</button>
         <div class="auth-promo">
@@ -766,21 +850,39 @@ async function confirmCancelActiveRun() {
           <small>一次登录，7 天内持续有效；每次使用自动续期。</small>
         </div>
         <form class="auth-card" @submit.prevent="submitAuthentication">
-          <div class="auth-card__top"><img class="auth-avatar" :src="defaultAvatarUrl" alt="默认头像" /><span>{{ authMode === 'login' ? (loginScope === 'admin' ? '管理员登录' : '欢迎回来') : '成为 ZENMOP 用户' }}</span></div>
-          <p class="eyebrow">{{ authMode === 'login' ? 'WELCOME BACK' : 'CREATE ACCOUNT' }}</p>
-          <h2 :id="`auth-title-${authMode}`">{{ authMode === 'login' ? '登录账号' : '创建账号' }}</h2>
-          <p class="auth-hint">{{ authMode === 'login' ? (loginScope === 'admin' ? '仅数据库中已授予 admin 角色的账号可以进入管理台。' : '继续查看商品详情，或与小智聊聊你的清洁需求。') : '注册后即可保存你的对话，并获得个性化建议。' }}</p>
-          <label>账号<input v-model.trim="authForm.username" autocomplete="username" required minlength="3" maxlength="32" pattern="[A-Za-z0-9_]+" placeholder="请输入账号" /></label>
+          <div class="auth-card__top"><img class="auth-avatar" :src="defaultAvatarUrl" alt="默认头像" /><span>{{ authMode === 'login' ? (loginScope === 'admin' ? '管理员登录' : '欢迎回来') : authMode === 'register' ? '成为 ZENMOP 用户' : '找回账号访问权' }}</span></div>
+          <p class="eyebrow">{{ authMode === 'login' ? 'WELCOME BACK' : authMode === 'register' ? 'CREATE ACCOUNT' : 'RESET ACCESS' }}</p>
+          <h2 :id="`auth-title-${authMode}`">{{ authMode === 'login' ? '登录账号' : authMode === 'register' ? '创建账号' : '重置密码' }}</h2>
+          <p class="auth-hint">{{ authMode === 'login' ? (loginScope === 'admin' ? '管理员账号也使用绑定手机号登录。' : '继续查看商品详情，或与小智聊聊你的清洁需求。') : authMode === 'register' ? '使用手机号完成验证后，即可保存对话并获得个性化建议。' : '通过已绑定手机号验证身份，设置新的登录密码。' }}</p>
+          <label>手机号<input v-model.trim="authForm.phone" autocomplete="tel" inputmode="tel" required maxlength="11" pattern="1[3-9][0-9]{9}" placeholder="请输入 11 位手机号" /></label>
           <label v-if="authMode === 'register'">昵称<input v-model.trim="authForm.nickname" required maxlength="40" placeholder="用于对话中的称呼" /></label>
-          <label>密码<input v-model="authForm.password" type="password" :autocomplete="authMode === 'login' ? 'current-password' : 'new-password'" required minlength="6" maxlength="20" :pattern="authMode === 'register' ? passwordPattern.source : undefined" :placeholder="authMode === 'register' ? '6-20 位，含字母、数字、特殊符号' : '请输入密码'" /></label>
-          <p v-if="authMode === 'register'" class="auth-password-note">密码须为 6-20 位，且同时含字母、数字和特殊符号。</p>
+          <label v-if="authMode !== 'login'" class="auth-code-label">短信验证码<div class="auth-code-row"><input v-model.trim="authForm.verificationCode" inputmode="numeric" autocomplete="one-time-code" required maxlength="6" pattern="[0-9]{6}" placeholder="6 位验证码" /><button type="button" class="auth-code-button" :disabled="smsCountdown > 0 || smsSending || authSubmitting" @click="sendAuthenticationCode">{{ smsSending ? '发送中…' : smsCountdown > 0 ? `${smsCountdown}s 后重发` : '获取验证码' }}</button></div></label>
+          <label>密码<input v-model="authForm.password" type="password" :autocomplete="authMode === 'login' ? 'current-password' : 'new-password'" required minlength="6" maxlength="20" :pattern="authMode !== 'login' ? passwordPattern.source : undefined" :placeholder="authMode !== 'login' ? '6-20 位，含字母、数字、特殊符号' : '请输入密码'" /></label>
+          <p v-if="authMode !== 'login'" class="auth-password-note">密码须为 6-20 位，且同时含字母、数字和特殊符号。</p>
+          <div v-if="authMode === 'register'" class="auth-consents">
+            <label class="auth-consent"><input v-model="authForm.agreeUserAgreement" type="checkbox" /><span>我已阅读并同意 <button type="button" @click="openLegalDocument('user-agreement')">《用户协议》</button></span></label>
+            <label class="auth-consent"><input v-model="authForm.agreePrivacyPolicy" type="checkbox" /><span>我已阅读并同意 <button type="button" @click="openLegalDocument('privacy-policy')">《隐私政策》</button></span></label>
+          </div>
           <p v-if="authError" class="auth-error" role="alert">{{ authError }}</p>
-          <button class="auth-submit" type="submit" :disabled="authSubmitting">{{ authSubmitting ? '请稍候…' : authMode === 'login' ? '登录' : '注册并登录' }} <span>→</span></button>
-          <button class="auth-switch" type="button" :disabled="authSubmitting" @click="authMode = authMode === 'login' ? 'register' : 'login'; authError = null">{{ authMode === 'login' ? '还没有账号？立即注册' : '已有账号？返回登录' }}</button>
+          <button class="auth-submit" type="submit" :disabled="authSubmitting">{{ authSubmitting ? '请稍候…' : authMode === 'login' ? '登录' : authMode === 'register' ? '注册并登录' : '重置密码并登录' }} <span>→</span></button>
+          <button v-if="authMode === 'login'" class="auth-switch" type="button" :disabled="authSubmitting" @click="switchAuthMode('register')">还没有账号？立即注册</button>
+          <button v-else class="auth-switch" type="button" :disabled="authSubmitting" @click="switchAuthMode('login')">返回登录</button>
+          <button v-if="authMode === 'login'" class="auth-switch" type="button" :disabled="authSubmitting" @click="switchAuthMode('reset')">忘记密码？短信重置</button>
           <button v-if="authMode === 'login'" class="auth-switch" type="button" :disabled="authSubmitting" @click="loginScope = loginScope === 'admin' ? 'user' : 'admin'; authError = null">{{ loginScope === 'admin' ? '返回普通用户登录' : '管理员登录' }}</button>
           <button class="auth-browse" type="button" :disabled="authSubmitting" @click="closeAuthDialog">暂不登录，继续浏览商品</button>
         </form>
       </div>
+    </section>
+  </Teleport>
+  <Teleport to="body">
+    <section v-if="legalDialogOpen" class="profile-overlay" aria-label="协议正文" @click.self="legalDialogOpen = false">
+      <article class="legal-card" role="dialog" aria-modal="true" aria-labelledby="legal-title">
+        <button class="auth-close" type="button" aria-label="关闭协议" @click="legalDialogOpen = false">×</button>
+        <p class="eyebrow">LEGAL DOCUMENT</p>
+        <h2 id="legal-title">{{ legalLoading ? '正在加载…' : legalDocument?.title }}</h2>
+        <p v-if="legalDocument" class="legal-meta">版本 {{ legalDocument.version }} · 生效于 {{ new Date(legalDocument.effective_at).toLocaleDateString('zh-CN') }}</p>
+        <div v-if="legalDocument" class="legal-content">{{ legalDocument.content }}</div>
+      </article>
     </section>
   </Teleport>
   <Teleport to="body">

@@ -149,6 +149,20 @@ class RunCoordinator:
                                     confidence=rich_outcome.confidence,
                                     now=now,
                                 )
+                        if outcome == "completed":
+                            await tx.record_product_recommendations(
+                                owner_id=execution.subject_id,
+                                session_id=execution.session_id,
+                                message_id=execution.assistant_message_id,
+                                recommendations=product_recommendations,
+                                now=now,
+                            )
+                            await tx.enqueue_summary_update(
+                                owner_id=execution.subject_id,
+                                session_id=execution.session_id,
+                                trigger_message_id=execution.assistant_message_id,
+                                now=now,
+                            )
                     elif event_type == "error":
                         await tx.update_run(
                             execution.run_id,

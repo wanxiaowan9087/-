@@ -21,9 +21,17 @@ from backend.app.adapters.sql.repository import SqlPlatformRepository
 from backend.app.adapters.uploads.avatar_store import AvatarStore
 from backend.app.api.v1.routes import router
 from backend.app.application.identity import IdentityService
+from backend.app.application.phone_crypto import PhoneProtector
 from backend.app.application.ports import RunExecutorPort
 from backend.app.application.service import PlatformService
-from backend.app.bootstrap import build_run_executor
+from backend.app.application.sms_verification import (
+    InMemoryRateLimiter,
+    RedisRateLimiter,
+    SmsLimits,
+    SmsVerificationService,
+)
+from backend.app.application.usage_summary import UsageSummaryWorker
+from backend.app.bootstrap import build_run_executor, build_sms_provider
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.context import bind_context, new_request_id
 from backend.app.core.errors import (
@@ -79,6 +87,27 @@ def create_app(
         vector_probe=getattr(executor_adapter, "vector_probe", None),
         knowledge_indexer=knowledge_indexer,
     )
+    if not settings.phone_encryption_key or not settings.phone_lookup_hmac_key:
+        if settings.environment == "production":
+            raise ValueError("phone protection keys are required in production")
+        settings.phone_encryption_key = settings.phone_encryption_key or ("dev-phone-encryption-key-32bytes")
+        settings.phone_lookup_hmac_key = settings.phone_lookup_hmac_key or ("dev-phone-lookup-hmac-key-32bytes")
+    phone_protector = PhoneProtector(settings.phone_encryption_key, settings.phone_lookup_hmac_key, settings.phone_key_version)
+    sms_limits = SmsLimits(
+        settings.sms_send_cooldown_seconds,
+        settings.sms_hourly_limit,
+        settings.sms_daily_limit,
+    )
+    redis_client = redis_adapter.client()
+    if settings.environment == "production" and settings.sms_provider == "aliyun" and redis_client is None:
+        raise ValueError("production SMS rate limiting requires Redis")
+    sms_limiter = (
+        RedisRateLimiter(redis_client, sms_limits)
+        if redis_client is not None
+        else InMemoryRateLimiter(sms_limits)
+    )
+    sms_service = SmsVerificationService(build_sms_provider(settings), sms_limiter)
+    usage_worker = UsageSummaryWorker(repository_adapter)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -114,7 +143,9 @@ def create_app(
                     "robot catalog indexing failed",
                     extra={"error_code": "CATALOG_INDEX_FAILED"},
                 )
+        await usage_worker.start()
         yield
+        await usage_worker.close()
         await redis_adapter.close()
         await service.close()
 
@@ -170,6 +201,8 @@ def create_app(
             ("post", "/runs/{run_id}/cancel"): "user",
             ("get", "/runs/{run_id}/trace"): "user-or-linked-reviewer",
             ("get", "/memories"): "user",
+            ("get", "/me/usage-summary"): "user",
+            ("post", "/me/usage-events"): "user",
             ("patch", "/memories/{memory_id}"): "user",
             ("delete", "/memories/{memory_id}"): "user",
             ("get", "/reviews"): "reviewer",
@@ -193,8 +226,11 @@ def create_app(
     app.openapi = contract_openapi  # type: ignore[method-assign]
     app.state.platform_service = service
     app.state.identity_service = resolved_identity_service
+    app.state.phone_protector = phone_protector
+    app.state.sms_service = sms_service
     app.state.avatar_store = AvatarStore(settings.uploads_dir)
     app.state.knowledge_catalog = KnowledgeCatalog(settings.uploads_dir, knowledge_indexer)
+    app.state.usage_summary_worker = usage_worker
     app.dependency_overrides[get_settings] = lambda: settings
     app.add_exception_handler(AppError, app_error_handler)  # type: ignore[arg-type]
     app.add_exception_handler(RequestValidationError, validation_error_handler)  # type: ignore[arg-type]

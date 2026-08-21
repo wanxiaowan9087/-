@@ -54,6 +54,7 @@ async def sql_client(tmp_path: object) -> AsyncIterator[AsyncClient]:
             environment="test",
             database_url=f"sqlite+aiosqlite:///{path}",
             redis_url=None,
+            demo_auth_enabled=True,
         ),
         repository=repository,
         executor=SqlFakeExecutor(),

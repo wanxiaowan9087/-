@@ -31,6 +31,11 @@ services:
     command: ["alembic", "-c", "backend/alembic.ini", "upgrade", "head"]
     environment:
       APP_DATABASE_URL: postgresql+asyncpg://agent_robot:agent_robot@postgres:5432/agent_robot
+      APP_ENVIRONMENT: ${APP_ENVIRONMENT:-production}
+      APP_DEMO_AUTH_ENABLED: "false"
+      APP_CURSOR_SIGNING_SECRET: ${APP_CURSOR_SIGNING_SECRET:?Set APP_CURSOR_SIGNING_SECRET in the shell before starting Docker Compose}
+      APP_PHONE_ENCRYPTION_KEY: ${APP_PHONE_ENCRYPTION_KEY:?Set APP_PHONE_ENCRYPTION_KEY in the shell before starting Docker Compose}
+      APP_PHONE_LOOKUP_HMAC_KEY: ${APP_PHONE_LOOKUP_HMAC_KEY:?Set APP_PHONE_LOOKUP_HMAC_KEY in the shell before starting Docker Compose}
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,6 +57,11 @@ services:
     command: ["python", "-m", "backend.scripts.migrate_json_vectors"]
     environment:
       APP_DATABASE_URL: postgresql+asyncpg://agent_robot:agent_robot@postgres:5432/agent_robot
+      APP_ENVIRONMENT: ${APP_ENVIRONMENT:-production}
+      APP_DEMO_AUTH_ENABLED: "false"
+      APP_CURSOR_SIGNING_SECRET: ${APP_CURSOR_SIGNING_SECRET:?Set APP_CURSOR_SIGNING_SECRET in the shell before starting Docker Compose}
+      APP_PHONE_ENCRYPTION_KEY: ${APP_PHONE_ENCRYPTION_KEY:?Set APP_PHONE_ENCRYPTION_KEY in the shell before starting Docker Compose}
+      APP_PHONE_LOOKUP_HMAC_KEY: ${APP_PHONE_LOOKUP_HMAC_KEY:?Set APP_PHONE_LOOKUP_HMAC_KEY in the shell before starting Docker Compose}
       APP_AGENT_VECTOR_STORE_PATH: /app/runtime/vector-store.json
       APP_AGENT_VECTOR_DIMENSIONS: "1024"
     volumes:
@@ -68,10 +78,19 @@ services:
       dockerfile: backend/Dockerfile
     environment:
       APP_DATABASE_URL: postgresql+asyncpg://agent_robot:agent_robot@postgres:5432/agent_robot
+      APP_ENVIRONMENT: ${APP_ENVIRONMENT:-production}
+      APP_CURSOR_SIGNING_SECRET: ${APP_CURSOR_SIGNING_SECRET:?Set APP_CURSOR_SIGNING_SECRET in the shell before starting Docker Compose}
+      APP_PHONE_ENCRYPTION_KEY: ${APP_PHONE_ENCRYPTION_KEY:?Set APP_PHONE_ENCRYPTION_KEY in the shell before starting Docker Compose}
+      APP_PHONE_LOOKUP_HMAC_KEY: ${APP_PHONE_LOOKUP_HMAC_KEY:?Set APP_PHONE_LOOKUP_HMAC_KEY in the shell before starting Docker Compose}
       APP_REDIS_URL: redis://redis:6379/1
       APP_DEMO_AUTH_ENABLED: "false"
       APP_AGENT_RUNTIME_ENABLED: "true"
       DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:?Set DASHSCOPE_API_KEY in the shell before starting Docker Compose}
+      APP_SMS_PROVIDER: ${APP_SMS_PROVIDER:-aliyun}
+      APP_ALIYUN_ACCESS_KEY_ID: ${APP_ALIYUN_ACCESS_KEY_ID:?Set APP_ALIYUN_ACCESS_KEY_ID in the shell before starting Docker Compose}
+      APP_ALIYUN_ACCESS_KEY_SECRET: ${APP_ALIYUN_ACCESS_KEY_SECRET:?Set APP_ALIYUN_ACCESS_KEY_SECRET in the shell before starting Docker Compose}
+      APP_ALIYUN_SMS_SIGN_NAME: ${APP_ALIYUN_SMS_SIGN_NAME:?Set APP_ALIYUN_SMS_SIGN_NAME in the shell before starting Docker Compose}
+      APP_ALIYUN_SMS_TEMPLATE_CODE: ${APP_ALIYUN_SMS_TEMPLATE_CODE:-100001}
       APP_CORS_ORIGINS: '["http://localhost:5174"]'
       APP_AGENT_VECTOR_STORE_PATH: /app/runtime/vector-store.json
       APP_AGENT_VECTOR_DIMENSIONS: "1024"

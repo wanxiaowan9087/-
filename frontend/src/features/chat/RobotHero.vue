@@ -16,6 +16,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   consult: []
   authRequired: [productId: string]
+  usageEvent: [eventType: 'product_detail_viewed' | 'product_3d_viewed', productId: string]
 }>()
 
 type RobotProduct = {
@@ -106,6 +107,7 @@ function openProduct(product: RobotProduct) {
   }
   selectedProduct.value = product
   detailMode.value = 'image'
+  emit('usageEvent', 'product_detail_viewed', product.id)
 }
 
 watch(
@@ -114,6 +116,7 @@ watch(
     if (!props.authenticated || !productId) return
     selectedProduct.value = products.find(product => product.id === productId) ?? null
     detailMode.value = 'image'
+    if (selectedProduct.value) emit('usageEvent', 'product_detail_viewed', selectedProduct.value.id)
   },
 )
 
@@ -188,7 +191,7 @@ function activateAssistant() {
           <p>ZENMOP / SMART HOME</p><h2 :id="`product-${selectedProduct.id}`">{{ selectedProduct.name }}</h2><b>{{ selectedProduct.subtitle }}</b>
           <div class="robot-dialog__modes" role="tablist" aria-label="产品展示方式">
             <button type="button" role="tab" :aria-selected="detailMode === 'image'" :class="{ active: detailMode === 'image' }" @click="detailMode = 'image'">产品图</button>
-            <button type="button" role="tab" :aria-selected="detailMode === '3d'" :class="{ active: detailMode === '3d' }" @click="detailMode = '3d'">3D 效果</button>
+            <button type="button" role="tab" :aria-selected="detailMode === '3d'" :class="{ active: detailMode === '3d' }" @click="detailMode = '3d'; emit('usageEvent', 'product_3d_viewed', selectedProduct.id)">3D 效果</button>
           </div>
           <span class="robot-dialog__price">¥ {{ selectedProduct.price.toLocaleString('zh-CN') }}</span><small>模拟起售价 · {{ selectedProduct.priceNote }}</small>
           <p class="robot-dialog__description">{{ selectedProduct.description }}</p>

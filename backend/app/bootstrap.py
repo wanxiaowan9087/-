@@ -12,11 +12,15 @@ from backend.app.adapters.mcp.robot_catalog import recommend_robots
 from backend.app.adapters.memory.platform_runtime import PlatformMemoryRuntime
 from backend.app.adapters.vector.dashscope import DashScopeEmbeddingAdapter
 from backend.app.adapters.vector.pgvector_store import PgVectorStore
+from backend.app.application.usage_summary import UsageSummaryProvider
 from backend.app.agent.customer_tools import build_customer_tool_registry
 from backend.app.agent.report_tools import ReportWorkflow
 from backend.app.agent.runtime import AgentRuntime
 from backend.app.agent.tooling import ToolExecutor
 from backend.app.application.ports import RunExecutorPort, UnavailableRunExecutor
+from backend.app.application.sms_verification import SmsProvider
+from backend.app.adapters.sms.fake import FakeSmsProvider
+from backend.app.adapters.sms.aliyun import AliyunDypnsapiProvider
 from backend.app.core.config import Settings
 from backend.app.rag.chunking import DocumentChunker
 from backend.app.rag.ingestion import KnowledgeIndexer
@@ -34,6 +38,22 @@ from backend.app.repositories.ports import PlatformRepository
 
 class AgentRuntimeBootstrapError(RuntimeError):
     """Configuration or optional dependency failure during live runtime wiring."""
+
+
+def build_sms_provider(settings: Settings) -> SmsProvider:
+    """Create the configured SMS provider without exposing credentials to callers."""
+    if settings.sms_provider == "fake":
+        return FakeSmsProvider()
+    if settings.sms_provider == "aliyun":
+        if not settings.aliyun_access_key_id or not settings.aliyun_access_key_secret or not settings.aliyun_sms_sign_name:
+            raise AgentRuntimeBootstrapError("Aliyun SMS credentials and sign name are required")
+        return AliyunDypnsapiProvider(
+            access_key_id=settings.aliyun_access_key_id,
+            access_key_secret=settings.aliyun_access_key_secret,
+            sign_name=settings.aliyun_sms_sign_name,
+            template_code=settings.aliyun_sms_template_code,
+        )
+    raise AgentRuntimeBootstrapError(f"unsupported SMS provider: {settings.sms_provider}")
 
 
 def build_run_executor(
@@ -88,7 +108,12 @@ def build_run_executor(
         memory = PlatformMemoryRuntime(repository) if repository is not None else None
         react_engine = LangChainReActEngine(
             model=model,
-            tool_executor=ToolExecutor(build_customer_tool_registry(memory)),
+            tool_executor=ToolExecutor(
+                build_customer_tool_registry(
+                    memory,
+                    UsageSummaryProvider(repository) if repository is not None else None,
+                )
+            ),
             chat_system_prompt=settings.agent_chat_system_prompt,
             report_system_prompt=settings.agent_report_system_prompt,
             model_name=settings.agent_model_name,
@@ -102,6 +127,7 @@ def build_run_executor(
             react_engine=react_engine,
             retriever=retriever,
             memory=memory,
+            usage_summary=UsageSummaryProvider(repository) if repository is not None else None,
         ),
         report_workflow=ReportWorkflow(
             settings.agent_external_records_path,

@@ -15,6 +15,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -31,6 +32,68 @@ class UserModel(Base):
     avatar_url: Mapped[str] = mapped_column(String(2048))
     password_hash: Mapped[str] = mapped_column(String(512))
     role: Mapped[str] = mapped_column(String(16), default="user")
+    phone_ciphertext: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    phone_lookup_digest: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True, index=True)
+    phone_key_version: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    phone_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    tokens_revoked_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class AgreementVersionModel(Base):
+    __tablename__ = "agreement_versions"
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    document_type: Mapped[str] = mapped_column(String(32), index=True)
+    version: Mapped[str] = mapped_column(String(32))
+    content: Mapped[str] = mapped_column(Text)
+    content_digest: Mapped[str] = mapped_column(String(64))
+    effective_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    status: Mapped[str] = mapped_column(String(16), default="active", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (UniqueConstraint("document_type", "version", name="uq_agreement_document_version"),)
+
+
+class UserAgreementConsentModel(Base):
+    __tablename__ = "user_agreement_consents"
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    agreement_version_id: Mapped[UUID] = mapped_column(ForeignKey("agreement_versions.id"), index=True)
+    document_type: Mapped[str] = mapped_column(String(32))
+    version: Mapped[str] = mapped_column(String(32))
+    content_digest: Mapped[str] = mapped_column(String(64))
+    consented_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    request_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    ip_digest: Mapped[str | None] = mapped_column(String(64))
+    user_agent_digest: Mapped[str | None] = mapped_column(String(64))
+    __table_args__ = (UniqueConstraint("user_id", "agreement_version_id", name="uq_user_agreement_consent"),)
+
+
+class SmsVerificationAuditModel(Base):
+    __tablename__ = "sms_verification_audits"
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    purpose: Mapped[str] = mapped_column(String(32), index=True)
+    phone_redacted: Mapped[str] = mapped_column(String(32))
+    phone_digest: Mapped[str] = mapped_column(String(64), index=True)
+    provider_request_id: Mapped[str | None] = mapped_column(String(128))
+    status: Mapped[str] = mapped_column(String(32), index=True)
+    provider_error_code: Mapped[str | None] = mapped_column(String(64))
+    request_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    ip_digest: Mapped[str | None] = mapped_column(String(64))
+    user_agent_digest: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class SecurityAuditLogModel(Base):
+    __tablename__ = "security_audit_logs"
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    actor_user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    event_type: Mapped[str] = mapped_column(String(64), index=True)
+    result: Mapped[str] = mapped_column(String(32), index=True)
+    request_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    ip_digest: Mapped[str | None] = mapped_column(String(64))
+    user_agent_digest: Mapped[str | None] = mapped_column(String(64))
+    metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
@@ -138,6 +201,68 @@ class FeedbackModel(Base):
     comment: Mapped[str | None] = mapped_column(String(1000))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     __table_args__ = (UniqueConstraint("owner_id", "message_id", name="uq_feedback_owner_message"),)
+
+
+class UsageEventModel(Base):
+    __tablename__ = "user_usage_events"
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    owner_id: Mapped[str] = mapped_column(String(255), index=True)
+    session_id: Mapped[UUID | None] = mapped_column(ForeignKey("sessions.id", ondelete="SET NULL"))
+    message_id: Mapped[UUID | None] = mapped_column(ForeignKey("messages.id", ondelete="SET NULL"))
+    event_type: Mapped[str] = mapped_column(String(64), index=True)
+    product_id: Mapped[str | None] = mapped_column(String(128))
+    model_code: Mapped[str | None] = mapped_column(String(128))
+    metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    __table_args__ = (
+        Index("ix_usage_events_owner_order", "owner_id", "occurred_at", "id"),
+        Index("ix_usage_events_owner_model_order", "owner_id", "model_code", "occurred_at"),
+    )
+
+
+class SummaryUpdateJobModel(Base):
+    __tablename__ = "summary_update_jobs"
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    owner_id: Mapped[str] = mapped_column(String(255), index=True)
+    session_id: Mapped[UUID] = mapped_column(ForeignKey("sessions.id", ondelete="CASCADE"), index=True)
+    trigger_message_id: Mapped[UUID] = mapped_column(
+        ForeignKey("messages.id", ondelete="CASCADE"), unique=True
+    )
+    status: Mapped[str] = mapped_column(String(16), index=True, default="queued")
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, default=3)
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    error_summary: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        Index("ix_summary_jobs_claim", "status", "next_attempt_at", "created_at"),
+    )
+
+
+class UserSummarySnapshotModel(Base):
+    __tablename__ = "user_summary_snapshots"
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    owner_id: Mapped[str] = mapped_column(String(255), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(16), index=True, default="active")
+    summary: Mapped[dict[str, Any]] = mapped_column(JSON)
+    display_summary: Mapped[str] = mapped_column(Text)
+    data_through_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    generator_version: Mapped[str] = mapped_column(String(64))
+    __table_args__ = (
+        UniqueConstraint("owner_id", "version", name="uq_user_summary_snapshot_version"),
+        Index("ix_user_summary_snapshot_owner_order", "owner_id", "generated_at", "id"),
+        Index(
+            "uq_user_summary_snapshot_active",
+            "owner_id",
+            unique=True,
+            postgresql_where=text("status = 'active'"),
+        ),
+    )
 
 
 class MemoryModel(Base):

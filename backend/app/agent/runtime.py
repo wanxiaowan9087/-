@@ -44,7 +44,11 @@ from .safety import (
     required_fields_missing,
 )
 from .tooling import CancellationToken
-from .customer_tools import reset_request_context, set_request_context
+from .customer_tools import (
+    get_user_usage_summary,
+    reset_request_context,
+    set_request_context,
+)
 from .tracing import RunStateMachine, TraceRecorder
 
 logger = logging.getLogger(__name__)
@@ -103,7 +107,14 @@ MODEL_IDENTITY_PATTERNS = (
     "\u5e95\u5c42\u6a21\u578b", "\u6a21\u578b\u63d0\u4f9b\u5546",
 )
 
-PROFILE_INTENT_PATTERNS = ("我的个人信息", "我的资料", "用户信息", "总结我的使用习惯", "我的使用习惯", "我的偏好")
+PROFILE_INTENT_PATTERNS = ("我的个人信息", "我的资料", "用户信息", "我的使用习惯", "我的偏好")
+USAGE_SUMMARY_INTENT_PATTERNS = (
+    "总结我的使用情况",
+    "总结我的使用习惯",
+    "我的使用总结",
+    "平台使用总结",
+    "使用报告",
+)
 
 
 def classify_meaningless_input(text: str) -> bool:
@@ -154,6 +165,10 @@ class MemoryRuntimePort(Protocol):
     ) -> str | None: ...
 
 
+class UsageSummaryRuntimePort(Protocol):
+    async def get(self, subject_id: str) -> object | None: ...
+
+
 @dataclass(frozen=True)
 class RuntimeConfig:
     confidence_threshold: float = 0.65
@@ -175,6 +190,7 @@ class AgentRuntime:
         react_engine: ReActEnginePort,
         retriever: RetrieverPort,
         memory: MemoryRuntimePort | None = None,
+        usage_summary: UsageSummaryRuntimePort | None = None,
         policy: DeterministicReviewPolicy | None = None,
         citation_service: CitationService | None = None,
         injection_detector: PromptInjectionDetector | None = None,
@@ -184,6 +200,7 @@ class AgentRuntime:
         self._react_engine = react_engine
         self._retriever = retriever
         self._memory = memory or NullMemoryCoordinator()
+        self._usage_summary = usage_summary
         self._policy = policy or DeterministicReviewPolicy(
             confidence_threshold=config.confidence_threshold
         )
@@ -236,6 +253,30 @@ class AgentRuntime:
                     retrieval_strategy="identity-intent",
                 )
             memory_context = await self._prepare_memory(request, trace, degraded)
+            if any(pattern in re.sub(r"\s+", "", request.user_text) for pattern in USAGE_SUMMARY_INTENT_PATTERNS):
+                if self._usage_summary is None:
+                    # Keep isolated runtime tests and non-platform adapters useful;
+                    # the production bootstrap always supplies the durable snapshot provider.
+                    profile_answer = answer_profile_intent(request.user_text, memory_context) or "当前还没有可用的使用总结。"
+                else:
+                    tool_result = await get_user_usage_summary(self._usage_summary)
+                    profile_answer = tool_result.display_content
+                state.transition(RunStatus.COMPLETED)
+                memory_warning = await self._extract_memory(request)
+                return AgentRunResult(
+                    run_id=run_id,
+                    status=state.status,
+                    public_content=profile_answer,
+                    candidate_content=None,
+                    citations=(),
+                    trace=trace.snapshot(),
+                    confidence=1.0,
+                    confidence_threshold=self._config.confidence_threshold,
+                    degraded_dependencies=tuple(dict.fromkeys(degraded)),
+                    memory_warning=memory_warning,
+                    model_name="deterministic-user-usage-summary",
+                    retrieval_strategy="usage-summary-snapshot",
+                )
             profile_answer = answer_profile_intent(request.user_text, memory_context)
             if profile_answer is not None:
                 state.transition(RunStatus.COMPLETED)

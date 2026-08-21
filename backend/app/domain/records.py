@@ -142,3 +142,46 @@ class ReviewAuditRecord:
     content_digest: str | None
     success: bool
     created_at: datetime
+
+
+@dataclass(slots=True)
+class UsageEventRecord:
+    id: UUID
+    owner_id: str
+    session_id: UUID | None
+    message_id: UUID | None
+    event_type: str
+    product_id: str | None
+    model_code: str | None
+    metadata: dict[str, Any]
+    occurred_at: datetime
+
+
+@dataclass(slots=True)
+class SummaryUpdateJobRecord:
+    id: UUID
+    owner_id: str
+    session_id: UUID
+    trigger_message_id: UUID
+    status: str
+    attempts: int
+    max_attempts: int
+    next_attempt_at: datetime
+    error_code: str | None
+    error_summary: str | None
+    created_at: datetime
+    updated_at: datetime
+    completed_at: datetime | None = None
+
+
+@dataclass(slots=True)
+class UserSummarySnapshotRecord:
+    id: UUID
+    owner_id: str
+    version: int
+    status: str
+    summary: dict[str, Any]
+    display_summary: str
+    data_through_at: datetime | None
+    generated_at: datetime
+    generator_version: str

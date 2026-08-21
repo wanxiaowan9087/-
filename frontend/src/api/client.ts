@@ -1,4 +1,4 @@
-import type { ApiErrorBody, AuthSession, AuthUser, ChatRequest, Envelope, KnowledgeFile, Memory, Message, Page, Session, StreamEvent } from './contracts'
+import type { ApiErrorBody, AuthSession, AuthUser, ChatRequest, Envelope, KnowledgeFile, LegalDocument, Memory, Message, Page, Session, SmsPurpose, StreamEvent, UsageEvent, UsageSummary } from './contracts'
 import { parseSseStream } from './sse'
 
 export class ApiClientError extends Error {
@@ -67,7 +67,26 @@ export function createAgentApi(options: AgentApiOptions) {
   }
 
   return {
-    async register(input: { username: string; password: string; nickname: string; avatar_url?: string }): Promise<AuthSession> {
+    async sendSmsCode(input: { phone: string; purpose: SmsPurpose }): Promise<{ accepted: boolean; retry_after_seconds: number }> {
+      const response = await fetcher(`${options.baseUrl}/auth/sms-codes`, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      })
+      return readJson<{ accepted: boolean; retry_after_seconds: number }>(response)
+    },
+
+    async register(input: {
+      phone: string
+      password: string
+      nickname: string
+      verification_code: string
+      user_agreement_version: string
+      privacy_policy_version: string
+      agree_user_agreement: true
+      agree_privacy_policy: true
+      avatar_url?: string
+    }): Promise<AuthSession> {
       const response = await fetcher(`${options.baseUrl}/auth/register`, {
         method: 'POST',
         headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
@@ -76,13 +95,29 @@ export function createAgentApi(options: AgentApiOptions) {
       return readJson<AuthSession>(response)
     },
 
-    async login(input: { username: string; password: string }): Promise<AuthSession> {
+    async login(input: { phone: string; password: string }): Promise<AuthSession> {
       const response = await fetcher(`${options.baseUrl}/auth/login`, {
         method: 'POST',
         headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
       })
       return readJson<AuthSession>(response)
+    },
+
+    async resetPassword(input: { phone: string; verification_code: string; new_password: string }): Promise<{ reset: boolean }> {
+      const response = await fetcher(`${options.baseUrl}/auth/password-resets`, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      })
+      return readJson<{ reset: boolean }>(response)
+    },
+
+    async getLegalDocument(type: 'user-agreement' | 'privacy-policy'): Promise<LegalDocument> {
+      const response = await fetcher(`${options.baseUrl}/legal/${type}`, {
+        headers: { Accept: 'application/json' },
+      })
+      return readJson<LegalDocument>(response)
     },
 
     async currentUser(): Promise<AuthUser> {
@@ -170,6 +205,20 @@ export function createAgentApi(options: AgentApiOptions) {
         headers: headers(),
       })
       return readJson<Page<Memory>>(response, true)
+    },
+
+    async getUsageSummary(): Promise<UsageSummary> {
+      const response = await fetcher(`${options.baseUrl}/me/usage-summary`, { headers: headers() })
+      return readJson<UsageSummary>(response, true)
+    },
+
+    async recordUsageEvent(input: { event_type: 'product_detail_viewed' | 'product_3d_viewed'; product_id: string; model_code?: string | null }): Promise<UsageEvent> {
+      const response = await fetcher(`${options.baseUrl}/me/usage-events`, {
+        method: 'POST',
+        headers: headers({ 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() }),
+        body: JSON.stringify(input),
+      })
+      return readJson<UsageEvent>(response, true)
     },
 
     async streamChat(request: ChatRequest, stream: StreamOptions): Promise<void> {

@@ -14,6 +14,8 @@ volumes, or service ports.
 
 ## Start
 
+Windows 用户可以直接双击项目根目录的 `start-agent-robot.cmd` 一键启动；它会在 Docker 未运行时自动尝试打开 Docker Desktop，启动 Docker 服务、等待后端健康检查，再打开 Vue 前端终端窗口。首次启动会构建后端镜像，后续可使用 `start-agent-robot.cmd -SkipBuild` 跳过构建。
+
 Open PowerShell in this directory. Provide the three values only in the current
 terminal session, then start the services:
 

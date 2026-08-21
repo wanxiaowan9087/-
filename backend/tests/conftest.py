@@ -9,6 +9,7 @@ from httpx import ASGITransport, AsyncClient
 
 from backend.app.adapters.memory.repository import MemoryPlatformRepository
 from backend.app.application.ports import RunExecution
+from backend.app.application.usage_summary import UsageSummaryWorker
 from backend.app.core.config import Settings
 from backend.app.main import create_app
 
@@ -19,6 +20,7 @@ class ScenarioHarness:
 
     client: AsyncClient
     repository: MemoryPlatformRepository
+    usage_summary_worker: UsageSummaryWorker
 
 
 class FakeExecutor:
@@ -72,6 +74,7 @@ async def identity_client() -> AsyncIterator[AsyncClient]:
         database_url="sqlite+aiosqlite:///./identity-test.db",
         redis_url=None,
         demo_auth_enabled=False,
+        sms_provider="fake",
     )
     app = create_app(
         settings,
@@ -105,5 +108,9 @@ async def scenario_harness() -> AsyncIterator[ScenarioHarness]:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as async_client:
-        yield ScenarioHarness(client=async_client, repository=repository)
+        yield ScenarioHarness(
+            client=async_client,
+            repository=repository,
+            usage_summary_worker=app.state.usage_summary_worker,
+        )
     await app.state.platform_service.close()

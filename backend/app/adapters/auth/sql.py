@@ -124,14 +124,16 @@ class SqlIdentityStore(IdentityStore):
             await session.flush()
             return _user(row)
 
-    async def save_token(self, user_id: UUID, token_digest: str, expires_at: datetime) -> None:
+    async def save_token(
+        self, user_id: UUID, token_digest: str, created_at: datetime, expires_at: datetime
+    ) -> None:
         async with self._session_factory.begin() as session:
             session.add(
                 AccessTokenModel(
                     user_id=user_id,
                     token_digest=token_digest,
                     expires_at=expires_at,
-                    created_at=datetime.now(expires_at.tzinfo),
+                    created_at=created_at,
                 )
             )
 

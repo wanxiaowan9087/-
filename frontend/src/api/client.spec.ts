@@ -138,6 +138,24 @@ describe('SSE API client', () => {
     )
   })
 
+  it('uses phone authentication, SMS verification, reset, and legal endpoints', async () => {
+    const ok = (data: unknown, status = 200) => new Response(JSON.stringify({ code: 'OK', message: 'success', request_id: 'request-auth', data }), { status })
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(ok({ accepted: true, retry_after_seconds: 60 }))
+      .mockResolvedValueOnce(ok({ reset: true }))
+      .mockResolvedValueOnce(ok({ document_type: 'privacy_policy', version: '2026.08.21', title: '隐私政策', content: '内容', content_sha256: 'hash', effective_at: '2026-08-21T00:00:00Z' }))
+    const api = createAgentApi({ baseUrl: '/api/v1', accessToken: '', fetcher })
+
+    await expect(api.sendSmsCode({ phone: '15884119087', purpose: 'password_reset' })).resolves.toEqual({ accepted: true, retry_after_seconds: 60 })
+    await api.resetPassword({ phone: '15884119087', verification_code: '123456', new_password: 'A1!aaaa' })
+    await api.getLegalDocument('privacy-policy')
+
+    expect(fetcher.mock.calls[0][0]).toBe('/api/v1/auth/sms-codes')
+    expect(JSON.parse((fetcher.mock.calls[0][1] as RequestInit).body as string)).toEqual({ phone: '15884119087', purpose: 'password_reset' })
+    expect(fetcher.mock.calls[1][0]).toBe('/api/v1/auth/password-resets')
+    expect(fetcher.mock.calls[2][0]).toBe('/api/v1/legal/privacy-policy')
+  })
+
   it('lists and reindexes knowledge files through admin endpoints', async () => {
     const fetcher = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({

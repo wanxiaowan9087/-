@@ -15,6 +15,7 @@ tags:
   - name: Chat
   - name: Runs
   - name: Memories
+  - name: Usage Summaries
   - name: Reviews
   - name: Knowledge
   - name: Administration
@@ -108,6 +109,78 @@ paths:
           $ref: "#/components/responses/ValidationError"
         "500":
           $ref: "#/components/responses/InternalError"
+  /auth/sms-codes:
+    post:
+      tags: [Authentication]
+      operationId: sendSmsCode
+      summary: 发送注册或找回密码验证码
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SmsCodeRequest" }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SmsCodeEnvelope" }
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/StorageUnavailable"
+  /auth/password-resets:
+    post:
+      tags: [Authentication]
+      operationId: resetPassword
+      summary: 使用短信验证码重置密码
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PasswordResetRequest" }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PasswordResetEnvelope" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/StorageUnavailable"
+  /legal/user-agreement:
+    get:
+      tags: [Authentication]
+      operationId: getUserAgreement
+      summary: 获取用户协议
+      security: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LegalDocumentEnvelope" }
+  /legal/privacy-policy:
+    get:
+      tags: [Authentication]
+      operationId: getPrivacyPolicy
+      summary: 获取隐私政策
+      security: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LegalDocumentEnvelope" }
   /auth/me:
     get:
       tags: [Authentication]
@@ -297,6 +370,65 @@ paths:
           $ref: "#/components/responses/ValidationError"
         "500":
           $ref: "#/components/responses/InternalError"
+  /me/usage-summary:
+    get:
+      tags: [Usage Summaries]
+      operationId: getCurrentUserUsageSummary
+      summary: 获取当前用户的平台使用总结
+      description: |
+        返回由真实站内对话、长期记忆和已推荐型号汇总的最新快照。
+        服务端从访问令牌确定用户身份，不接受 user_id 参数；设备业务数据缺失时返回明确状态，不会编造。
+      x-required-role: user
+      responses:
+        "200":
+          description: 当前用户总结快照；数据不足时返回 status=empty。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageSummaryEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/StorageUnavailable"
+  /me/usage-events:
+    post:
+      tags: [Usage Summaries]
+      operationId: recordCurrentUserUsageEvent
+      summary: 记录当前用户的产品浏览行为
+      description: 仅允许记录详情页和 3D 查看行为；用户身份从访问令牌确定，写入数据严格按 user_id 隔离。
+      x-required-role: user
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UsageEventRequest"
+      responses:
+        "201":
+          description: 行为已记录
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageEventEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/StorageUnavailable"
   /sessions:
     get:
       tags: [Sessions]
@@ -1155,13 +1287,12 @@ components:
     RegisterRequest:
       type: object
       additionalProperties: false
-      required: [username, password, nickname]
+      required: [phone, password, nickname, verification_code, user_agreement_version, privacy_policy_version, agree_user_agreement, agree_privacy_policy]
       properties:
-        username:
+        phone:
           type: string
-          minLength: 3
-          maxLength: 32
-          pattern: '^[A-Za-z0-9_]+$'
+          minLength: 11
+          maxLength: 16
         password:
           type: string
           minLength: 6
@@ -1171,6 +1302,23 @@ components:
           type: string
           minLength: 1
           maxLength: 40
+        verification_code:
+          type: string
+          pattern: '^[0-9]{6}$'
+        user_agreement_version:
+          type: string
+          minLength: 1
+          maxLength: 32
+        privacy_policy_version:
+          type: string
+          minLength: 1
+          maxLength: 32
+        agree_user_agreement:
+          type: boolean
+          const: true
+        agree_privacy_policy:
+          type: boolean
+          const: true
         avatar_url:
           type: [string, "null"]
           minLength: 8
@@ -1179,17 +1327,76 @@ components:
     LoginRequest:
       type: object
       additionalProperties: false
-      required: [username, password]
+      required: [phone, password]
       properties:
-        username:
+        phone:
           type: string
-          minLength: 3
-          maxLength: 32
-          pattern: '^[A-Za-z0-9_]+$'
+          minLength: 11
+          maxLength: 16
         password:
           type: string
           minLength: 6
           maxLength: 20
+    SmsCodeRequest:
+      type: object
+      additionalProperties: false
+      required: [phone, purpose]
+      properties:
+        phone: { type: string, minLength: 11, maxLength: 16 }
+        purpose: { type: string, enum: [register, password_reset] }
+    SmsCodeResult:
+      type: object
+      required: [accepted, retry_after_seconds]
+      properties:
+        accepted: { type: boolean }
+        retry_after_seconds: { type: integer, minimum: 0 }
+    SmsCodeEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/ApiEnvelopeBase"
+        - type: object
+          required: [data]
+          properties:
+            data: { $ref: "#/components/schemas/SmsCodeResult" }
+    PasswordResetRequest:
+      type: object
+      additionalProperties: false
+      required: [phone, verification_code, new_password]
+      properties:
+        phone: { type: string, minLength: 11, maxLength: 16 }
+        verification_code: { type: string, pattern: '^[0-9]{6}$' }
+        new_password:
+          type: string
+          minLength: 6
+          maxLength: 20
+          pattern: '^(?=.*[A-Za-z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{6,20}$'
+    PasswordResetResult:
+      type: object
+      required: [reset]
+      properties: { reset: { type: boolean, const: true } }
+    PasswordResetEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/ApiEnvelopeBase"
+        - type: object
+          required: [data]
+          properties:
+            data: { $ref: "#/components/schemas/PasswordResetResult" }
+    LegalDocument:
+      type: object
+      required: [document_type, version, title, content, content_sha256, effective_at]
+      properties:
+        document_type: { type: string, enum: [user_agreement, privacy_policy] }
+        version: { type: string }
+        title: { type: string }
+        content: { type: string }
+        content_sha256: { type: string, minLength: 64, maxLength: 64 }
+        effective_at: { $ref: "#/components/schemas/Timestamp" }
+    LegalDocumentEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/ApiEnvelopeBase"
+        - type: object
+          required: [data]
+          properties:
+            data: { $ref: "#/components/schemas/LegalDocument" }
     AuthUser:
       type: object
       additionalProperties: false
@@ -2240,3 +2447,185 @@ components:
           properties:
             data:
               $ref: "#/components/schemas/ReviewDecisionResult"
+    UsageSummaryTopic:
+      type: object
+      additionalProperties: false
+      required: [name, count]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        count:
+          type: integer
+          minimum: 1
+    UsageSummaryMemory:
+      type: object
+      additionalProperties: false
+      required: [content, confidence, source_message_id]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 5000
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        source_message_id:
+          $ref: "#/components/schemas/Uuid"
+    UsageSummaryProduct:
+      type: object
+      additionalProperties: false
+      required: [model_code, recommendation_count]
+      properties:
+        product_id:
+          type: [string, "null"]
+          maxLength: 128
+        model_code:
+          type: string
+          minLength: 1
+          maxLength: 128
+        recommendation_count:
+          type: integer
+          minimum: 1
+    UsageSummaryDeviceUsage:
+      type: object
+      additionalProperties: false
+      required: [status, reason]
+      properties:
+        status:
+          type: string
+          enum: [available, unavailable]
+        reason:
+          type: [string, "null"]
+          maxLength: 200
+    UsageSummaryConversationOverview:
+      type: object
+      additionalProperties: false
+      required: [session_count, message_count, active_days, top_topics]
+      properties:
+        session_count:
+          type: integer
+          minimum: 0
+        message_count:
+          type: integer
+          minimum: 0
+        active_days:
+          type: integer
+          minimum: 0
+        top_topics:
+          type: array
+          maxItems: 10
+          items:
+            $ref: "#/components/schemas/UsageSummaryTopic"
+    UsageSummaryProductActivity:
+      type: object
+      additionalProperties: false
+      required: [recommended_models, detail_view_count, three_d_view_count]
+      properties:
+        recommended_models:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/UsageSummaryProduct"
+        detail_view_count:
+          type: integer
+          minimum: 0
+        three_d_view_count:
+          type: integer
+          minimum: 0
+    UsageSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - version
+        - conversation_overview
+        - facts
+        - preferences
+        - product_activity
+        - device_usage
+        - generated_at
+        - data_through_at
+      properties:
+        status:
+          type: string
+          enum: [ready, updating, empty]
+        version:
+          type: integer
+          minimum: 0
+        conversation_overview:
+          $ref: "#/components/schemas/UsageSummaryConversationOverview"
+        facts:
+          type: array
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/UsageSummaryMemory"
+        preferences:
+          type: array
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/UsageSummaryMemory"
+        product_activity:
+          $ref: "#/components/schemas/UsageSummaryProductActivity"
+        device_usage:
+          $ref: "#/components/schemas/UsageSummaryDeviceUsage"
+        generated_at:
+          anyOf:
+            - $ref: "#/components/schemas/Timestamp"
+            - type: "null"
+        data_through_at:
+          anyOf:
+            - $ref: "#/components/schemas/Timestamp"
+            - type: "null"
+    UsageSummaryEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/ApiEnvelopeBase"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: "#/components/schemas/UsageSummary"
+    UsageEventRequest:
+      type: object
+      additionalProperties: false
+      required: [event_type, product_id]
+      properties:
+        event_type:
+          type: string
+          enum: [product_detail_viewed, product_3d_viewed]
+        product_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        model_code:
+          type: [string, "null"]
+          maxLength: 128
+          default: null
+    UsageEvent:
+      type: object
+      additionalProperties: false
+      required: [id, event_type, product_id, model_code, occurred_at]
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        event_type:
+          type: string
+          enum: [product_detail_viewed, product_3d_viewed, product_recommended]
+        product_id:
+          type: [string, "null"]
+          maxLength: 128
+        model_code:
+          type: [string, "null"]
+          maxLength: 128
+        occurred_at:
+          $ref: "#/components/schemas/Timestamp"
+    UsageEventEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/ApiEnvelopeBase"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: "#/components/schemas/UsageEvent"

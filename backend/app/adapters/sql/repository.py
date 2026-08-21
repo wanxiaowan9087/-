@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import and_, desc, func, or_, select
+from sqlalchemy import and_, delete, desc, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
@@ -22,6 +22,9 @@ from backend.app.domain.records import (
     RunRecord,
     SessionRecord,
     StreamEventRecord,
+    SummaryUpdateJobRecord,
+    UsageEventRecord,
+    UserSummarySnapshotRecord,
 )
 
 from .models import (
@@ -35,6 +38,9 @@ from .models import (
     RunModel,
     SessionModel,
     StreamEventModel,
+    SummaryUpdateJobModel,
+    UsageEventModel,
+    UserSummarySnapshotModel,
 )
 
 
@@ -121,6 +127,28 @@ def _review(row: ReviewModel) -> ReviewRecord:
         row.version,
         row.created_at,
         row.decided_at,
+    )
+
+
+def _usage_event(row: UsageEventModel) -> UsageEventRecord:
+    return UsageEventRecord(
+        row.id, row.owner_id, row.session_id, row.message_id, row.event_type,
+        row.product_id, row.model_code, row.metadata_ or {}, row.occurred_at,
+    )
+
+
+def _summary_job(row: SummaryUpdateJobModel) -> SummaryUpdateJobRecord:
+    return SummaryUpdateJobRecord(
+        row.id, row.owner_id, row.session_id, row.trigger_message_id, row.status,
+        row.attempts, row.max_attempts, row.next_attempt_at, row.error_code,
+        row.error_summary, row.created_at, row.updated_at, row.completed_at,
+    )
+
+
+def _summary_snapshot(row: UserSummarySnapshotModel) -> UserSummarySnapshotRecord:
+    return UserSummarySnapshotRecord(
+        row.id, row.owner_id, row.version, row.status, row.summary or {},
+        row.display_summary, row.data_through_at, row.generated_at, row.generator_version,
     )
 
 
@@ -637,6 +665,365 @@ class SqlPlatformTransaction:
             message.product_recommendations = product_recommendations
         await self.session.flush()
         return _run(row)
+
+    async def enqueue_summary_update(
+        self,
+        *,
+        owner_id: str,
+        session_id: UUID,
+        trigger_message_id: UUID,
+        now: datetime,
+    ) -> SummaryUpdateJobRecord:
+        existing = (
+            await self.session.execute(
+                select(SummaryUpdateJobModel).where(
+                    SummaryUpdateJobModel.trigger_message_id == trigger_message_id
+                ).with_for_update()
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            return _summary_job(existing)
+        row = SummaryUpdateJobModel(
+            owner_id=owner_id,
+            session_id=session_id,
+            trigger_message_id=trigger_message_id,
+            status="queued",
+            attempts=0,
+            max_attempts=3,
+            next_attempt_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+        try:
+            # The unique trigger-message key is the durable idempotency boundary.
+            # A savepoint leaves the outer chat-completion transaction usable when
+            # another worker enqueues the same completed assistant message first.
+            async with self.session.begin_nested():
+                self.session.add(row)
+                await self.session.flush()
+        except IntegrityError:
+            existing = (
+                await self.session.execute(
+                    select(SummaryUpdateJobModel)
+                    .where(SummaryUpdateJobModel.trigger_message_id == trigger_message_id)
+                    .with_for_update()
+                )
+            ).scalar_one()
+            return _summary_job(existing)
+        return _summary_job(row)
+
+    async def claim_summary_update_jobs(
+        self, *, now: datetime, limit: int
+    ) -> list[SummaryUpdateJobRecord]:
+        rows = list(
+            (
+                await self.session.execute(
+                    select(SummaryUpdateJobModel)
+                    .where(
+                        SummaryUpdateJobModel.status.in_(("queued", "retry")),
+                        SummaryUpdateJobModel.next_attempt_at <= now,
+                        SummaryUpdateJobModel.attempts < SummaryUpdateJobModel.max_attempts,
+                    )
+                    .order_by(
+                        SummaryUpdateJobModel.next_attempt_at,
+                        SummaryUpdateJobModel.created_at,
+                        SummaryUpdateJobModel.id,
+                    )
+                    .limit(limit)
+                    .with_for_update(skip_locked=True)
+                )
+            ).scalars()
+        )
+        for row in rows:
+            row.status = "running"
+            row.attempts += 1
+            row.updated_at = now
+        await self.session.flush()
+        return [_summary_job(row) for row in rows]
+
+    async def complete_summary_update_job(
+        self,
+        job_id: UUID,
+        *,
+        summary: dict[str, Any],
+        display_summary: str,
+        data_through_at: datetime | None,
+        generator_version: str,
+        now: datetime,
+    ) -> UserSummarySnapshotRecord | None:
+        job = (
+            await self.session.execute(
+                select(SummaryUpdateJobModel)
+                .where(SummaryUpdateJobModel.id == job_id, SummaryUpdateJobModel.status == "running")
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+        if job is None:
+            return None
+        if self.session.bind is not None and self.session.bind.dialect.name == "postgresql":
+            # Different jobs for one owner may be claimed by different workers.
+            # Serialize the version allocation and active-snapshot switch even when
+            # the owner has no previous snapshot row to lock yet.
+            await self.session.execute(
+                select(func.pg_advisory_xact_lock(func.hashtext(job.owner_id)))
+            )
+        latest_version = (
+            await self.session.execute(
+                select(func.max(UserSummarySnapshotModel.version)).where(
+                    UserSummarySnapshotModel.owner_id == job.owner_id
+                )
+            )
+        ).scalar_one_or_none() or 0
+        await self.session.execute(
+            update(UserSummarySnapshotModel)
+            .where(
+                UserSummarySnapshotModel.owner_id == job.owner_id,
+                UserSummarySnapshotModel.status == "active",
+            )
+            .values(status="superseded")
+        )
+        snapshot = UserSummarySnapshotModel(
+            owner_id=job.owner_id,
+            version=latest_version + 1,
+            status="active",
+            summary=summary,
+            display_summary=display_summary,
+            data_through_at=data_through_at,
+            generated_at=now,
+            generator_version=generator_version,
+        )
+        self.session.add(snapshot)
+        job.status = "completed"
+        job.completed_at = now
+        job.updated_at = now
+        job.error_code = None
+        job.error_summary = None
+        await self.session.flush()
+        return _summary_snapshot(snapshot)
+
+    async def fail_summary_update_job(
+        self,
+        job_id: UUID,
+        *,
+        error_code: str,
+        error_summary: str,
+        retry_at: datetime | None,
+        now: datetime,
+    ) -> None:
+        job = (
+            await self.session.execute(
+                select(SummaryUpdateJobModel)
+                .where(SummaryUpdateJobModel.id == job_id, SummaryUpdateJobModel.status == "running")
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+        if job is None:
+            return
+        job.error_code = error_code[:64]
+        job.error_summary = error_summary[:500]
+        job.updated_at = now
+        if retry_at is not None and job.attempts < job.max_attempts:
+            job.status = "retry"
+            job.next_attempt_at = retry_at
+        else:
+            job.status = "failed"
+            job.completed_at = now
+        await self.session.flush()
+
+    async def get_latest_usage_summary(
+        self, owner_id: str
+    ) -> UserSummarySnapshotRecord | None:
+        row = (
+            await self.session.execute(
+                select(UserSummarySnapshotModel)
+                .where(
+                    UserSummarySnapshotModel.owner_id == owner_id,
+                    UserSummarySnapshotModel.status == "active",
+                )
+                .order_by(desc(UserSummarySnapshotModel.generated_at), desc(UserSummarySnapshotModel.id))
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        return _summary_snapshot(row) if row else None
+
+    async def has_pending_summary_update(self, owner_id: str) -> bool:
+        row = (
+            await self.session.execute(
+                select(SummaryUpdateJobModel.id)
+                .where(
+                    SummaryUpdateJobModel.owner_id == owner_id,
+                    SummaryUpdateJobModel.status.in_(("queued", "retry", "running")),
+                )
+                .limit(1)
+            )
+        ).first()
+        return row is not None
+
+    async def record_product_recommendations(
+        self,
+        *,
+        owner_id: str,
+        session_id: UUID,
+        message_id: UUID,
+        recommendations: list[dict[str, Any]],
+        now: datetime,
+    ) -> None:
+        rows: list[UsageEventModel] = []
+        for recommendation in recommendations:
+            model_code = recommendation.get("model") or recommendation.get("model_code")
+            if not isinstance(model_code, str) or not model_code.strip():
+                continue
+            product_id = recommendation.get("product_id")
+            rows.append(
+                UsageEventModel(
+                    owner_id=owner_id,
+                    session_id=session_id,
+                    message_id=message_id,
+                    event_type="product_recommended",
+                    product_id=str(product_id) if product_id is not None else None,
+                    model_code=model_code.strip(),
+                    metadata_={},
+                    occurred_at=now,
+                )
+            )
+        self.session.add_all(rows)
+        await self.session.flush()
+
+    async def record_usage_event(
+        self,
+        *,
+        owner_id: str,
+        event_type: str,
+        product_id: str | None,
+        model_code: str | None,
+        now: datetime,
+    ) -> UsageEventRecord:
+        row = UsageEventModel(
+            owner_id=owner_id,
+            event_type=event_type,
+            product_id=product_id,
+            model_code=model_code,
+            metadata_={},
+            occurred_at=now,
+        )
+        self.session.add(row)
+        await self.session.flush()
+        return _usage_event(row)
+
+    async def list_usage_events(
+        self, owner_id: str, *, limit: int
+    ) -> list[UsageEventRecord]:
+        rows = list(
+            (
+                await self.session.execute(
+                    select(UsageEventModel)
+                    .where(UsageEventModel.owner_id == owner_id)
+                    .order_by(desc(UsageEventModel.occurred_at), desc(UsageEventModel.id))
+                    .limit(limit)
+                )
+            ).scalars()
+        )
+        return [_usage_event(row) for row in rows]
+
+    async def purge_expired_usage_data(self, *, now: datetime) -> dict[str, int]:
+        from datetime import timedelta
+
+        fourteen_days = now - timedelta(days=14)
+        sixty_days = now - timedelta(days=60)
+        ninety_days = now - timedelta(days=90)
+        thirty_days = now - timedelta(days=30)
+        counts = {
+            "events": 0,
+            "jobs": 0,
+            "snapshots": 0,
+            "memories": 0,
+            "messages": 0,
+            "stream_events": 0,
+        }
+        event_covered_by_snapshot = select(UserSummarySnapshotModel.id).where(
+            UserSummarySnapshotModel.owner_id == UsageEventModel.owner_id,
+            UserSummarySnapshotModel.status == "active",
+            UserSummarySnapshotModel.data_through_at.is_not(None),
+            UserSummarySnapshotModel.data_through_at >= UsageEventModel.occurred_at,
+        ).exists()
+        for key, statement in {
+            "events": delete(UsageEventModel).where(
+                UsageEventModel.occurred_at < sixty_days,
+                event_covered_by_snapshot,
+            ),
+            "jobs": delete(SummaryUpdateJobModel).where(
+                SummaryUpdateJobModel.status.in_(("completed", "failed")),
+                SummaryUpdateJobModel.completed_at < fourteen_days,
+            ),
+            "memories": delete(MemoryModel).where(
+                MemoryModel.status.in_(("inactive", "deleted")), MemoryModel.updated_at < thirty_days
+            ),
+            # Stream events are the verbose trace payload. Run rows referenced
+            # by review audits remain until their audit retention is defined.
+            "stream_events": delete(StreamEventModel).where(
+                StreamEventModel.created_at < fourteen_days
+            ),
+        }.items():
+            result = await self.session.execute(statement)
+            counts[key] = result.rowcount or 0
+
+        owners = list(
+            (
+                await self.session.execute(select(UserSummarySnapshotModel.owner_id).distinct())
+            ).scalars()
+        )
+        for owner_id in owners:
+            obsolete = list(
+                (
+                    await self.session.execute(
+                        select(UserSummarySnapshotModel.id)
+                        .where(
+                            UserSummarySnapshotModel.owner_id == owner_id,
+                            UserSummarySnapshotModel.status != "active",
+                        )
+                        .order_by(desc(UserSummarySnapshotModel.generated_at), desc(UserSummarySnapshotModel.id))
+                        .offset(11)
+                    )
+                ).scalars()
+            )
+            if obsolete:
+                result = await self.session.execute(
+                    delete(UserSummarySnapshotModel).where(UserSummarySnapshotModel.id.in_(obsolete))
+                )
+                counts["snapshots"] += result.rowcount or 0
+
+        covered_by_snapshot = select(UserSummarySnapshotModel.id).where(
+            UserSummarySnapshotModel.owner_id == MessageModel.owner_id,
+            UserSummarySnapshotModel.status == "active",
+            UserSummarySnapshotModel.data_through_at.is_not(None),
+            UserSummarySnapshotModel.data_through_at >= MessageModel.created_at,
+        ).exists()
+        referenced_by_active_memory = select(MemoryModel.id).where(
+            MemoryModel.source_message_id == MessageModel.id,
+            MemoryModel.status == "active",
+        ).exists()
+        referenced_by_summary_job = select(SummaryUpdateJobModel.id).where(
+            SummaryUpdateJobModel.trigger_message_id == MessageModel.id,
+            SummaryUpdateJobModel.status.in_(("queued", "retry", "running")),
+        ).exists()
+        referenced_by_run = select(RunModel.id).where(
+            or_(
+                RunModel.user_message_id == MessageModel.id,
+                RunModel.assistant_message_id == MessageModel.id,
+            )
+        ).exists()
+        message_result = await self.session.execute(
+            delete(MessageModel).where(
+                MessageModel.created_at < ninety_days,
+                covered_by_snapshot,
+                ~referenced_by_active_memory,
+                ~referenced_by_summary_job,
+                ~referenced_by_run,
+            )
+        )
+        counts["messages"] = message_result.rowcount or 0
+        await self.session.flush()
+        return counts
 
     async def create_feedback(
         self,

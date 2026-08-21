@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -52,8 +53,50 @@ class InMemoryRateLimiter:
         return True
 
 
+class RedisRateLimiter:
+    """Atomic distributed SMS limiter used when Redis is configured."""
+
+    _SCRIPT = """
+    local cooldown = redis.call('SET', KEYS[1], '1', 'NX', 'EX', ARGV[1])
+    if not cooldown then return 0 end
+    local hourly = redis.call('INCR', KEYS[2])
+    if hourly == 1 then redis.call('EXPIRE', KEYS[2], 3600) end
+    local daily = redis.call('INCR', KEYS[3])
+    if daily == 1 then redis.call('EXPIRE', KEYS[3], 86400) end
+    if hourly > tonumber(ARGV[2]) or daily > tonumber(ARGV[3]) then
+      redis.call('DEL', KEYS[1])
+      redis.call('DECR', KEYS[2])
+      redis.call('DECR', KEYS[3])
+      return 0
+    end
+    return 1
+    """
+
+    def __init__(self, client, limits: SmsLimits = SmsLimits()) -> None:
+        self.client = client
+        self.limits = limits
+
+    async def allow(self, key: str) -> bool:
+        digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
+        prefix = f"agent:sms:{digest}"
+        try:
+            result = await self.client.eval(
+                self._SCRIPT,
+                3,
+                f"{prefix}:cooldown",
+                f"{prefix}:hour",
+                f"{prefix}:day",
+                self.limits.cooldown_seconds,
+                self.limits.hourly,
+                self.limits.daily,
+            )
+        except Exception as exc:
+            raise AppError("RATE_LIMIT_BACKEND_UNAVAILABLE", "短信服务暂时不可用", 503) from exc
+        return bool(int(result))
+
+
 class SmsVerificationService:
-    def __init__(self, provider: SmsProvider, limiter: InMemoryRateLimiter | None = None) -> None:
+    def __init__(self, provider: SmsProvider, limiter=None) -> None:
         self.provider = provider
         self.limiter = limiter or InMemoryRateLimiter()
 

@@ -42,6 +42,10 @@ class EmptyUserContextProvider:
         return MemoryContext()
 
 
+class UsageSummaryProvider(Protocol):
+    async def get(self, subject_id: str) -> object | None: ...
+
+
 _request_context: ContextVar[tuple[str, str] | None] = ContextVar(
     "agent_request_context", default=None
 )
@@ -89,11 +93,37 @@ async def summarize_user_habits(provider: UserContextProvider) -> ToolResult:
     )
 
 
+async def get_user_usage_summary(provider: UsageSummaryProvider) -> ToolResult:
+    identity = _request_context.get()
+    if identity is None:
+        return ToolResult("当前请求未绑定用户身份，无法读取使用总结。")
+    subject_id, _ = identity
+    snapshot = await provider.get(subject_id)
+    if snapshot is None:
+        return ToolResult(
+            "当前账号还没有可用的使用记录，暂时无法生成总结。",
+            internal_content={"status": "empty", "subject_id": subject_id},
+        )
+    summary = getattr(snapshot, "display_summary", None)
+    if not isinstance(summary, str) or not summary.strip():
+        return ToolResult("当前账号的使用总结正在更新，请稍后再试。")
+    return ToolResult(
+        summary,
+        internal_content={
+            "status": "ready",
+            "subject_id": subject_id,
+            "snapshot_version": getattr(snapshot, "version", None),
+        },
+    )
+
+
 def build_customer_tool_registry(
     provider: UserContextProvider | None = None,
+    usage_summary_provider: UsageSummaryProvider | None = None,
 ) -> ToolRegistry:
     """Return only deterministic, privacy-safe tools for the live agent."""
     context_provider = provider or EmptyUserContextProvider()
+    summary_provider = usage_summary_provider or _EmptyUsageSummaryProvider()
     return ToolRegistry(
         (
             ToolDefinition(
@@ -124,5 +154,20 @@ def build_customer_tool_registry(
                 timeout_seconds=2.0,
                 critical=False,
             ),
+            ToolDefinition(
+                name="get_user_usage_summary",
+                purpose="读取当前已认证用户按 user_id 隔离的最新平台使用总结；没有记录时明确返回空状态。",
+                input_type=SupportScopeInput,
+                handler=lambda _arguments: get_user_usage_summary(summary_provider),
+                timeout_seconds=2.0,
+                critical=False,
+            ),
         )
     )
+
+
+@dataclass(frozen=True)
+class _EmptyUsageSummaryProvider:
+    async def get(self, subject_id: str) -> object | None:
+        del subject_id
+        return None

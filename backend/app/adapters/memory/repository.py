@@ -21,6 +21,9 @@ from backend.app.domain.records import (
     RunRecord,
     SessionRecord,
     StreamEventRecord,
+    SummaryUpdateJobRecord,
+    UsageEventRecord,
+    UserSummarySnapshotRecord,
 )
 
 
@@ -35,6 +38,9 @@ class MemoryPlatformRepository:
         self.memories: dict[UUID, MemoryRecord] = {}
         self.reviews: dict[UUID, ReviewRecord] = {}
         self.feedback: dict[UUID, FeedbackRecord] = {}
+        self.usage_events: dict[UUID, UsageEventRecord] = {}
+        self.summary_jobs: dict[UUID, SummaryUpdateJobRecord] = {}
+        self.summary_snapshots: dict[UUID, UserSummarySnapshotRecord] = {}
         self.idempotency: dict[tuple[str, str, str, str], IdempotencyRecord] = {}
         self.review_audits: list[ReviewAuditRecord] = []
         self._lock = asyncio.Lock()
@@ -51,6 +57,9 @@ class MemoryPlatformRepository:
                     self.memories,
                     self.reviews,
                     self.feedback,
+                    self.usage_events,
+                    self.summary_jobs,
+                    self.summary_snapshots,
                     self.idempotency,
                     self.review_audits,
                 )
@@ -66,6 +75,9 @@ class MemoryPlatformRepository:
                     self.memories,
                     self.reviews,
                     self.feedback,
+                    self.usage_events,
+                    self.summary_jobs,
+                    self.summary_snapshots,
                     self.idempotency,
                     self.review_audits,
                 ) = snapshot
@@ -422,6 +434,222 @@ class MemoryPlatformRepository:
         if product_recommendations is not None:
             assistant.product_recommendations = copy.deepcopy(product_recommendations)
         return run
+
+    async def enqueue_summary_update(
+        self,
+        *,
+        owner_id: str,
+        session_id: UUID,
+        trigger_message_id: UUID,
+        now: datetime,
+    ) -> SummaryUpdateJobRecord:
+        existing = next(
+            (item for item in self.summary_jobs.values() if item.trigger_message_id == trigger_message_id),
+            None,
+        )
+        if existing is not None:
+            return existing
+        record = SummaryUpdateJobRecord(
+            uuid4(), owner_id, session_id, trigger_message_id, "queued", 0, 3, now,
+            None, None, now, now,
+        )
+        self.summary_jobs[record.id] = record
+        return record
+
+    async def claim_summary_update_jobs(
+        self, *, now: datetime, limit: int
+    ) -> list[SummaryUpdateJobRecord]:
+        candidates = [
+            item
+            for item in self.summary_jobs.values()
+            if item.status in {"queued", "retry"}
+            and item.next_attempt_at <= now
+            and item.attempts < item.max_attempts
+        ]
+        candidates.sort(key=lambda item: (item.next_attempt_at, item.created_at, item.id))
+        claimed = candidates[:limit]
+        for item in claimed:
+            item.status = "running"
+            item.attempts += 1
+            item.updated_at = now
+        return claimed
+
+    async def complete_summary_update_job(
+        self,
+        job_id: UUID,
+        *,
+        summary: dict[str, Any],
+        display_summary: str,
+        data_through_at: datetime | None,
+        generator_version: str,
+        now: datetime,
+    ) -> UserSummarySnapshotRecord | None:
+        job = self.summary_jobs.get(job_id)
+        if job is None or job.status != "running":
+            return None
+        active = [item for item in self.summary_snapshots.values() if item.owner_id == job.owner_id and item.status == "active"]
+        for item in active:
+            item.status = "superseded"
+        version = max((item.version for item in self.summary_snapshots.values() if item.owner_id == job.owner_id), default=0) + 1
+        snapshot = UserSummarySnapshotRecord(
+            uuid4(), job.owner_id, version, "active", copy.deepcopy(summary), display_summary,
+            data_through_at, now, generator_version,
+        )
+        self.summary_snapshots[snapshot.id] = snapshot
+        job.status = "completed"
+        job.completed_at = now
+        job.updated_at = now
+        job.error_code = None
+        job.error_summary = None
+        return snapshot
+
+    async def fail_summary_update_job(
+        self,
+        job_id: UUID,
+        *,
+        error_code: str,
+        error_summary: str,
+        retry_at: datetime | None,
+        now: datetime,
+    ) -> None:
+        job = self.summary_jobs.get(job_id)
+        if job is None or job.status != "running":
+            return
+        job.error_code = error_code[:64]
+        job.error_summary = error_summary[:500]
+        job.updated_at = now
+        if retry_at is not None and job.attempts < job.max_attempts:
+            job.status = "retry"
+            job.next_attempt_at = retry_at
+        else:
+            job.status = "failed"
+            job.completed_at = now
+
+    async def get_latest_usage_summary(
+        self, owner_id: str
+    ) -> UserSummarySnapshotRecord | None:
+        items = [
+            item for item in self.summary_snapshots.values()
+            if item.owner_id == owner_id and item.status == "active"
+        ]
+        return max(items, key=lambda item: (item.generated_at, item.id), default=None)
+
+    async def has_pending_summary_update(self, owner_id: str) -> bool:
+        return any(
+            item.owner_id == owner_id and item.status in {"queued", "retry", "running"}
+            for item in self.summary_jobs.values()
+        )
+
+    async def record_product_recommendations(
+        self,
+        *,
+        owner_id: str,
+        session_id: UUID,
+        message_id: UUID,
+        recommendations: list[dict[str, Any]],
+        now: datetime,
+    ) -> None:
+        for recommendation in recommendations:
+            product_id = recommendation.get("product_id")
+            model_code = recommendation.get("model") or recommendation.get("model_code")
+            if not isinstance(model_code, str) or not model_code.strip():
+                continue
+            event_id = uuid4()
+            self.usage_events[event_id] = UsageEventRecord(
+                event_id, owner_id, session_id, message_id, "product_recommended",
+                str(product_id) if product_id is not None else None, model_code.strip(), {}, now,
+            )
+
+    async def record_usage_event(
+        self,
+        *,
+        owner_id: str,
+        event_type: str,
+        product_id: str | None,
+        model_code: str | None,
+        now: datetime,
+    ) -> UsageEventRecord:
+        event_id = uuid4()
+        event = UsageEventRecord(
+            event_id, owner_id, None, None, event_type, product_id, model_code, {}, now
+        )
+        self.usage_events[event_id] = event
+        return event
+
+    async def list_usage_events(
+        self, owner_id: str, *, limit: int
+    ) -> list[UsageEventRecord]:
+        items = [item for item in self.usage_events.values() if item.owner_id == owner_id]
+        items.sort(key=lambda item: (item.occurred_at, item.id), reverse=True)
+        return items[:limit]
+
+    async def purge_expired_usage_data(self, *, now: datetime) -> dict[str, int]:
+        deleted = {
+            "events": 0,
+            "jobs": 0,
+            "snapshots": 0,
+            "memories": 0,
+            "messages": 0,
+            "stream_events": 0,
+        }
+        fourteen_days = now - timedelta(days=14)
+        sixty_days = now - timedelta(days=60)
+        ninety_days = now - timedelta(days=90)
+        thirty_days = now - timedelta(days=30)
+
+        # Stream events are verbose trace payloads. Keep run records because they
+        # can remain referenced by review/audit data with a separate retention rule.
+        for run_id, events in list(self.events.items()):
+            retained = [event for event in events if event.created_at >= fourteen_days]
+            deleted["stream_events"] += len(events) - len(retained)
+            if retained:
+                self.events[run_id] = retained
+            else:
+                del self.events[run_id]
+        active_coverages = {
+            item.owner_id: item.data_through_at
+            for item in self.summary_snapshots.values()
+            if item.status == "active"
+        }
+        for event_id, event in list(self.usage_events.items()):
+            coverage = active_coverages.get(event.owner_id)
+            if (
+                event.occurred_at < sixty_days
+                and coverage is not None
+                and coverage >= event.occurred_at
+            ):
+                del self.usage_events[event_id]
+                deleted["events"] += 1
+        for job_id, job in list(self.summary_jobs.items()):
+            if job.status in {"completed", "failed"} and job.completed_at and job.completed_at < fourteen_days:
+                del self.summary_jobs[job_id]
+                deleted["jobs"] += 1
+        for memory_id, memory in list(self.memories.items()):
+            if memory.status in {"inactive", "deleted"} and memory.updated_at < thirty_days:
+                del self.memories[memory_id]
+                deleted["memories"] += 1
+        by_owner: dict[str, list[UserSummarySnapshotRecord]] = {}
+        for snapshot in self.summary_snapshots.values():
+            by_owner.setdefault(snapshot.owner_id, []).append(snapshot)
+        for owner_id, snapshots in by_owner.items():
+            snapshots.sort(key=lambda item: (item.generated_at, item.id), reverse=True)
+            for snapshot in snapshots[12:]:
+                if snapshot.status != "active":
+                    del self.summary_snapshots[snapshot.id]
+                    deleted["snapshots"] += 1
+        protected_sources = {item.source_message_id for item in self.memories.values()}
+        for message_id, message in list(self.messages.items()):
+            coverage = active_coverages.get(message.owner_id)
+            if (
+                message.created_at is not None
+                and message.created_at < ninety_days
+                and coverage is not None
+                and coverage >= message.created_at
+                and message_id not in protected_sources
+            ):
+                del self.messages[message_id]
+                deleted["messages"] += 1
+        return deleted
 
     async def create_feedback(
         self,

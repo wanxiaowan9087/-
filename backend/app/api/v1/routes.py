@@ -6,9 +6,17 @@ from uuid import UUID
 from fastapi import APIRouter, Body, Depends, Header, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from backend.app.api.dependencies import get_identity_service, get_service
+from backend.app.api.dependencies import (
+    get_identity_service,
+    get_phone_protector,
+    get_service,
+    get_sms_service,
+)
 from backend.app.application.identity import IdentityService, IdentityUser, IssuedSession
+from backend.app.application.legal import CURRENT_LEGAL_DOCUMENTS
+from backend.app.application.phone_crypto import PhoneProtector
 from backend.app.application.service import PlatformService
+from backend.app.application.sms_verification import SmsPurpose, SmsVerificationService
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.context import request_id_var
 from backend.app.core.errors import AppError
@@ -24,16 +32,19 @@ from backend.app.schemas.resources import (
     CreateFeedbackRequest,
     CreateSessionRequest,
     DeleteMemoryResult,
+    ExternalIdentityMapping,
+    ExternalIdentityMappingRequest,
     Feedback,
     KnowledgeFile,
     KnowledgeReindexResult,
-    ExternalIdentityMapping,
-    ExternalIdentityMappingRequest,
+    LegalDocument,
     LiveStatus,
     LoginRequest,
     Memory,
     Message,
     NewChatRequest,
+    PasswordResetRequest,
+    PasswordResetResult,
     ReadyStatus,
     RegisterRequest,
     RetryChatRequest,
@@ -42,8 +53,13 @@ from backend.app.schemas.resources import (
     ReviewTask,
     RunTrace,
     Session,
+    SmsCodeRequest,
+    SmsCodeResult,
     UpdateMemoryRequest,
     UpdateProfileRequest,
+    UsageEvent,
+    UsageEventRequest,
+    UsageSummary,
 )
 
 router = APIRouter()
@@ -110,12 +126,33 @@ def auth_session(grant: IssuedSession) -> AuthSession:
 async def register(
     request: RegisterRequest,
     identity: IdentityService = Depends(get_identity_service),
+    sms: SmsVerificationService = Depends(get_sms_service),
+    phone_protector: PhoneProtector = Depends(get_phone_protector),
 ) -> Envelope[AuthSession]:
-    grant = await identity.register(
-        username=request.username,
+    valid_versions = {
+        item.document_type: item.version for item in CURRENT_LEGAL_DOCUMENTS
+    }
+    if (
+        request.user_agreement_version != valid_versions.get("user_agreement")
+        or request.privacy_policy_version != valid_versions.get("privacy_policy")
+    ):
+        raise AppError("VALIDATION_ERROR", "legal agreement version is unavailable", 422)
+    if not await sms.check(
+        phone=request.phone,
+        purpose=SmsPurpose.REGISTER,
+        code=request.verification_code,
+    ):
+        raise AppError("UNAUTHORIZED", "invalid or expired verification code", 401)
+    grant = await identity.register_phone(
+        phone=request.phone,
+        phone_protector=phone_protector,
         password=request.password,
         nickname=request.nickname,
         avatar_url=request.avatar_url,
+        consent_versions={
+            "user_agreement": request.user_agreement_version,
+            "privacy_policy": request.privacy_policy_version,
+        },
     )
     return Envelope(data=auth_session(grant), request_id=request_id_var.get())
 
@@ -130,9 +167,47 @@ async def register(
 async def login(
     request: LoginRequest,
     identity: IdentityService = Depends(get_identity_service),
+    phone_protector: PhoneProtector = Depends(get_phone_protector),
 ) -> Envelope[AuthSession]:
-    grant = await identity.login(username=request.username, password=request.password)
+    grant = await identity.login_phone(
+        phone=request.phone,
+        phone_protector=phone_protector,
+        password=request.password,
+    )
     return Envelope(data=auth_session(grant), request_id=request_id_var.get())
+
+
+@router.post("/auth/sms-codes", response_model=Envelope[SmsCodeResult], operation_id="sendSmsCode", tags=["Authentication"], responses=error_responses(422, 429, 500, 503))
+async def send_sms_code(request: SmsCodeRequest, sms: SmsVerificationService = Depends(get_sms_service)) -> Envelope[SmsCodeResult]:
+    await sms.send(phone=request.phone, purpose=SmsPurpose(request.purpose))
+    return Envelope(data=SmsCodeResult(accepted=True, retry_after_seconds=60), request_id=request_id_var.get())
+
+
+@router.post("/auth/password-resets", response_model=Envelope[PasswordResetResult], operation_id="resetPassword", tags=["Authentication"], responses=error_responses(401, 422, 429, 500, 503))
+async def reset_password(request: PasswordResetRequest, identity: IdentityService = Depends(get_identity_service), sms: SmsVerificationService = Depends(get_sms_service), phone_protector: PhoneProtector = Depends(get_phone_protector)) -> Envelope[PasswordResetResult]:
+    valid = await sms.check(phone=request.phone, purpose=SmsPurpose.PASSWORD_RESET, code=request.verification_code)
+    if not valid:
+        raise AppError("UNAUTHORIZED", "invalid or expired verification code", 401)
+    await identity.reset_password(phone=request.phone, phone_protector=phone_protector, new_password=request.new_password)
+    return Envelope(data=PasswordResetResult(), request_id=request_id_var.get())
+
+
+def _legal_document(document_type: str) -> LegalDocument:
+    document = next((item for item in CURRENT_LEGAL_DOCUMENTS if item.document_type == document_type), None)
+    if document is None:
+        raise AppError("NOT_FOUND", "legal document not found", 404)
+    from datetime import UTC, datetime
+    return LegalDocument(document_type=document.document_type, version=document.version, title=document.title, content=document.content, content_sha256=document.content_digest, effective_at=datetime.now(UTC))
+
+
+@router.get("/legal/user-agreement", response_model=Envelope[LegalDocument], operation_id="getUserAgreement", tags=["Authentication"])
+async def get_user_agreement() -> Envelope[LegalDocument]:
+    return Envelope(data=_legal_document("user_agreement"), request_id=request_id_var.get())
+
+
+@router.get("/legal/privacy-policy", response_model=Envelope[LegalDocument], operation_id="getPrivacyPolicy", tags=["Authentication"])
+async def get_privacy_policy() -> Envelope[LegalDocument]:
+    return Envelope(data=_legal_document("privacy_policy"), request_id=request_id_var.get())
 
 
 @router.get(
@@ -509,6 +584,38 @@ async def list_memories(
     service: PlatformService = Depends(get_service),
 ) -> Envelope[Page[Memory]]:
     return await service.list_memories(principal, cursor, limit, status, memory_type)
+
+
+@router.get(
+    "/me/usage-summary",
+    response_model=Envelope[UsageSummary],
+    operation_id="getCurrentUserUsageSummary",
+    tags=["Usage Summaries"],
+    responses=error_responses(401, 422, 500, 503),
+)
+async def get_current_user_usage_summary(
+    principal: Principal = Depends(get_principal),
+    service: PlatformService = Depends(get_service),
+) -> Envelope[UsageSummary]:
+    return await service.get_usage_summary(principal)
+
+
+@router.post(
+    "/me/usage-events",
+    response_model=Envelope[UsageEvent],
+    status_code=201,
+    operation_id="recordCurrentUserUsageEvent",
+    tags=["Usage Summaries"],
+    responses=error_responses(401, 409, 422, 500, 503),
+)
+async def record_current_user_usage_event(
+    request: UsageEventRequest,
+    key: IdempotencyKey,
+    principal: Principal = Depends(get_principal),
+    service: PlatformService = Depends(get_service),
+) -> JSONResponse:
+    status, body, replayed = await service.record_usage_event(principal, key, request)
+    return json_result(status, body, replayed)
 
 
 @router.patch(
