@@ -47,7 +47,9 @@ class Settings(BaseSettings):
     )
     aliyun_access_key_secret: str | None = Field(
         default=None,
-        validation_alias=AliasChoices("ALIBABA_CLOUD_ACCESS_KEY_SECRET", "APP_ALIYUN_ACCESS_KEY_SECRET"),
+        validation_alias=AliasChoices(
+            "ALIBABA_CLOUD_ACCESS_KEY_SECRET", "APP_ALIYUN_ACCESS_KEY_SECRET"
+        ),
     )
     aliyun_sms_sign_name: str | None = None
     aliyun_sms_template_code: str = "100001"
@@ -55,6 +57,9 @@ class Settings(BaseSettings):
     sms_send_cooldown_seconds: int = Field(default=60, ge=1)
     sms_hourly_limit: int = Field(default=5, ge=1)
     sms_daily_limit: int = Field(default=10, ge=1)
+    sms_verify_max_attempts: int = Field(default=5, ge=1, le=10)
+    sms_verify_attempt_window_seconds: int = Field(default=900, ge=60, le=3_600)
+    sms_verify_lock_seconds: int = Field(default=900, ge=60, le=3_600)
     test_executor_enabled: bool = False
     cursor_signing_secret: str = "development-only-cursor-secret"
     idempotency_ttl_seconds: int = Field(default=86_400, ge=86_400)

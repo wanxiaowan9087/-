@@ -26,8 +26,11 @@ from backend.app.application.ports import RunExecutorPort
 from backend.app.application.service import PlatformService
 from backend.app.application.sms_verification import (
     InMemoryRateLimiter,
+    InMemoryVerificationAttemptLimiter,
     RedisRateLimiter,
+    RedisVerificationAttemptLimiter,
     SmsLimits,
+    SmsVerificationAttemptLimits,
     SmsVerificationService,
 )
 from backend.app.application.usage_summary import UsageSummaryWorker
@@ -90,23 +93,47 @@ def create_app(
     if not settings.phone_encryption_key or not settings.phone_lookup_hmac_key:
         if settings.environment == "production":
             raise ValueError("phone protection keys are required in production")
-        settings.phone_encryption_key = settings.phone_encryption_key or ("dev-phone-encryption-key-32bytes")
-        settings.phone_lookup_hmac_key = settings.phone_lookup_hmac_key or ("dev-phone-lookup-hmac-key-32bytes")
-    phone_protector = PhoneProtector(settings.phone_encryption_key, settings.phone_lookup_hmac_key, settings.phone_key_version)
+        settings.phone_encryption_key = (
+            settings.phone_encryption_key or "dev-phone-encryption-key-32bytes"
+        )
+        settings.phone_lookup_hmac_key = (
+            settings.phone_lookup_hmac_key or "dev-phone-lookup-hmac-key-32bytes"
+        )
+    phone_protector = PhoneProtector(
+        settings.phone_encryption_key,
+        settings.phone_lookup_hmac_key,
+        settings.phone_key_version,
+    )
     sms_limits = SmsLimits(
         settings.sms_send_cooldown_seconds,
         settings.sms_hourly_limit,
         settings.sms_daily_limit,
     )
+    sms_attempt_limits = SmsVerificationAttemptLimits(
+        settings.sms_verify_max_attempts,
+        settings.sms_verify_attempt_window_seconds,
+        settings.sms_verify_lock_seconds,
+    )
     redis_client = redis_adapter.client()
-    if settings.environment == "production" and settings.sms_provider == "aliyun" and redis_client is None:
+    if (
+        settings.environment == "production"
+        and settings.sms_provider == "aliyun"
+        and redis_client is None
+    ):
         raise ValueError("production SMS rate limiting requires Redis")
     sms_limiter = (
         RedisRateLimiter(redis_client, sms_limits)
         if redis_client is not None
         else InMemoryRateLimiter(sms_limits)
     )
-    sms_service = SmsVerificationService(build_sms_provider(settings), sms_limiter)
+    sms_attempt_limiter = (
+        RedisVerificationAttemptLimiter(redis_client, sms_attempt_limits)
+        if redis_client is not None
+        else InMemoryVerificationAttemptLimiter(sms_attempt_limits)
+    )
+    sms_service = SmsVerificationService(
+        build_sms_provider(settings), sms_limiter, sms_attempt_limiter
+    )
     usage_worker = UsageSummaryWorker(repository_adapter)
 
     @asynccontextmanager

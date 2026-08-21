@@ -43,12 +43,24 @@ chmod 600 deploy/production.env
 ```
 
 Edit `deploy/production.env` with the real domain, DashScope key, database password,
-administrator password, and cursor-signing secret. Generate secrets locally on the
+administrator password, cursor-signing secret, and both phone protection keys.
+The phone encryption key must be a Base64 value representing 16, 24, or 32 bytes;
+the phone lookup HMAC key must contain at least 32 bytes. Generate each value on the
 server with:
 
 ```bash
-openssl rand -hex 32
+openssl rand -base64 32
 ```
+
+Do not rely on environment variables configured on a local Windows computer: Docker
+containers on the Alibaba Cloud server only receive values listed in
+`deploy/production.env` and the production Compose configuration.
+
+SMS verification defaults to five failed code checks per phone and purpose within
+15 minutes. The fifth failure locks further checks for 15 minutes; a successful
+check clears the counter. The existing send limits remain 60 seconds between sends,
+five per hour, and ten per day. These values may be changed through the corresponding
+`APP_SMS_VERIFY_*` variables in `deploy/production.env`.
 
 Run the non-destructive configuration check before startup:
 
