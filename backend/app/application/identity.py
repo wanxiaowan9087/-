@@ -27,6 +27,11 @@ class IdentityUser:
     password_hash: str
     role: str
     created_at: datetime
+    phone_ciphertext: str | None = None
+    phone_lookup_digest: str | None = None
+    phone_key_version: str | None = None
+    phone_verified_at: datetime | None = None
+    tokens_revoked_after: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +46,8 @@ class IdentityStore(Protocol):
 
     async def find_user_by_username(self, username: str) -> IdentityUser | None: ...
 
+    async def find_user_by_phone_digest(self, phone_lookup_digest: str) -> IdentityUser | None: ...
+
     async def find_user_by_id(self, user_id: UUID) -> IdentityUser | None: ...
 
     async def update_user(
@@ -48,6 +55,8 @@ class IdentityStore(Protocol):
     ) -> IdentityUser | None: ...
 
     async def update_password(self, user_id: UUID, password_hash: str) -> IdentityUser | None: ...
+
+    async def update_phone_password(self, user_id: UUID, password_hash: str, *, tokens_revoked_after: datetime) -> IdentityUser | None: ...
 
     async def save_token(self, user_id: UUID, token_digest: str, expires_at: datetime) -> None: ...
 
@@ -158,6 +167,39 @@ class IdentityService:
         if user is None or not self._hasher.verify(password, user.password_hash):
             raise AppError("UNAUTHORIZED", "invalid username or password", 401)
         return await self._issue(user, self._clock())
+
+    async def register_phone(self, *, phone: str, phone_protector, password: str, nickname: str,
+                             avatar_url: str | None = None, consent_versions: dict[str, object] | None = None) -> IssuedSession:
+        _validate_password(password)
+        digest = phone_protector.lookup_digest(phone)
+        if await self._store.find_user_by_phone_digest(digest):
+            raise conflict("phone is already registered")
+        now = self._clock()
+        user = IdentityUser(id=uuid4(), username=f"phone_{digest[:16]}", nickname=nickname.strip(),
+            avatar_url=(avatar_url or DEFAULT_AVATAR_URL).strip(), password_hash=self._hasher.hash(password), role="user",
+            created_at=now, phone_ciphertext=phone_protector.encrypt(phone), phone_lookup_digest=digest,
+            phone_key_version=phone_protector.key_version, phone_verified_at=now)
+        created = await self._store.create_user(user)
+        save_consents = getattr(self._store, "save_consents", None)
+        if consent_versions and save_consents is not None:
+            await save_consents(created.id, consent_versions, now)
+        return await self._issue(created, now)
+
+    async def login_phone(self, *, phone: str, phone_protector, password: str) -> IssuedSession:
+        user = await self._store.find_user_by_phone_digest(phone_protector.lookup_digest(phone))
+        if user is None or not self._hasher.verify(password, user.password_hash):
+            raise AppError("UNAUTHORIZED", "invalid phone or password", 401)
+        return await self._issue(user, self._clock())
+
+    async def reset_password(self, *, phone: str, phone_protector, new_password: str) -> IdentityUser:
+        _validate_password(new_password)
+        user = await self._store.find_user_by_phone_digest(phone_protector.lookup_digest(phone))
+        if user is None:
+            raise AppError("UNAUTHORIZED", "invalid phone or password", 401)
+        updated = await self._store.update_phone_password(user.id, self._hasher.hash(new_password), tokens_revoked_after=self._clock())
+        if updated is None:
+            raise AppError("UNAUTHORIZED", "invalid phone or password", 401)
+        return updated
 
     async def authenticate(self, token: str) -> IdentityUser:
         now = self._clock()

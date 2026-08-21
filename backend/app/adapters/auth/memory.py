@@ -11,6 +11,7 @@ class MemoryIdentityStore(IdentityStore):
     def __init__(self) -> None:
         self._users: dict[UUID, IdentityUser] = {}
         self._usernames: dict[str, UUID] = {}
+        self._phones: dict[str, UUID] = {}
         self._tokens: dict[str, tuple[UUID, datetime]] = {}
 
     async def create_user(self, user: IdentityUser) -> IdentityUser:
@@ -18,10 +19,18 @@ class MemoryIdentityStore(IdentityStore):
             raise conflict("username is already registered")
         self._users[user.id] = user
         self._usernames[user.username] = user.id
+        if user.phone_lookup_digest:
+            if user.phone_lookup_digest in self._phones:
+                raise conflict("phone is already registered")
+            self._phones[user.phone_lookup_digest] = user.id
         return user
 
     async def find_user_by_username(self, username: str) -> IdentityUser | None:
         user_id = self._usernames.get(username)
+        return self._users.get(user_id) if user_id else None
+
+    async def find_user_by_phone_digest(self, phone_lookup_digest: str) -> IdentityUser | None:
+        user_id = self._phones.get(phone_lookup_digest)
         return self._users.get(user_id) if user_id else None
 
     async def find_user_by_id(self, user_id: UUID) -> IdentityUser | None:
@@ -41,7 +50,21 @@ class MemoryIdentityStore(IdentityStore):
             password_hash=user.password_hash,
             role=user.role,
             created_at=user.created_at,
+            phone_ciphertext=user.phone_ciphertext, phone_lookup_digest=user.phone_lookup_digest,
+            phone_key_version=user.phone_key_version, phone_verified_at=user.phone_verified_at,
+            tokens_revoked_after=user.tokens_revoked_after,
         )
+        self._users[user_id] = updated
+        return updated
+
+    async def update_phone_password(self, user_id: UUID, password_hash: str, *, tokens_revoked_after: datetime) -> IdentityUser | None:
+        user = self._users.get(user_id)
+        if user is None:
+            return None
+        updated = IdentityUser(id=user.id, username=user.username, nickname=user.nickname, avatar_url=user.avatar_url,
+            password_hash=password_hash, role=user.role, created_at=user.created_at, phone_ciphertext=user.phone_ciphertext,
+            phone_lookup_digest=user.phone_lookup_digest, phone_key_version=user.phone_key_version,
+            phone_verified_at=user.phone_verified_at, tokens_revoked_after=tokens_revoked_after)
         self._users[user_id] = updated
         return updated
 
@@ -57,6 +80,9 @@ class MemoryIdentityStore(IdentityStore):
             password_hash=password_hash,
             role=user.role,
             created_at=user.created_at,
+            phone_ciphertext=user.phone_ciphertext, phone_lookup_digest=user.phone_lookup_digest,
+            phone_key_version=user.phone_key_version, phone_verified_at=user.phone_verified_at,
+            tokens_revoked_after=user.tokens_revoked_after,
         )
         self._users[user_id] = updated
         return updated
@@ -70,8 +96,11 @@ class MemoryIdentityStore(IdentityStore):
         token = self._tokens.get(token_digest)
         if token is None or token[1] <= now:
             return None
+        user = self._users.get(token[0])
+        if user is None or (user.tokens_revoked_after is not None and token[1] <= user.tokens_revoked_after):
+            return None
         self._tokens[token_digest] = (token[0], refreshed_expires_at)
-        return self._users.get(token[0])
+        return user
 
     async def set_role(self, user_id: UUID, role: str) -> IdentityUser | None:
         user = self._users.get(user_id)
@@ -79,6 +108,8 @@ class MemoryIdentityStore(IdentityStore):
             return None
         updated = IdentityUser(id=user.id, username=user.username, nickname=user.nickname,
                                avatar_url=user.avatar_url, password_hash=user.password_hash,
-                               role=role, created_at=user.created_at)
+                               role=role, created_at=user.created_at, phone_ciphertext=user.phone_ciphertext,
+                               phone_lookup_digest=user.phone_lookup_digest, phone_key_version=user.phone_key_version,
+                               phone_verified_at=user.phone_verified_at, tokens_revoked_after=user.tokens_revoked_after)
         self._users[user_id] = updated
         return updated

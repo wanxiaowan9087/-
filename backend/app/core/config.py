@@ -4,7 +4,7 @@ import json
 from functools import lru_cache
 from typing import Annotated
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -32,6 +32,29 @@ class Settings(BaseSettings):
     admin_username: str | None = None
     admin_password: str | None = None
     admin_nickname: str = "系统管理员"
+    phone_encryption_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("APP_PHONE_ENCRYPTION_KEY", "PHONE_ENCRYPTION_KEY"),
+    )
+    phone_lookup_hmac_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("APP_PHONE_LOOKUP_HMAC_KEY", "PHONE_LOOKUP_HMAC_KEY"),
+    )
+    phone_key_version: str = "v1"
+    aliyun_access_key_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("ALIBABA_CLOUD_ACCESS_KEY_ID", "APP_ALIYUN_ACCESS_KEY_ID"),
+    )
+    aliyun_access_key_secret: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("ALIBABA_CLOUD_ACCESS_KEY_SECRET", "APP_ALIYUN_ACCESS_KEY_SECRET"),
+    )
+    aliyun_sms_sign_name: str | None = None
+    aliyun_sms_template_code: str = "100001"
+    sms_provider: str = "fake"
+    sms_send_cooldown_seconds: int = Field(default=60, ge=1)
+    sms_hourly_limit: int = Field(default=5, ge=1)
+    sms_daily_limit: int = Field(default=10, ge=1)
     test_executor_enabled: bool = False
     cursor_signing_secret: str = "development-only-cursor-secret"
     idempotency_ttl_seconds: int = Field(default=86_400, ge=86_400)
@@ -85,6 +108,13 @@ class Settings(BaseSettings):
                 raise ValueError("credentialed production CORS cannot allow '*'")
             if self.cursor_signing_secret == "development-only-cursor-secret":
                 raise ValueError("production cursor signing secret must be configured")
+            if not self.phone_encryption_key or not self.phone_lookup_hmac_key:
+                raise ValueError("production phone encryption and lookup keys must be configured")
+            if self.sms_provider == "aliyun":
+                if not self.aliyun_access_key_id or not self.aliyun_access_key_secret:
+                    raise ValueError("Aliyun credentials are required when sms_provider=aliyun")
+                if not self.aliyun_sms_sign_name or not self.aliyun_sms_template_code:
+                    raise ValueError("Aliyun SMS sign and template are required")
         if not self.database_url.startswith("postgresql+asyncpg://"):
             if self.environment not in {"test", "development"}:
                 raise ValueError("non-development database must use PostgreSQL asyncpg")
