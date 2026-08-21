@@ -45,6 +45,8 @@ services:
     command: ["alembic", "-c", "backend/alembic.ini", "upgrade", "head"]
     environment:
       APP_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      APP_PHONE_ENCRYPTION_KEY: ${APP_PHONE_ENCRYPTION_KEY:?Set APP_PHONE_ENCRYPTION_KEY in deploy/production.env}
+      APP_PHONE_LOOKUP_HMAC_KEY: ${APP_PHONE_LOOKUP_HMAC_KEY:?Set APP_PHONE_LOOKUP_HMAC_KEY in deploy/production.env}
     depends_on:
       postgres:
         condition: service_healthy
