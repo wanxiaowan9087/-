@@ -49,10 +49,16 @@ class AliyunDypnsapiProvider:
         try:
             from alibabacloud_dypnsapi20170525 import models
             request = models.SendSmsVerifyCodeRequest(
+                country_code="86",
+                code_length=6,
+                code_type=1,
+                duplicate_policy=1,
+                interval=60,
                 phone_number=normalized,
                 sign_name=self._sign_name,
                 template_code=self._template_code,
                 template_param=self._template_param,
+                valid_time=300,
             )
             response = await self._client().send_sms_verify_code_async(request)
             body = getattr(response, "body", response)
