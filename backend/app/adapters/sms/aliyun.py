@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from backend.app.application.phone_crypto import normalize_mainland_phone
 from backend.app.application.sms_verification import SmsPurpose
+
+logger = logging.getLogger(__name__)
 
 
 class AliyunDypnsapiProvider:
@@ -13,13 +16,23 @@ class AliyunDypnsapiProvider:
     ensuring a production process fails clearly if the provider dependency is absent.
     """
 
-    def __init__(self, *, access_key_id: str, access_key_secret: str, sign_name: str, template_code: str, endpoint: str = "dypnsapi.aliyuncs.com") -> None:
+    def __init__(
+        self,
+        *,
+        access_key_id: str,
+        access_key_secret: str,
+        sign_name: str,
+        template_code: str,
+        template_param: str = '{"code":"##code##","min":"5"}',
+        endpoint: str = "dypnsapi.aliyuncs.com",
+    ) -> None:
         if not all((access_key_id, access_key_secret, sign_name, template_code)):
             raise ValueError("Aliyun Dypnsapi credentials and template are required")
         self._access_key_id = access_key_id
         self._access_key_secret = access_key_secret
         self._sign_name = sign_name
         self._template_code = template_code
+        self._template_param = template_param
         self._endpoint = endpoint
 
     def _client(self) -> Any:
@@ -39,11 +52,25 @@ class AliyunDypnsapiProvider:
                 phone_number=normalized,
                 sign_name=self._sign_name,
                 template_code=self._template_code,
+                template_param=self._template_param,
             )
             response = await self._client().send_sms_verify_code_async(request)
             body = getattr(response, "body", response)
+            provider_code = str(getattr(body, "code", ""))
+            if provider_code and provider_code not in {"OK", "200", "Success"}:
+                logger.warning(
+                    "aliyun sms provider rejected request",
+                    extra={
+                        "provider_code": provider_code,
+                        "provider_message": str(getattr(body, "message", "")),
+                        "provider_request_id": str(getattr(body, "request_id", "")),
+                    },
+                )
+                raise RuntimeError(f"Aliyun SMS rejected request: {provider_code}")
             return str(getattr(body, "request_id", "aliyun-request"))
         except Exception as exc:
+            if not (isinstance(exc, RuntimeError) and str(exc).startswith("Aliyun SMS rejected")):
+                logger.exception("aliyun sms provider call failed")
             raise RuntimeError("Aliyun SMS send failed") from exc
 
     async def check(self, phone: str, purpose: SmsPurpose, code: str) -> bool:

@@ -53,6 +53,8 @@ class Settings(BaseSettings):
     )
     aliyun_sms_sign_name: str | None = None
     aliyun_sms_template_code: str = "100001"
+    # Required by the PNVS dynamic-code template used in production.
+    aliyun_sms_template_param: str = '{"code":"##code##","min":"5"}'
     sms_provider: str = "fake"
     sms_send_cooldown_seconds: int = Field(default=60, ge=1)
     sms_hourly_limit: int = Field(default=5, ge=1)

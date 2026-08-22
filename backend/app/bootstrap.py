@@ -52,6 +52,7 @@ def build_sms_provider(settings: Settings) -> SmsProvider:
             access_key_secret=settings.aliyun_access_key_secret,
             sign_name=settings.aliyun_sms_sign_name,
             template_code=settings.aliyun_sms_template_code,
+            template_param=settings.aliyun_sms_template_param,
         )
     raise AgentRuntimeBootstrapError(f"unsupported SMS provider: {settings.sms_provider}")
 
