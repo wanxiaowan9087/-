@@ -113,6 +113,14 @@ class Settings(BaseSettings):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
 
+    @field_validator("aliyun_sms_template_param")
+    @classmethod
+    def validate_aliyun_template_param(cls, value: str) -> str:
+        parsed = json.loads(value)
+        if not isinstance(parsed, dict):
+            raise ValueError("Aliyun SMS template param must be a JSON object")
+        return value
+
     @model_validator(mode="after")
     def enforce_production_baseline(self) -> Settings:
         if self.test_executor_enabled and self.environment != "test":
