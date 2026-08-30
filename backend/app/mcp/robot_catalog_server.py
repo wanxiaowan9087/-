@@ -31,12 +31,12 @@ class RobotProduct:
 
 
 PRODUCTS: tuple[RobotProduct, ...] = (
-    RobotProduct("s8-luna", "S8-LUNA", "S8 皓月", 2999, ("静音运行", "激光导航", "自动集尘", "拖布热风烘干"), ("夜间清洁", "婴幼儿家庭", "80-140 平方米"), "robot-ivory"),
-    RobotProduct("s8-air", "S8-AIR", "S8 Air", 1999, ("轻薄机身", "基础扫拖", "边角清洁优化"), ("60 平方米以内", "小户型", "预算有限"), "robot-ivory"),
-    RobotProduct("x9-obsidian", "X9-OBSIDIAN", "X9 曜石", 4299, ("全屋激光建图", "双旋拖布", "地毯识别", "自动上下水接口"), ("大户型", "多房间", "宠物家庭"), "robot-graphite"),
-    RobotProduct("x9-edge", "X9-EDGE", "X9 Edge", 3599, ("贴边清洁", "毫米级避障", "强吸力", "地毯增压"), ("家具较多", "边角灰尘", "养宠家庭"), "robot-graphite"),
-    RobotProduct("m6-terra", "M6-TERRA", "M6 陶土", 2499, ("高扭矩滚刷", "可调水量", "木地板保护", "分区清洁"), ("木地板", "瓷砖", "混合地面"), "robot-terracotta"),
-    RobotProduct("m6-mini", "M6-MINI", "M6 Mini", 1599, ("紧凑机身", "低噪扫拖", "定时任务"), ("40 平方米以内", "单身公寓", "卧室"), "robot-terracotta"),
+    RobotProduct("s8-luna", "S8-LUNA", "S8 皓月", 2999, ("静音运行", "激光导航", "自动集尘", "拖布热风烘干"), ("夜间清洁", "婴幼儿家庭", "80-140 平方米"), "robot-s8-luna"),
+    RobotProduct("s8-air", "S8-AIR", "S8 Air", 1999, ("轻薄机身", "基础扫拖", "边角清洁优化"), ("60 平方米以内", "小户型", "预算有限"), "robot-s8-air"),
+    RobotProduct("x9-obsidian", "X9-OBSIDIAN", "X9 曜石", 4299, ("全屋激光建图", "双旋拖布", "地毯识别", "自动上下水接口"), ("大户型", "多房间", "宠物家庭"), "robot-x9-obsidian"),
+    RobotProduct("x9-edge", "X9-EDGE", "X9 Edge", 3599, ("贴边清洁", "毫米级避障", "强吸力", "地毯增压"), ("家具较多", "边角灰尘", "养宠家庭"), "robot-x9-edge"),
+    RobotProduct("m6-terra", "M6-TERRA", "M6 霞陶", 2499, ("高扭矩滚刷", "可调水量", "木地板保护", "分区清洁"), ("木地板", "瓷砖", "混合地面"), "robot-m6-terra"),
+    RobotProduct("m6-mini", "M6-MINI", "M6 Mini", 1599, ("紧凑机身", "低噪扫拖", "定时任务"), ("40 平方米以内", "单身公寓", "卧室"), "robot-m6-mini"),
 )
 
 
@@ -44,7 +44,7 @@ class RecommendInput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     query: str = Field(min_length=1, max_length=500)
     budget_max: int | None = Field(default=None, ge=1000, le=10000)
-    limit: int = Field(default=3, ge=1, le=3)
+    limit: int = Field(default=3, ge=1, le=6)
 
 
 class GetInput(BaseModel):

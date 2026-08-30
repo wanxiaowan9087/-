@@ -10,12 +10,16 @@ export function redactLocalSourcePaths(content: string): string {
     .replace(documentId, '')
     .replace(documentVersion, '')
     .replace(/[（(]\s*[，,;；\s]*[）)]/g, '')
-    .replace(/\s{2,}/g, ' ')
+    .replace(/[ \t]{2,}/g, ' ')
     .trim()
 }
 
 export function formatAssistantContent(content: string): string {
   return redactLocalSourcePaths(content)
-    .replace(/\s+-\s+(?=(?:\*\*)?[A-Z][A-Z0-9-]{1,})/g, '\n\n- ')
+    .replace(/[ \t]+-[ \t]+(?=(?:\*\*)?[A-Z][A-Z0-9-]{1,})/g, '\n\n- ')
     .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/(?<=[。！？!?])(?=[^\n])/g, '\n\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim()
 }

@@ -24,4 +24,10 @@ describe('redactLocalSourcePaths', () => {
       '推荐如下：\n\n- M6-MINI 适合小户型。\n\n- S8-AIR 适合日常清洁。',
     )
   })
+
+  it('preserves line breaks and separates consecutive Chinese sentences', () => {
+    expect(formatAssistantContent('第一句说明。第二句说明！第三句说明？')).toBe(
+      '第一句说明。\n\n第二句说明！\n\n第三句说明？',
+    )
+  })
 })

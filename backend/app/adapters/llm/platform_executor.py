@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import AsyncIterator
 from dataclasses import asdict, is_dataclass
 from datetime import UTC, date, datetime
@@ -66,7 +67,9 @@ class RuntimeRunExecutor:
         recommendations = ()
         try:
             if _is_robot_recommendation_intent(execution.input_content):
-                recommendations = await recommend_robots(execution.input_content)
+                # Fetch the complete small catalog first. The final answer is
+                # the source of truth for which cards are safe to display.
+                recommendations = await recommend_robots(execution.input_content, limit=6)
         except RobotCatalogMcpError:
             recommendations = ()
         try:
@@ -121,7 +124,7 @@ class RuntimeRunExecutor:
             ):
                 yield "status", {"phase": phase, "detail": None}
             result = await self._runtime.execute(request, cancellation=token)
-            for recommendation in recommendations:
+            for recommendation in _filter_recommendations(recommendations, result.public_content):
                 yield "product_recommendation", _jsonable(recommendation)
             async with self._lock:
                 self._outcomes[execution.run_id] = result
@@ -206,8 +209,37 @@ class RuntimeRunExecutor:
             self._outcomes.clear()
 
 
-def _chunks(content: str, size: int = 24) -> list[str]:
-    return [content[index : index + size] for index in range(0, len(content), size)]
+def _chunks(content: str, size: int = 48) -> list[str]:
+    """Stream complete paragraphs where possible, splitting only long ones."""
+    chunks: list[str] = []
+    for paragraph in re.split(r"(?<=\n\n)", content):
+        if not paragraph:
+            continue
+        chunks.extend(paragraph[index : index + size] for index in range(0, len(paragraph), size))
+    return chunks
+
+
+_PRODUCT_ALIASES: dict[str, tuple[str, ...]] = {
+    "s8-luna": ("s8-luna", "s8 luna", "s8皓月", "皓月"),
+    "s8-air": ("s8-air", "s8 air", "s8轻羽", "轻羽"),
+    "x9-obsidian": ("x9-obsidian", "x9 obsidian", "x9曜石", "曜石"),
+    "x9-edge": ("x9-edge", "x9 edge"),
+    "m6-terra": ("m6-terra", "m6 terra", "m6陶土", "陶土", "m6霞陶", "霞陶"),
+    "m6-mini": ("m6-mini", "m6 mini", "m6小径", "小径"),
+}
+
+
+def _filter_recommendations(
+    recommendations: tuple[Any, ...], answer: str
+) -> tuple[Any, ...]:
+    """Only emit cards for canonical products explicitly named by the answer."""
+    compact = re.sub(r"[\s\-_]", "", answer.casefold())
+    selected = []
+    for recommendation in recommendations:
+        aliases = _PRODUCT_ALIASES.get(recommendation.product_id, (recommendation.product_id,))
+        if any(re.sub(r"[\s\-_]", "", alias.casefold()) in compact for alias in aliases):
+            selected.append(recommendation)
+    return tuple(selected)
 
 
 def _month_bounds(month: str) -> tuple[datetime, datetime]:

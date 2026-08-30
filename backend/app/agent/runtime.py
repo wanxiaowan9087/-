@@ -75,17 +75,21 @@ def redact_local_source_paths(content: str) -> str:
     redacted = _DOCUMENT_ID.sub("", redacted)
     redacted = _DOCUMENT_VERSION.sub("", redacted)
     redacted = re.sub(r"[（(]\s*[，,;；\s]*[）)]", "", redacted)
-    return re.sub(r"\s{2,}", " ", redacted).strip()
+    # Collapse horizontal spacing only. Newlines are presentation semantics.
+    return re.sub(r"[ \t]{2,}", " ", redacted).strip()
 
 
 def format_user_visible_answer(content: str) -> str:
     """Normalize compact model lists so each recommendation remains scannable."""
     formatted = re.sub(
-        r"\s+-\s+(?=(?:\*\*)?[A-Z][A-Z0-9-]{1,})",
+        r"[ \t]+-[ \t]+(?=(?:\*\*)?[A-Z][A-Z0-9-]{1,})",
         "\n\n- ",
         content,
     )
-    return re.sub(r"\*\*(.+?)\*\*", r"\1", formatted)
+    formatted = re.sub(r"\*\*(.+?)\*\*", r"\1", formatted)
+    formatted = re.sub(r"(?<=[。！？!?])(?=[^\n])", "\n\n", formatted)
+    formatted = re.sub(r"\n{3,}", "\n\n", formatted)
+    return re.sub(r"[ \t]{2,}", " ", formatted).strip()
 
 
 IDENTITY_INTENT_PATTERNS = (
