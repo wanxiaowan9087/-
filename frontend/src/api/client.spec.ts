@@ -95,13 +95,13 @@ describe('SSE API client', () => {
     const api = createAgentApi({ baseUrl: '/api/v1', accessToken: 'token', fetcher })
 
     await api.listSessions()
-    await api.listMessages('session-1')
+    await api.listMessages('session-1', 100, 'next-page')
     await api.listMemories()
 
     expect(fetcher).toHaveBeenNthCalledWith(1, '/api/v1/sessions?limit=30', expect.objectContaining({
       headers: expect.objectContaining({ Authorization: 'Bearer token' }),
     }))
-    expect(fetcher).toHaveBeenNthCalledWith(2, '/api/v1/sessions/session-1/messages?limit=50', expect.any(Object))
+    expect(fetcher).toHaveBeenNthCalledWith(2, '/api/v1/sessions/session-1/messages?limit=100&cursor=next-page', expect.any(Object))
     expect(fetcher).toHaveBeenNthCalledWith(3, '/api/v1/memories?status=active&limit=20', expect.any(Object))
   })
 

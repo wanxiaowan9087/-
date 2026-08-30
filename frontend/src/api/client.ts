@@ -193,8 +193,10 @@ export function createAgentApi(options: AgentApiOptions) {
       return readJson<Page<Session>>(response, true)
     },
 
-    async listMessages(sessionId: string, limit = 50): Promise<Page<Message>> {
-      const response = await fetcher(`${options.baseUrl}/sessions/${sessionId}/messages?limit=${limit}`, {
+    async listMessages(sessionId: string, limit = 100, cursor?: string | null): Promise<Page<Message>> {
+      const query = new URLSearchParams({ limit: String(limit) })
+      if (cursor) query.set('cursor', cursor)
+      const response = await fetcher(`${options.baseUrl}/sessions/${sessionId}/messages?${query}`, {
         headers: headers(),
       })
       return readJson<Page<Message>>(response, true)

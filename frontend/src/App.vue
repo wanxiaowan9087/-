@@ -6,7 +6,14 @@ import { mockPreview } from './features/chat/mock-data'
 import RobotHero from './features/chat/RobotHero.vue'
 import ProductRecommendations from './features/chat/ProductRecommendations.vue'
 import { formatAssistantContent } from './features/chat/content-redaction'
-import { commitSessionMessages, type SessionMessageCache, type SessionRequestTokens } from './features/chat/session-cache'
+import {
+  commitSessionMessages,
+  hasPersistedCompletedReply,
+  loadCompleteTranscript,
+  visibleTranscriptMessages,
+  type SessionMessageCache,
+  type SessionRequestTokens,
+} from './features/chat/session-cache'
 import { ApiClientError, createAgentApi } from './api/client'
 import type { AuthSession, AuthUser, ChatRequest, KnowledgeFile, LegalDocument, Memory, Message, Session } from './api/contracts'
 import { toProductRecommendationView } from './stores/chat'
@@ -73,11 +80,10 @@ const historyLoading = ref(false)
 const historyError = ref<string | null>(null)
 const activeSessionTitle = computed(() => sessions.value.find(item => item.id === chat.sessionId)?.title || mockPreview.title)
 const historicalMessages = computed(() => chat.sessionId ? sessionMessages.value[chat.sessionId] ?? [] : [])
-const visibleHistoricalMessages = computed(() => historicalMessages.value.filter(message => {
-  if (!message.content) return false
-  if (message.id === chat.userMessageId) return false
-  if (chat.runId && message.run_id === chat.runId) return false
-  return true
+const visibleHistoricalMessages = computed(() => visibleTranscriptMessages(historicalMessages.value, {
+  currentUserMessageId: chat.userMessageId,
+  currentRunId: chat.runId,
+  isStreaming: chat.previewState === 'loading',
 }))
 
 let revealObserver: IntersectionObserver | undefined
@@ -459,7 +465,11 @@ async function refreshConversationState() {
 async function refreshSessionMessages(sessionId: string) {
   const loadVersion = (messageLoadVersions[sessionId] ?? 0) + 1
   messageLoadVersions[sessionId] = loadVersion
-  const page = await api.listMessages(sessionId)
+  const messages = await loadCompleteTranscript(
+    cursor => api.listMessages(sessionId, 100, cursor),
+    () => loadVersion === messageLoadVersions[sessionId],
+  )
+  if (messages === null) return
   // Each transcript has an independent request sequence. A background refresh
   // for one session must never invalidate a switch request for another.
   sessionMessages.value = commitSessionMessages(
@@ -467,12 +477,19 @@ async function refreshSessionMessages(sessionId: string) {
     sessionId,
     loadVersion,
     messageLoadVersions[sessionId],
-    page.items,
+    messages,
   )
   if (chat.sessionId === sessionId) {
     await nextTick()
     observeReveals()
   }
+}
+
+function replaceStreamWithPersistedTranscript(sessionId: string) {
+  if (chat.sessionId !== sessionId || !hasPersistedCompletedReply(sessionMessages.value[sessionId] ?? [], chat.runId)) return
+  chat.$reset()
+  chat.sessionId = sessionId
+  submittedQuestion.value = ''
 }
 
 async function openSession(sessionId: string) {
@@ -590,6 +607,7 @@ async function executeChat(request: ChatRequest, question: string) {
     }
     draft.value = ''
     await refreshConversationState()
+    replaceStreamWithPersistedTranscript(request.session_id)
     scheduleConversationScroll()
   } catch (error) {
     if (!controller.signal.aborted) {

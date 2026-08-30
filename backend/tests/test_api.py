@@ -84,6 +84,31 @@ async def test_chat_new_stream_persists_message_and_replays(client: AsyncClient)
 
 
 @pytest.mark.asyncio
+async def test_consecutive_chat_turns_remain_in_the_durable_transcript(client: AsyncClient) -> None:
+    session = await client.post(
+        "/api/v1/sessions",
+        headers={**USER, "Idempotency-Key": "session-key-consecutive-001"},
+        json={},
+    )
+    session_id = session.json()["data"]["id"]
+    for index, content in enumerate(("first question", "second question"), start=1):
+        streamed = await client.post(
+            "/api/v1/chat/stream",
+            headers={**USER, "Idempotency-Key": f"stream-key-consecutive-{index:03d}"},
+            json={"mode": "new", "session_id": session_id, "content": content},
+        )
+        assert streamed.status_code == 200
+
+    messages = await client.get(f"/api/v1/sessions/{session_id}/messages?limit=100", headers=USER)
+    items = messages.json()["data"]["items"]
+    assert [item["role"] for item in items] == ["user", "assistant", "user", "assistant"]
+    assert [item["content"] for item in items if item["role"] == "user"] == [
+        "first question",
+        "second question",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_chat_session_title_uses_first_message_summary(client: AsyncClient) -> None:
     created = await client.post(
         "/api/v1/sessions",
