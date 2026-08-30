@@ -25,8 +25,19 @@ export function formatAssistantContent(content: string): string {
 }
 
 export function toAssistantParagraphs(content: string): string[] {
-  return formatAssistantContent(content)
+  const paragraphs = formatAssistantContent(content)
     .split(/\n\s*\n/)
     .map(paragraph => paragraph.replace(/\s*\n\s*/g, ' ').trim())
     .filter(Boolean)
+
+  let listIndex = 0
+  return paragraphs.map(paragraph => {
+    const item = paragraph.match(/^(?:[-*•])\s+(.+)$/)
+    if (!item) {
+      listIndex = 0
+      return paragraph
+    }
+    listIndex += 1
+    return `${listIndex}. ${item[1]}`
+  })
 }

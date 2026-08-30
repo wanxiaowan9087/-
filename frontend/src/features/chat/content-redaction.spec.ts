@@ -39,7 +39,16 @@ describe('redactLocalSourcePaths', () => {
     expect(toAssistantParagraphs('第一句说明。第二句说明！\n\n- S8-AIR 适合日常清洁。')).toEqual([
       '第一句说明。',
       '第二句说明！',
-      '- S8-AIR 适合日常清洁。',
+      '1. S8-AIR 适合日常清洁。',
+    ])
+  })
+
+  it('numbers consecutive bullet points and restarts after normal prose', () => {
+    expect(toAssistantParagraphs('- 第一项\n\n• 第二项\n\n说明结束。\n\n* 新的一项')).toEqual([
+      '1. 第一项',
+      '2. 第二项',
+      '说明结束。',
+      '1. 新的一项',
     ])
   })
 })
