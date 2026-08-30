@@ -5,7 +5,7 @@ import { useChatStore } from './stores/chat'
 import { mockPreview } from './features/chat/mock-data'
 import RobotHero from './features/chat/RobotHero.vue'
 import ProductRecommendations from './features/chat/ProductRecommendations.vue'
-import { formatAssistantContent } from './features/chat/content-redaction'
+import { toAssistantParagraphs } from './features/chat/content-redaction'
 import {
   commitSessionMessages,
   hasPersistedCompletedReply,
@@ -809,7 +809,7 @@ async function confirmCancelActiveRun() {
             <time>{{ new Date(message.created_at).toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }}</time>
           </div>
           <p v-if="message.role === 'user'">{{ message.content }}</p>
-          <section v-else class="answer-card">{{ formatAssistantContent(message.content) }}</section>
+          <section v-else class="answer-card"><p v-for="(paragraph, index) in toAssistantParagraphs(message.content)" :key="`${message.id}:${index}`">{{ paragraph }}</p></section>
           <section v-if="messageCitations(message).length" class="sources">
             <div class="sources-head"><span>依据资料</span><small>{{ messageCitations(message).length }} 条可定位引用</small></div>
             <div class="source-grid"><button v-for="citation in messageCitations(message)" :key="`${message.id}:${citation.document_id}`" class="source-card" type="button"><span class="source-index">#</span><div><b>{{ citation.title }}</b><p>{{ citation.page ? `第 ${citation.page} 页` : '知识库资料' }}</p></div><i>↗</i></button></div>
@@ -826,7 +826,7 @@ async function confirmCancelActiveRun() {
             <div><p class="eyebrow">DRAFT WITHHELD</p><h2>候选答案等待人工审核</h2><p>{{ chat.review.reasonCodes.join(' · ') || '运行策略要求人工审核' }}</p></div>
             <span class="withheld-code">{{ chat.review.reviewId || 'PENDING' }}</span>
           </section>
-          <section v-else-if="chat.assistantText" class="answer-card" aria-live="polite">{{ formatAssistantContent(chat.assistantText) }}</section>
+          <section v-else-if="chat.assistantText" class="answer-card" aria-live="polite"><p v-for="(paragraph, index) in toAssistantParagraphs(chat.assistantText)" :key="`stream:${index}`">{{ paragraph }}</p></section>
           <section v-else class="tool-card"><div class="tool-top"><span class="tool-icon">↻</span><div><b>{{ chat.runOutcome === 'cancelled' ? '本次运行已取消' : latestTool ? `工具：${latestTool.toolName}` : '正在调用受控 Agent' }}</b><small>{{ chat.runOutcome === 'cancelled' ? '已通知服务端停止执行，候选内容不会发布。' : latestTool?.detail || chat.lastStatus || '检索、重排与安全策略检查中' }}</small></div><span class="tool-ok">{{ chat.runOutcome === 'cancelled' ? '已取消' : latestTool?.outcome || '运行中' }}</span></div></section>
           <section v-if="chat.citations.length" class="sources"><div class="sources-head"><span>依据资料</span><small>{{ chat.citations.length }} 条可定位引用</small></div><div class="source-grid"><button v-for="(citation, index) in chat.citations" :key="`${citation.documentVersion}:${citation.chunkId}`" class="source-card" type="button"><span class="source-index">{{ String(index + 1).padStart(2, '0') }}</span><div><b>{{ citation.title }}</b><p>{{ citation.locator }}</p></div><i>↗</i></button></div></section>
           <ProductRecommendations :recommendations="chat.productRecommendations" @select="openRecommendedProduct" />

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { formatAssistantContent, redactLocalSourcePaths } from './content-redaction'
+import {
+  formatAssistantContent,
+  redactLocalSourcePaths,
+  toAssistantParagraphs,
+} from './content-redaction'
 
 describe('redactLocalSourcePaths', () => {
   it('removes a labeled local source path from persisted assistant content', () => {
@@ -29,5 +33,13 @@ describe('redactLocalSourcePaths', () => {
     expect(formatAssistantContent('第一句说明。第二句说明！第三句说明？')).toBe(
       '第一句说明。\n\n第二句说明！\n\n第三句说明？',
     )
+  })
+
+  it('turns semantic breaks into compact renderable paragraphs', () => {
+    expect(toAssistantParagraphs('第一句说明。第二句说明！\n\n- S8-AIR 适合日常清洁。')).toEqual([
+      '第一句说明。',
+      '第二句说明！',
+      '- S8-AIR 适合日常清洁。',
+    ])
   })
 })

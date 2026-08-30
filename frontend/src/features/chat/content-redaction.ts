@@ -23,3 +23,10 @@ export function formatAssistantContent(content: string): string {
     .replace(/[ \t]{2,}/g, ' ')
     .trim()
 }
+
+export function toAssistantParagraphs(content: string): string[] {
+  return formatAssistantContent(content)
+    .split(/\n\s*\n/)
+    .map(paragraph => paragraph.replace(/\s*\n\s*/g, ' ').trim())
+    .filter(Boolean)
+}
