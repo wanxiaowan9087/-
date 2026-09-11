@@ -6,7 +6,6 @@ from typing import Any
 
 from .models import DocumentRecord, DocumentType
 
-
 TEXT_SUFFIXES = {".txt", ".md", ".markdown"}
 PDF_SUFFIXES = {".pdf"}
 EXCEL_SUFFIXES = {".xlsx"}
@@ -46,7 +45,7 @@ def _text_type(suffix: str) -> DocumentType:
 
 def _parse_pdf(payload: bytes, document_id: str, title: str, source: str) -> DocumentRecord:
     try:
-        from pypdf import PdfReader
+        from pypdf import PdfReader  # type: ignore[import-not-found]
     except ImportError as error:
         raise RuntimeError("PDF 解析依赖 pypdf 未安装") from error
     try:
@@ -69,7 +68,7 @@ def _parse_pdf(payload: bytes, document_id: str, title: str, source: str) -> Doc
 
 def _parse_excel(payload: bytes, document_id: str, title: str, source: str) -> DocumentRecord:
     try:
-        from openpyxl import load_workbook
+        from openpyxl import load_workbook  # type: ignore[import-untyped]
     except ImportError as error:
         raise RuntimeError("Excel 解析依赖 openpyxl 未安装") from error
     try:

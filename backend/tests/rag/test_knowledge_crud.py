@@ -41,11 +41,13 @@ async def test_catalog_update_reindexes_and_delete_cleans_both_indexes(tmp_path:
     await catalog.register(item)
     from backend.app.rag.parsers import parse_knowledge_payload
 
-    document = parse_knowledge_payload(filename, payload, document_id=document_id, title=item.title, source=item.source)
+    document = parse_knowledge_payload(
+        filename, payload, document_id=document_id, title=item.title, source=item.source
+    )
     await indexer.ingest(document)
     updated = await catalog.update_file(document_id, title="X9 使用手册")
     assert updated.title == "X9 使用手册"
-    assert (await vectors.search(await FixedEmbedding().embed_query("地毯"), 5))
+    assert await vectors.search(await FixedEmbedding().embed_query("地毯"), 5)
     await catalog.delete_file(document_id)
     assert not (root / filename).exists()
     assert not await vectors.search(await FixedEmbedding().embed_query("地毯"), 5)

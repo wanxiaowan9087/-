@@ -16,6 +16,17 @@ from backend.app.rag.parsers import SUPPORTED_SUFFIXES, parse_knowledge_payload
 from backend.app.schemas.resources import KnowledgeFile
 
 
+def _integer(value: object, default: int = 0) -> int:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            pass
+    return default
+
+
 class KnowledgeCatalog:
     """Admin-only catalog over durable uploaded documents and their indexer."""
 
@@ -35,7 +46,9 @@ class KnowledgeCatalog:
 
     def _write_manifest(self, manifest: dict[str, dict[str, object]]) -> None:
         self._root.mkdir(parents=True, exist_ok=True)
-        handle, temporary = tempfile.mkstemp(prefix="knowledge-manifest-", suffix=".tmp", dir=self._root)
+        handle, temporary = tempfile.mkstemp(
+            prefix="knowledge-manifest-", suffix=".tmp", dir=self._root
+        )
         try:
             with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
                 json.dump(manifest, stream, ensure_ascii=False, indent=2)
@@ -59,7 +72,9 @@ class KnowledgeCatalog:
                 same_name = item
         return ("conflict", same_name) if same_name is not None else None
 
-    async def find_similar(self, text: str, *, threshold: float = 0.82) -> tuple[KnowledgeFile, float] | None:
+    async def find_similar(
+        self, text: str, *, threshold: float = 0.82
+    ) -> tuple[KnowledgeFile, float] | None:
         candidate_tokens = set(tokenize(text))
         if len(candidate_tokens) < 8:
             return None
@@ -144,10 +159,14 @@ class KnowledgeCatalog:
         item = await self.get_file(document_id)
         if item is None:
             raise AppError("KNOWLEDGE_FILE_NOT_FOUND", "知识文档不存在", 404)
-        updated = item.model_copy(update={
-            "title": title.strip() if title is not None else item.title,
-            "original_filename": original_filename.strip() if original_filename is not None else item.original_filename,
-        })
+        updated = item.model_copy(
+            update={
+                "title": title.strip() if title is not None else item.title,
+                "original_filename": original_filename.strip()
+                if original_filename is not None
+                else item.original_filename,
+            }
+        )
         if not updated.title:
             raise AppError("INVALID_KNOWLEDGE_METADATA", "文档标题不能为空", 400)
         if self._indexer is not None and title is not None:
@@ -155,16 +174,26 @@ class KnowledgeCatalog:
             if not path.exists():
                 raise AppError("KNOWLEDGE_SOURCE_MISSING", "文档源文件不存在，无法重新索引", 409)
             try:
-                document = parse_knowledge_payload(item.filename, path.read_bytes(), document_id=item.id, title=updated.title, source=item.source)
+                document = parse_knowledge_payload(
+                    item.filename,
+                    path.read_bytes(),
+                    document_id=item.id,
+                    title=updated.title,
+                    source=item.source,
+                )
                 report = await self._indexer.ingest(document)
             except (ValueError, RuntimeError) as error:
-                raise AppError("KNOWLEDGE_INDEXING_FAILED", str(error), 503, {"retryable": True}) from error
-            updated = updated.model_copy(update={
-                "chunk_count": report.chunks_indexed,
-                "document_version": report.document_version,
-                "ingest_status": "indexed",
-                "last_indexed_at": datetime.now(UTC),
-            })
+                raise AppError(
+                    "KNOWLEDGE_INDEXING_FAILED", str(error), 503, {"retryable": True}
+                ) from error
+            updated = updated.model_copy(
+                update={
+                    "chunk_count": report.chunks_indexed,
+                    "document_version": report.document_version,
+                    "ingest_status": "indexed",
+                    "last_indexed_at": datetime.now(UTC),
+                }
+            )
         await self.register(updated)
         return updated
 
@@ -198,16 +227,28 @@ class KnowledgeCatalog:
             payload = path.read_bytes()
             digest = hashlib.sha256(payload).hexdigest()
             metadata = manifest.get(path.name, {})
-            document_id = str(metadata.get("id") or uuid5(NAMESPACE_URL, f"knowledge-upload:{path.name}"))
+            document_id = str(
+                metadata.get("id") or uuid5(NAMESPACE_URL, f"knowledge-upload:{path.name}")
+            )
             title = str(metadata.get("title") or path.stem.rsplit("-", 1)[0] or path.stem)
             try:
-                document = parse_knowledge_payload(path.name, payload, document_id=document_id, title=title, source=f"file://uploads/knowledge/{path.name}")
+                document = parse_knowledge_payload(
+                    path.name,
+                    payload,
+                    document_id=document_id,
+                    title=title,
+                    source=f"file://uploads/knowledge/{path.name}",
+                )
                 chunk_count = len(DocumentChunker().split(document))
             except (ValueError, RuntimeError):
-                chunk_count = int(metadata.get("chunk_count") or 0)
+                chunk_count = _integer(metadata.get("chunk_count"))
             uploaded_at = metadata.get("uploaded_at")
             try:
-                uploaded = datetime.fromisoformat(str(uploaded_at)) if uploaded_at else datetime.fromtimestamp(stat.st_mtime, UTC)
+                uploaded = (
+                    datetime.fromisoformat(str(uploaded_at))
+                    if uploaded_at
+                    else datetime.fromtimestamp(stat.st_mtime, UTC)
+                )
             except ValueError:
                 uploaded = datetime.fromtimestamp(stat.st_mtime, UTC)
             last_indexed_at = metadata.get("last_indexed_at")
@@ -217,29 +258,40 @@ class KnowledgeCatalog:
                 indexed = None
             raw_status = str(metadata.get("ingest_status") or "indexed")
             ingest_status = raw_status if raw_status in {"indexed", "local", "error"} else "error"
-            files.append(KnowledgeFile(
-                id=document_id,
-                filename=path.name,
-                title=title,
-                source=f"file://uploads/knowledge/{path.name}",
-                size_bytes=stat.st_size,
-                chunk_count=int(metadata.get("chunk_count") or chunk_count),
-                uploaded_at=uploaded,
-                original_filename=str(metadata.get("original_filename") or path.stem.rsplit("-", 1)[0] + path.suffix),
-                sha256=str(metadata.get("sha256") or digest),
-                ingest_status=ingest_status,
-                document_version=str(metadata.get("document_version")) if metadata.get("document_version") else None,
-                last_indexed_at=indexed,
-            ))
+            files.append(
+                KnowledgeFile(
+                    id=document_id,
+                    filename=path.name,
+                    title=title,
+                    source=f"file://uploads/knowledge/{path.name}",
+                    size_bytes=stat.st_size,
+                    chunk_count=_integer(metadata.get("chunk_count"), chunk_count),
+                    uploaded_at=uploaded,
+                    original_filename=str(
+                        metadata.get("original_filename")
+                        or path.stem.rsplit("-", 1)[0] + path.suffix
+                    ),
+                    sha256=str(metadata.get("sha256") or digest),
+                    ingest_status=ingest_status,
+                    document_version=str(metadata.get("document_version"))
+                    if metadata.get("document_version")
+                    else None,
+                    last_indexed_at=indexed,
+                )
+            )
         known_ids = {item.id for item in files}
         known_filenames = {item.filename for item in files}
         for filename, metadata in manifest.items():
             if filename in known_filenames:
                 continue
-            document_id = str(metadata.get("id") or uuid5(NAMESPACE_URL, f"knowledge-upload:{filename}"))
+            document_id = str(
+                metadata.get("id") or uuid5(NAMESPACE_URL, f"knowledge-upload:{filename}")
+            )
             uploaded_at = metadata.get("uploaded_at")
             try:
-                uploaded = datetime.fromisoformat(str(uploaded_at)) if uploaded_at else datetime.now(UTC)
+                uploaded = (
+                    datetime.fromisoformat(str(uploaded_at)) if uploaded_at else datetime.now(UTC)
+                )
             except ValueError:
                 uploaded = datetime.now(UTC)
             last_indexed_at = metadata.get("last_indexed_at")
@@ -249,20 +301,24 @@ class KnowledgeCatalog:
                 indexed = None
             raw_status = str(metadata.get("ingest_status") or "indexed")
             ingest_status = raw_status if raw_status in {"indexed", "local", "error"} else "error"
-            files.append(KnowledgeFile(
-                id=document_id,
-                filename=filename,
-                title=str(metadata.get("title") or Path(filename).stem),
-                source=str(metadata.get("source") or f"file://uploads/knowledge/{filename}"),
-                size_bytes=max(1, int(metadata.get("size_bytes") or 1)),
-                chunk_count=max(0, int(metadata.get("chunk_count") or 0)),
-                uploaded_at=uploaded,
-                original_filename=str(metadata.get("original_filename") or filename),
-                sha256=str(metadata.get("sha256")) if metadata.get("sha256") else None,
-                ingest_status=ingest_status,
-                document_version=str(metadata.get("document_version")) if metadata.get("document_version") else None,
-                last_indexed_at=indexed,
-            ))
+            files.append(
+                KnowledgeFile(
+                    id=document_id,
+                    filename=filename,
+                    title=str(metadata.get("title") or Path(filename).stem),
+                    source=str(metadata.get("source") or f"file://uploads/knowledge/{filename}"),
+                    size_bytes=max(1, _integer(metadata.get("size_bytes"), 1)),
+                    chunk_count=max(0, _integer(metadata.get("chunk_count"))),
+                    uploaded_at=uploaded,
+                    original_filename=str(metadata.get("original_filename") or filename),
+                    sha256=str(metadata.get("sha256")) if metadata.get("sha256") else None,
+                    ingest_status=ingest_status,
+                    document_version=str(metadata.get("document_version"))
+                    if metadata.get("document_version")
+                    else None,
+                    last_indexed_at=indexed,
+                )
+            )
             known_ids.add(document_id)
         if self._indexer is not None:
             try:
@@ -273,20 +329,22 @@ class KnowledgeCatalog:
                 if document.document_id in known_ids:
                     continue
                 source_name = Path(document.source).name or f"{document.document_id}.md"
-                files.append(KnowledgeFile(
-                    id=document.document_id,
-                    filename=source_name,
-                    title=document.title,
-                    source=document.source,
-                    size_bytes=max(1, len(document.content.encode("utf-8"))),
-                    chunk_count=chunk_count,
-                    uploaded_at=datetime.now(UTC),
-                    original_filename=source_name,
-                    sha256=None,
-                    ingest_status="indexed",
-                    document_version=version,
-                    last_indexed_at=datetime.now(UTC),
-                ))
+                files.append(
+                    KnowledgeFile(
+                        id=document.document_id,
+                        filename=source_name,
+                        title=document.title,
+                        source=document.source,
+                        size_bytes=max(1, len(document.content.encode("utf-8"))),
+                        chunk_count=chunk_count,
+                        uploaded_at=datetime.now(UTC),
+                        original_filename=source_name,
+                        sha256=None,
+                        ingest_status="indexed",
+                        document_version=version,
+                        last_indexed_at=datetime.now(UTC),
+                    )
+                )
         return sorted(files, key=lambda item: item.uploaded_at, reverse=True)
 
     async def reindex_all(self) -> int:
@@ -309,10 +367,14 @@ class KnowledgeCatalog:
             )
             report = await self._indexer.ingest(document)
             count += report.chunks_indexed
-            await self.register(item.model_copy(update={
-                "chunk_count": report.chunks_indexed,
-                "document_version": report.document_version,
-                "last_indexed_at": datetime.now(UTC),
-                "ingest_status": "indexed",
-            }))
+            await self.register(
+                item.model_copy(
+                    update={
+                        "chunk_count": report.chunks_indexed,
+                        "document_version": report.document_version,
+                        "last_indexed_at": datetime.now(UTC),
+                        "ingest_status": "indexed",
+                    }
+                )
+            )
         return count

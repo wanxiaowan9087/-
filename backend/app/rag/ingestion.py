@@ -4,7 +4,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 from .chunking import DocumentChunker
-from .models import DocumentRecord
+from .models import Chunk, DocumentRecord
 from .ports import EmbeddingPort, KeywordSearchPort, VectorStorePort
 
 
@@ -41,9 +41,7 @@ class KnowledgeIndexer:
         version = chunks[0].document_version
         try:
             vectors = tuple(
-                await self._embeddings.embed_documents(
-                    [chunk.content for chunk in chunks]
-                )
+                await self._embeddings.embed_documents([chunk.content for chunk in chunks])
             )
         except Exception as error:
             raise IndexingError("embedding") from error
@@ -56,9 +54,7 @@ class KnowledgeIndexer:
         except Exception as error:
             raise IndexingError("vector_store") from error
         try:
-            await self._keyword_index.replace_document(
-                document.document_id, version, chunks
-            )
+            await self._keyword_index.replace_document(document.document_id, version, chunks)
         except Exception as error:
             raise IndexingError("keyword_index") from error
         return IngestionReport(
@@ -82,22 +78,24 @@ class KnowledgeIndexer:
         if load_all_chunks is None:
             return ()
         chunks = await load_all_chunks()
-        grouped: dict[tuple[str, str], list] = defaultdict(list)
+        grouped: dict[tuple[str, str], list[Chunk]] = defaultdict(list)
         for chunk in chunks:
             grouped[(chunk.document_id, chunk.document_version)].append(chunk)
         documents: list[tuple[DocumentRecord, int, str]] = []
         for (document_id, version), items in grouped.items():
             first = items[0]
-            documents.append((
-                DocumentRecord(
-                    document_id=document_id,
-                    title=first.title,
-                    source=first.source,
-                    document_type=first.document_type,
-                    content="\n\n".join(item.content for item in items),
-                    version=version,
-                ),
-                len(items),
-                version,
-            ))
+            documents.append(
+                (
+                    DocumentRecord(
+                        document_id=document_id,
+                        title=first.title,
+                        source=first.source,
+                        document_type=first.document_type,
+                        content="\n\n".join(item.content for item in items),
+                        version=version,
+                    ),
+                    len(items),
+                    version,
+                )
+            )
         return tuple(documents)

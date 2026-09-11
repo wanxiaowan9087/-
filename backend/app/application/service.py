@@ -20,7 +20,6 @@ from backend.app.domain.records import IdempotencyRecord, StreamEventRecord
 from backend.app.rag.chunking import DocumentChunker
 from backend.app.rag.ingestion import KnowledgeIndexer
 from backend.app.rag.knowledge_catalog import KnowledgeCatalog
-from backend.app.rag.models import DocumentRecord, DocumentType
 from backend.app.rag.parsers import SUPPORTED_SUFFIXES, parse_knowledge_payload
 from backend.app.repositories.ports import PlatformRepository, PlatformTransaction
 from backend.app.schemas.common import Envelope, Page, PageInfo
@@ -818,7 +817,12 @@ class PlatformService:
                     catalog.remove(old_filename)
         except Exception as error:
             target.unlink(missing_ok=True)
-            raise AppError("KNOWLEDGE_CATALOG_FAILED", "知识库清单写入失败，文档未发布", 503, {"retryable": True}) from error
+            raise AppError(
+                "KNOWLEDGE_CATALOG_FAILED",
+                "知识库清单写入失败，文档未发布",
+                503,
+                {"retryable": True},
+            ) from error
         return Envelope(
             data=result,
             request_id=request_id_var.get(),
