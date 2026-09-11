@@ -87,6 +87,13 @@ class InMemoryVectorStore:
             if chunk_id in self._entries
         )
 
+    async def delete_document(self, document_id: str) -> None:
+        self._entries = {
+            chunk_id: record
+            for chunk_id, record in self._entries.items()
+            if record[0].document_id != document_id
+        }
+
     def snapshot(self) -> tuple[Chunk, ...]:
         return tuple(entry[0] for entry in self._entries.values())
 

@@ -81,6 +81,13 @@ class PgVectorStore:
         resolved = {str(row["chunk_id"]): _chunk_from_row(row) for row in rows}
         return tuple(resolved[chunk_id] for chunk_id in chunk_ids if chunk_id in resolved)
 
+    async def delete_document(self, document_id: str) -> None:
+        async with self._engine.begin() as connection:
+            await connection.execute(
+                text("DELETE FROM knowledge_vectors WHERE document_id = CAST(:document_id AS uuid)"),
+                {"document_id": document_id},
+            )
+
     async def load_all_chunks(self) -> tuple[Chunk, ...]:
         async with self._engine.connect() as connection:
             rows = (await connection.execute(_LOAD_ALL_CHUNKS)).mappings().all()

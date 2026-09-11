@@ -308,6 +308,29 @@ class SqlPlatformTransaction:
         ).scalar_one_or_none()
         return _session(row) if row else None
 
+    async def delete_session(self, owner_id: str, session_id: UUID) -> bool:
+        session = await self.session.execute(
+            select(SessionModel.id)
+            .where(SessionModel.id == session_id, SessionModel.owner_id == owner_id)
+            .with_for_update()
+        )
+        if session.scalar_one_or_none() is None:
+            return False
+        message_ids = select(MessageModel.id).where(MessageModel.session_id == session_id)
+        run_ids = select(RunModel.id).where(RunModel.session_id == session_id)
+        review_ids = select(ReviewModel.id).where(ReviewModel.session_id == session_id)
+        await self.session.execute(delete(ReviewAuditModel).where(ReviewAuditModel.review_id.in_(review_ids)))
+        await self.session.execute(delete(ReviewModel).where(ReviewModel.session_id == session_id))
+        await self.session.execute(delete(FeedbackModel).where(FeedbackModel.message_id.in_(message_ids)))
+        await self.session.execute(delete(MemoryModel).where(MemoryModel.source_message_id.in_(message_ids)))
+        await self.session.execute(delete(StreamEventModel).where(StreamEventModel.run_id.in_(run_ids)))
+        await self.session.execute(delete(RunModel).where(RunModel.session_id == session_id))
+        await self.session.execute(delete(SummaryUpdateJobModel).where(SummaryUpdateJobModel.session_id == session_id))
+        await self.session.execute(delete(MessageModel).where(MessageModel.session_id == session_id))
+        await self.session.execute(delete(SessionModel).where(SessionModel.id == session_id))
+        await self.session.flush()
+        return True
+
     async def update_session_title(
         self, owner_id: str, session_id: UUID, title: str, now: datetime
     ) -> SessionRecord | None:

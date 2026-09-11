@@ -32,6 +32,16 @@ const draft = ref('')
 const submittedQuestion = ref('')
 const activeAbortController = ref<InstanceType<typeof globalThis.AbortController> | null>(null)
 type ProtectedAction = { type: 'agent' } | { type: 'product'; productId: string }
+type KnowledgeUploadStatus = 'uploading' | 'indexed' | 'duplicate' | 'conflict' | 'similar' | 'failed' | 'skipped'
+type KnowledgeUploadResult = {
+  id: string
+  file: File
+  filename: string
+  status: KnowledgeUploadStatus
+  reason: string
+  uploaded?: KnowledgeFile
+  existingFilename?: string
+}
 
 const accessToken = ref(loadStoredAccessToken())
 const authUser = ref<AuthUser | null>(loadStoredAuthUser())
@@ -60,9 +70,27 @@ const profileDropActive = ref(false)
 const avatarInput = ref<HTMLInputElement | null>(null)
 const knowledgeInput = ref<HTMLInputElement | null>(null)
 const knowledgeUploading = ref(false)
+const knowledgeUploadProgress = ref({ current: 0, total: 0 })
+const knowledgeUploadResults = ref<KnowledgeUploadResult[]>([])
+const knowledgeUploadDialogOpen = ref(false)
 const knowledgeReindexing = ref(false)
 const knowledgeFiles = ref<KnowledgeFile[]>([])
+const knowledgeMutatingId = ref<string | null>(null)
+const knowledgeSearch = ref('')
+const knowledgeDetail = ref<KnowledgeFile | null>(null)
+const knowledgeDetailLoading = ref(false)
+const filteredKnowledgeFiles = computed(() => {
+  const query = knowledgeSearch.value.trim().toLocaleLowerCase()
+  if (!query) return knowledgeFiles.value
+  return knowledgeFiles.value.filter(file => [file.title, file.filename, file.original_filename || '', file.ingest_status || '']
+    .some(value => value.toLocaleLowerCase().includes(query)))
+})
+const toastMessage = ref('')
+const toastTone = ref<'success' | 'info' | 'warning' | 'error'>('info')
+let toastTimer: ReturnType<typeof globalThis.setTimeout> | undefined
 const cancelDialogOpen = ref(false)
+const sessionToDelete = ref<Session | null>(null)
+const sessionDeleting = ref(false)
 const currentView = ref<'showcase' | 'agent' | 'admin'>('showcase')
 const defaultAvatarUrl = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=160&q=80'
 const api = createAgentApi({
@@ -191,7 +219,30 @@ onBeforeUnmount(() => {
   revealObserver?.disconnect()
   if (scrollTimer) globalThis.clearTimeout(scrollTimer)
   if (smsTimer) globalThis.clearInterval(smsTimer)
+  if (toastTimer) globalThis.clearTimeout(toastTimer)
 })
+
+function showToast(message: string, tone: typeof toastTone.value = 'info') {
+  toastMessage.value = message
+  toastTone.value = tone
+  if (toastTimer) globalThis.clearTimeout(toastTimer)
+  toastTimer = globalThis.setTimeout(() => { toastMessage.value = '' }, 4200)
+}
+
+function knowledgeStatusLabel(status: KnowledgeFile['ingest_status']) {
+  return status === 'indexed' ? '已入库' : status === 'local' ? '待接入索引' : '异常'
+}
+
+function knowledgeDigest(file: KnowledgeFile) {
+  return file.sha256 ? `${file.sha256.slice(0, 10)}…` : '未记录'
+}
+
+function knowledgeUploadLabel(status: KnowledgeUploadStatus) {
+  return {
+    uploading: '正在处理', indexed: '已入库', duplicate: '已存在',
+    conflict: '名称冲突', similar: '内容相似', failed: '入库失败', skipped: '已跳过',
+  }[status]
+}
 
 watch(
   () => [chat.runId, chat.assistantText, chat.previewState],
@@ -648,33 +699,133 @@ async function sendMessage() {
   await executeChat({ mode: 'new', session_id: sessionId, content }, content)
 }
 
-async function uploadKnowledgeFile(file: File | undefined) {
-  if (!file || knowledgeUploading.value) return
+async function uploadKnowledgeFiles(files: File[]) {
+  if (!files.length || knowledgeUploading.value) return
   if (!isAdmin.value) {
-    historyError.value = '只有管理员可以上传知识文件。'
-    return
-  }
-  if (!/\.(txt|md|markdown)$/i.test(file.name) || file.size > 2 * 1024 * 1024) {
-    historyError.value = '请上传 2MB 以内的 .txt / .md 知识文件'
+    showToast('只有管理员可以上传知识文件。', 'error')
     return
   }
   knowledgeUploading.value = true
+  knowledgeUploadProgress.value = { current: 0, total: files.length }
+  knowledgeUploadResults.value = files.map((file, index) => ({
+    id: `${file.name}:${file.size}:${file.lastModified}:${index}`,
+    file,
+    filename: file.name,
+    status: 'uploading',
+    reason: '等待校验与入库。',
+  }))
+  knowledgeUploadDialogOpen.value = true
   historyError.value = null
   try {
-    const uploaded = await api.uploadKnowledgeFile(file)
-    knowledgeFiles.value = [uploaded, ...knowledgeFiles.value.filter(item => item.id !== uploaded.id)]
+    for (const item of knowledgeUploadResults.value) {
+      knowledgeUploadProgress.value.current += 1
+      await uploadKnowledgeItem(item)
+    }
     chat.errorMessage = ''
+    if (knowledgeUploadResults.value.some(item => item.status === 'indexed')) chat.setPreviewState('ready')
+    await refreshKnowledgeFiles()
+  } finally {
+    knowledgeUploading.value = false
+    knowledgeUploadProgress.value = { current: 0, total: 0 }
+    if (knowledgeInput.value) knowledgeInput.value.value = ''
+  }
+}
+
+async function uploadKnowledgeItem(item: KnowledgeUploadResult, overwrite = false, allowSimilar = false) {
+  const filename = item.filename.trim()
+  if (!/\.(txt|md|markdown|pdf|xlsx)$/i.test(filename)) {
+    item.status = 'failed'
+    item.reason = '仅支持 .txt、.md、.markdown、.pdf、.xlsx 文件名。'
+    return
+  }
+  if (item.file.size > 2 * 1024 * 1024) {
+    item.status = 'failed'
+    item.reason = '文件超过单个 2 MB 的限制。'
+    return
+  }
+  item.status = 'uploading'
+  item.reason = '正在切片、Embedding 并写入索引。'
+  try {
+    const uploaded = await api.uploadKnowledgeFile(item.file, filename, overwrite, allowSimilar)
+    item.status = 'indexed'
+    item.uploaded = uploaded
+    item.reason = `已完成 ${uploaded.chunk_count} 个切片并写入知识库。`
+    knowledgeFiles.value = [uploaded, ...knowledgeFiles.value.filter(file => file.id !== uploaded.id)]
     draft.value = `我已经上传了《${uploaded.title}》，请基于这份资料回答：`
-    chat.setPreviewState('ready')
   } catch (error) {
     if (error instanceof ApiClientError && error.status === 401) {
       expireAuthentication({ type: 'agent' })
+      item.status = 'failed'
+      item.reason = '登录已过期。'
       return
     }
-    historyError.value = error instanceof Error ? error.message : '知识文件上传失败'
+    if (error instanceof ApiClientError && error.code === 'KNOWLEDGE_DUPLICATE') {
+      item.status = 'duplicate'
+      item.reason = '向量数据库已存在相同内容，未重复切片或写入。'
+    } else if (error instanceof ApiClientError && error.code === 'KNOWLEDGE_NAME_CONFLICT') {
+      item.status = 'conflict'
+      item.existingFilename = String(error.data?.existing_filename || filename)
+      item.reason = '已存在同名但内容不同的资料；修改名称后可重新入库。'
+    } else if (error instanceof ApiClientError && error.code === 'KNOWLEDGE_SIMILAR') {
+      item.status = 'similar'
+      const similarity = typeof error.data?.similarity === 'number' ? `（相似度 ${(error.data.similarity * 100).toFixed(1)}%）` : ''
+      item.reason = `与《${String(error.data?.similar_filename || '已有资料')}》内容高度相似${similarity}；改名不会消除语义重复。`
+    } else {
+      item.status = 'failed'
+      item.reason = error instanceof Error ? error.message : '服务端未完成入库。'
+    }
+  }
+}
+
+function skipKnowledgeItem(item: KnowledgeUploadResult) {
+  item.status = 'skipped'
+  item.reason = '已跳过，不会写入知识库。'
+}
+
+async function retryKnowledgeItem(item: KnowledgeUploadResult) {
+  if (knowledgeUploading.value || item.status === 'uploading') return
+  await uploadKnowledgeItem(item)
+  await refreshKnowledgeFiles()
+}
+
+async function overwriteKnowledgeItem(item: KnowledgeUploadResult) {
+  if (knowledgeUploading.value || item.status === 'uploading') return
+  await uploadKnowledgeItem(item, true)
+  await refreshKnowledgeFiles()
+}
+
+async function keepSimilarKnowledgeItem(item: KnowledgeUploadResult) {
+  if (knowledgeUploading.value || item.status === 'uploading') return
+  await uploadKnowledgeItem(item, false, true)
+  await refreshKnowledgeFiles()
+}
+
+function requestDeleteSession(session: Session) {
+  if (chat.previewState === 'loading') {
+    showToast('当前正在生成回答，请先停止后再删除会话。', 'warning')
+    return
+  }
+  sessionToDelete.value = session
+}
+
+async function confirmDeleteSession() {
+  const target = sessionToDelete.value
+  if (!target || sessionDeleting.value) return
+  sessionDeleting.value = true
+  try {
+    await api.deleteSession(target.id)
+    sessions.value = sessions.value.filter(session => session.id !== target.id)
+    const remainingMessages = { ...sessionMessages.value }
+    delete remainingMessages[target.id]
+    sessionMessages.value = remainingMessages
+    if (chat.sessionId === target.id) resetConversation()
+    sessionToDelete.value = null
+    showToast(`已删除会话《${target.title}》。`, 'success')
+  } catch (error) {
+    if (error instanceof ApiClientError && error.status === 401) { expireAuthentication({ type: 'agent' }); return }
+    showToast(error instanceof Error ? error.message : '会话删除失败。', 'error')
   } finally {
-    knowledgeUploading.value = false
-    if (knowledgeInput.value) knowledgeInput.value.value = ''
+    sessionDeleting.value = false
   }
 }
 
@@ -688,7 +839,50 @@ async function refreshKnowledgeFiles() {
       expireAuthentication({ type: 'agent' })
       return
     }
-    historyError.value = error instanceof Error ? error.message : '知识文件列表加载失败'
+    showToast(error instanceof Error ? error.message : '知识文件列表加载失败', 'error')
+  }
+}
+
+async function editKnowledgeFile(file: KnowledgeFile) {
+  if (!isAdmin.value || knowledgeMutatingId.value) return
+  const title = window.prompt('修改文档标题', file.title)?.trim()
+  if (!title || title === file.title) return
+  knowledgeMutatingId.value = file.id
+  try {
+    const updated = await api.updateKnowledgeFile(file.id, { title })
+    knowledgeFiles.value = knowledgeFiles.value.map(item => item.id === file.id ? updated : item)
+    showToast('文档标题已更新并重新索引。', 'success')
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : '文档修改失败', 'error')
+  } finally {
+    knowledgeMutatingId.value = null
+  }
+}
+
+async function viewKnowledgeFile(file: KnowledgeFile) {
+  if (knowledgeDetailLoading.value) return
+  knowledgeDetailLoading.value = true
+  try {
+    knowledgeDetail.value = await api.getKnowledgeFile(file.id)
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : '文档详情加载失败', 'error')
+  } finally {
+    knowledgeDetailLoading.value = false
+  }
+}
+
+async function deleteKnowledgeFile(file: KnowledgeFile) {
+  if (!isAdmin.value || knowledgeMutatingId.value) return
+  if (!window.confirm(`确认删除《${file.title}》？删除后将同时移除向量索引。`)) return
+  knowledgeMutatingId.value = file.id
+  try {
+    await api.deleteKnowledgeFile(file.id)
+    knowledgeFiles.value = knowledgeFiles.value.filter(item => item.id !== file.id)
+    showToast('知识文档及其索引已删除。', 'success')
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : '文档删除失败', 'error')
+  } finally {
+    knowledgeMutatingId.value = null
   }
 }
 
@@ -698,13 +892,13 @@ async function reindexKnowledgeFiles() {
   historyError.value = null
   try {
     const result = await api.reindexKnowledgeFiles()
-    historyError.value = `索引已重建，共处理 ${result.chunks_indexed} 个文本切片。`
+    showToast(`索引已重建，共处理 ${result.chunks_indexed} 个文本切片。`, 'success')
   } catch (error) {
     if (error instanceof ApiClientError && error.status === 401) {
       expireAuthentication({ type: 'agent' })
       return
     }
-    historyError.value = error instanceof Error ? error.message : '索引重建失败'
+    showToast(error instanceof Error ? error.message : '索引重建失败', 'error')
   } finally {
     knowledgeReindexing.value = false
   }
@@ -763,7 +957,7 @@ async function confirmCancelActiveRun() {
       <button class="new-session" type="button" @click="resetConversation"><span>＋</span>新建会话 <kbd>⌘ K</kbd></button>
       <div class="sidebar-label">近期会话</div>
       <nav class="session-list">
-        <button v-for="session in sessions" :key="session.id" class="session" :class="{ active: session.id === chat.sessionId }" type="button" @click="openSession(session.id)"><b>{{ session.title }}</b><span>{{ session.last_message_at ? new Date(session.last_message_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '尚未开始' }}</span></button>
+        <div v-for="session in sessions" :key="session.id" class="session-entry" :class="{ active: session.id === chat.sessionId }"><button class="session" type="button" @click="openSession(session.id)"><b>{{ session.title }}</b><span>{{ session.last_message_at ? new Date(session.last_message_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '尚未开始' }}</span></button><button class="session-delete" type="button" :aria-label="`删除会话 ${session.title}`" title="删除会话" @click.stop="requestDeleteSession(session)">×</button></div>
         <p v-if="!sessions.length" class="session-empty">{{ historyLoading ? '正在同步历史...' : '暂无历史会话' }}</p>
       </nav>
       <p v-if="historyError" class="session-error">{{ historyError }}</p>
@@ -771,7 +965,7 @@ async function confirmCancelActiveRun() {
       </template>
       <template v-else>
         <button class="showcase-return" type="button" @click="openAgentDesk"><span>←</span> 返回客服工作台</button>
-        <div class="brand-lockup"><span class="brand-mark">管</span><span>知识库管理</span><small>ADMIN CONSOLE</small></div>
+        <div class="brand-lockup brand-lockup--admin"><span class="brand-mark">管</span><div class="brand-lockup__copy"><span>知识库管理</span><small>ADMIN CONSOLE</small></div></div>
         <div class="sidebar-label">管理功能</div>
         <nav class="session-list admin-nav"><button class="session active" type="button"><b>知识文件</b><span>上传并纳入检索</span></button></nav>
         <div class="sidebar-foot"><span class="presence"></span><div><b>{{ authUser?.nickname }}</b><small>管理员</small></div><button type="button" @click="signOut">退出</button></div>
@@ -846,9 +1040,9 @@ async function confirmCancelActiveRun() {
       <template v-else>
         <header class="topbar"><button class="menu-button" type="button" aria-label="打开管理导航" @click="chat.toggleNav">☰</button><div class="agent-heading"><span>ADMIN / KNOWLEDGE</span><b>知识库入库管理</b></div><div class="header-actions"><button class="avatar" type="button" :aria-label="`${authUser?.nickname}，打开个人资料`" @click="openProfile"><img :src="authUser?.avatar_url || defaultAvatarUrl" :alt="`${authUser?.nickname}的头像`" /><span>{{ userInitial }}</span></button></div></header>
         <section class="admin-stage">
-          <p class="eyebrow">CONTROLLED KNOWLEDGE</p><h1>将经过审核的资料纳入客服检索。</h1><p>文件上传后会由服务端完成解析、切片与索引；普通用户没有此入口，也无法直接调用上传接口。</p>
-          <div class="admin-upload-card"><div><b>上传知识文件</b><small>支持 UTF-8 的 .txt、.md、.markdown，单个文件不超过 2 MB。</small></div><input ref="knowledgeInput" class="knowledge-file-input" type="file" accept=".txt,.md,.markdown,text/plain,text/markdown" @change="uploadKnowledgeFile(($event.target as HTMLInputElement).files?.item(0) ?? undefined)" /><button type="button" class="send" :disabled="knowledgeUploading" @click="knowledgeInput?.click()">{{ knowledgeUploading ? '正在入库…' : '选择文件' }}</button><button type="button" class="send send--secondary" :disabled="knowledgeReindexing" @click="reindexKnowledgeFiles">{{ knowledgeReindexing ? '重建中…' : '重建索引' }}</button></div>
-          <div class="admin-file-list"><div class="admin-file-list__head"><b>已入库资料</b><span>{{ knowledgeFiles.length }} 个文件</span></div><p v-if="!knowledgeFiles.length" class="admin-file-empty">暂无已入库文件。</p><article v-for="file in knowledgeFiles" :key="file.id" class="admin-file-row"><div><b>{{ file.title }}</b><small>{{ file.filename }} · {{ (file.size_bytes / 1024).toFixed(1) }} KB</small></div><span>{{ file.chunk_count }} chunks</span></article></div>
+          <p class="eyebrow">CONTROLLED KNOWLEDGE</p><h1>将经过审核的资料纳入客服检索。</h1><p>上传前会校验原始文件名和 SHA-256；完全重复的文档不会再次切片、Embedding，同名不同内容会被拦截并提示。</p>
+          <div class="admin-upload-card"><div class="admin-upload-card__copy"><b>批量上传知识文件</b><small>支持 .txt、.md、.pdf、.xlsx，单个文件不超过 2 MB。PDF 按页解析，Excel 按工作表和行保留字段上下文。</small></div><input ref="knowledgeInput" class="knowledge-file-input" type="file" multiple accept=".txt,.md,.markdown,.pdf,.xlsx,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" @change="uploadKnowledgeFiles(Array.from(($event.target as HTMLInputElement).files || []))" /><div class="admin-upload-card__actions"><button type="button" class="send" :disabled="knowledgeUploading" @click="knowledgeInput?.click()">{{ knowledgeUploading ? `入库中 ${knowledgeUploadProgress.current}/${knowledgeUploadProgress.total}` : '选择多个文件' }}</button><button type="button" class="send send--secondary" :disabled="knowledgeReindexing" @click="reindexKnowledgeFiles">{{ knowledgeReindexing ? '重建中…' : '重建索引' }}</button></div></div>
+          <div class="admin-file-list"><div class="admin-file-list__head"><div><b>已入库资料</b><small>统一管理已发布到 pgvector 与关键词索引的文档</small></div><div class="admin-file-list__tools"><input v-model.trim="knowledgeSearch" type="search" placeholder="搜索标题、文件名或状态" aria-label="搜索知识文件" /><span>{{ filteredKnowledgeFiles.length }} / {{ knowledgeFiles.length }} 个文件</span></div></div><p v-if="!knowledgeFiles.length" class="admin-file-empty">暂无已入库文件。</p><p v-else-if="!filteredKnowledgeFiles.length" class="admin-file-empty">没有匹配的知识文件。</p><div v-else class="admin-file-table" role="table" aria-label="知识文件清单"><div class="admin-file-table__row admin-file-table__row--header" role="row"><span>资料</span><span>索引状态</span><span>切片</span><span>摘要</span><span>最近更新</span><span>操作</span></div><article v-for="file in filteredKnowledgeFiles" :key="file.id" class="admin-file-table__row" role="row"><div class="admin-file-identity"><b>{{ file.title }}</b><small>{{ file.original_filename || file.filename }} · {{ (file.size_bytes / 1024).toFixed(1) }} KB</small></div><span class="knowledge-status" :class="`knowledge-status--${file.ingest_status || 'indexed'}`">{{ knowledgeStatusLabel(file.ingest_status) }}</span><span>{{ file.chunk_count }} 段</span><code>{{ knowledgeDigest(file) }}</code><time>{{ new Date(file.last_indexed_at || file.uploaded_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) }}</time><div class="admin-file-actions"><button type="button" class="batch-keep" :disabled="knowledgeDetailLoading" @click="viewKnowledgeFile(file)">查看</button><button type="button" class="batch-retry" :disabled="knowledgeMutatingId === file.id" @click="editKnowledgeFile(file)">修改</button><button type="button" class="batch-skip" :disabled="knowledgeMutatingId === file.id" @click="deleteKnowledgeFile(file)">删除</button></div></article></div></div>
           <p v-if="historyError" class="session-error">{{ historyError }}</p>
         </section>
       </template>
@@ -856,6 +1050,9 @@ async function confirmCancelActiveRun() {
     <button class="scrim" aria-label="关闭会话列表" @click="chat.closeNav"></button>
   </div>
   <Teleport to="body">
+    <div v-if="toastMessage" class="app-toast" :class="`app-toast--${toastTone}`" role="status" aria-live="polite"><span aria-hidden="true">{{ toastTone === 'success' ? '✓' : toastTone === 'warning' ? '!' : toastTone === 'error' ? '×' : 'i' }}</span>{{ toastMessage }}</div>
+    <section v-if="knowledgeUploadDialogOpen" class="profile-overlay" aria-label="批量上传结果" @click.self="!knowledgeUploading && (knowledgeUploadDialogOpen = false)"><article class="knowledge-batch-dialog" role="dialog" aria-modal="true" aria-labelledby="knowledge-batch-title"><button class="auth-close" type="button" aria-label="关闭上传结果" :disabled="knowledgeUploading" @click="knowledgeUploadDialogOpen = false">×</button><p class="eyebrow">KNOWLEDGE INGESTION</p><h2 id="knowledge-batch-title">批量入库结果</h2><p class="knowledge-batch-summary">{{ knowledgeUploading ? `正在处理 ${knowledgeUploadProgress.current} / ${knowledgeUploadProgress.total} 个文件` : `已完成 ${knowledgeUploadResults.length} 个文件的校验与处理` }}</p><section class="knowledge-batch-section"><h3>已入库</h3><p v-if="!knowledgeUploadResults.some(item => item.status === 'indexed')" class="knowledge-batch-empty">本次没有新文件写入。</p><article v-for="item in knowledgeUploadResults.filter(item => item.status === 'indexed')" :key="item.id" class="knowledge-batch-row knowledge-batch-row--success"><div><b>{{ item.filename }}</b><small>{{ item.reason }}</small></div><span class="knowledge-batch-status">{{ knowledgeUploadLabel(item.status) }}</span></article></section><section class="knowledge-batch-section"><h3>需要处理</h3><p v-if="!knowledgeUploadResults.some(item => ['duplicate', 'conflict', 'similar', 'failed', 'skipped'].includes(item.status))" class="knowledge-batch-empty">没有需要处理的文件。</p><article v-for="item in knowledgeUploadResults.filter(item => ['duplicate', 'conflict', 'similar', 'failed', 'skipped'].includes(item.status))" :key="item.id" class="knowledge-batch-row" :class="`knowledge-batch-row--${item.status}`"><div class="knowledge-batch-row__detail"><b>{{ item.file.name }}</b><small>{{ item.reason }}</small><label v-if="item.status === 'conflict'">新的文件名<input v-model.trim="item.filename" maxlength="180" :disabled="knowledgeUploading" /></label></div><div class="knowledge-batch-row__actions"><span class="knowledge-batch-status">{{ knowledgeUploadLabel(item.status) }}</span><button v-if="item.status === 'conflict'" type="button" class="batch-overwrite" :disabled="knowledgeUploading" @click="overwriteKnowledgeItem(item)">覆盖原文档</button><button v-if="item.status === 'similar'" type="button" class="batch-keep" :disabled="knowledgeUploading" @click="keepSimilarKnowledgeItem(item)">仍然保留</button><button v-if="item.status === 'conflict' || item.status === 'failed'" type="button" class="batch-retry" :disabled="knowledgeUploading" @click="retryKnowledgeItem(item)">{{ item.status === 'conflict' ? '修改并入库' : '重试' }}</button><button v-if="item.status === 'conflict' || item.status === 'similar' || item.status === 'failed'" type="button" class="batch-skip" :disabled="knowledgeUploading" @click="skipKnowledgeItem(item)">跳过</button></div></article></section><div class="knowledge-batch-footer"><button type="button" class="auth-browse" :disabled="knowledgeUploading" @click="knowledgeUploadDialogOpen = false">完成</button></div></article></section>
+    <section v-if="sessionToDelete" class="profile-overlay" aria-label="确认删除会话" @click.self="!sessionDeleting && (sessionToDelete = null)"><div class="cancel-card" role="dialog" aria-modal="true"><p class="eyebrow">DELETE CONVERSATION</p><h2>删除这个会话？</h2><p>会话中的消息、运行记录、反馈、审核记录和由此生成的记忆会一并删除，操作不可恢复。</p><div><button type="button" class="auth-browse" :disabled="sessionDeleting" @click="sessionToDelete = null">取消</button><button type="button" class="auth-submit auth-submit--danger" :disabled="sessionDeleting" @click="confirmDeleteSession">{{ sessionDeleting ? '删除中…' : '确认删除' }}</button></div></div></section>
     <section v-if="authDialogOpen" class="auth-overlay" :aria-label="authMode === 'register' ? '注册账号' : authMode === 'reset' ? '重置密码' : '账号登录'" @click.self="closeAuthDialog">
       <div class="auth-shell" role="dialog" aria-modal="true" :aria-labelledby="`auth-title-${authMode}`">
         <button class="auth-close" type="button" aria-label="关闭登录窗口" :disabled="authSubmitting" @click="closeAuthDialog">×</button>
@@ -921,6 +1118,17 @@ async function confirmCancelActiveRun() {
         <div class="profile-actions"><button type="button" class="auth-browse" @click="profileDialogOpen = false">取消</button><button class="auth-submit" type="submit" :disabled="profileSubmitting">{{ profileSubmitting ? '保存中…' : '保存资料' }} <span>→</span></button></div>
         <button type="button" class="profile-signout" @click="profileDialogOpen = false; signOut()">退出登录</button>
       </form>
+    </section>
+  </Teleport>
+  <Teleport to="body">
+    <section v-if="knowledgeDetail" class="profile-overlay" aria-label="知识文件详情" @click.self="knowledgeDetail = null">
+      <article class="legal-card knowledge-detail-card" role="dialog" aria-modal="true" aria-labelledby="knowledge-detail-title">
+        <button class="auth-close" type="button" aria-label="关闭文档详情" @click="knowledgeDetail = null">×</button>
+        <p class="eyebrow">KNOWLEDGE DOCUMENT</p>
+        <h2 id="knowledge-detail-title">{{ knowledgeDetail.title }}</h2>
+        <p class="legal-meta">{{ knowledgeDetail.original_filename || knowledgeDetail.filename }} · {{ knowledgeDetail.chunk_count }} 个切片 · {{ (knowledgeDetail.size_bytes / 1024).toFixed(1) }} KB</p>
+        <dl class="knowledge-detail-meta"><div><dt>索引状态</dt><dd>{{ knowledgeStatusLabel(knowledgeDetail.ingest_status) }}</dd></div><div><dt>文档版本</dt><dd>{{ knowledgeDetail.document_version || '未记录' }}</dd></div><div><dt>SHA-256</dt><dd>{{ knowledgeDetail.sha256 || '未记录' }}</dd></div><div><dt>最近索引</dt><dd>{{ new Date(knowledgeDetail.last_indexed_at || knowledgeDetail.uploaded_at).toLocaleString('zh-CN') }}</dd></div></dl>
+      </article>
     </section>
   </Teleport>
   <Teleport to="body">

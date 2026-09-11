@@ -33,6 +33,8 @@ class VectorStorePort(Protocol):
 
     async def resolve(self, chunk_ids: Sequence[str]) -> Sequence[Chunk]: ...
 
+    async def delete_document(self, document_id: str) -> None: ...
+
 
 class KeywordSearchPort(Protocol):
     async def replace_document(
@@ -43,6 +45,8 @@ class KeywordSearchPort(Protocol):
     ) -> None: ...
 
     async def search(self, query: str, limit: int) -> Sequence[ScoredChunk]: ...
+
+    async def delete_document(self, document_id: str) -> None: ...
 
 
 class RerankerPort(Protocol):

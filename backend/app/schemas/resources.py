@@ -205,6 +205,11 @@ class CancelRunResult(ContractModel):
     requested_at: datetime
 
 
+class DeleteSessionResult(ContractModel):
+    session_id: UUID
+    deleted: Literal[True] = True
+
+
 class TraceStep(ContractModel):
     sequence: int = Field(ge=1)
     step_type: Literal[
@@ -256,10 +261,25 @@ class KnowledgeFile(ContractModel):
     size_bytes: int = Field(ge=1)
     chunk_count: int = Field(ge=0)
     uploaded_at: datetime
+    original_filename: str | None = Field(default=None, max_length=180)
+    sha256: str | None = Field(default=None, min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$")
+    ingest_status: Literal["indexed", "local", "error"] = "indexed"
+    document_version: str | None = Field(default=None, max_length=128)
+    last_indexed_at: datetime | None = None
 
 
 class KnowledgeReindexResult(ContractModel):
     chunks_indexed: int = Field(ge=0)
+
+
+class UpdateKnowledgeFileRequest(ContractModel):
+    title: str | None = Field(default=None, min_length=1, max_length=120)
+    original_filename: str | None = Field(default=None, min_length=1, max_length=180)
+
+
+class DeleteKnowledgeFileResult(ContractModel):
+    id: str = Field(min_length=1, max_length=128)
+    deleted_at: datetime
 
 
 class ExternalIdentityMappingRequest(ContractModel):
@@ -416,6 +436,7 @@ RunTraceEnvelope = Envelope[RunTrace]
 MemoryEnvelope = Envelope[Memory]
 MemoryPageEnvelope = Envelope[Page[Memory]]
 KnowledgeFileEnvelope = Envelope[KnowledgeFile]
+DeleteKnowledgeFileEnvelope = Envelope[DeleteKnowledgeFileResult]
 DeleteMemoryEnvelope = Envelope[DeleteMemoryResult]
 ReviewPageEnvelope = Envelope[Page[ReviewTask]]
 ReviewDecisionEnvelope = Envelope[ReviewDecisionResult]

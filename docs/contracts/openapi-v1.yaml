@@ -277,7 +277,7 @@ paths:
     post:
       tags: [Knowledge]
       operationId: uploadKnowledgeFile
-      summary: 上传知识库文本文件
+      summary: 上传知识库文件
       x-required-role: admin
       parameters:
         - name: filename
@@ -287,12 +287,30 @@ paths:
             type: string
             minLength: 1
             maxLength: 180
+        - name: overwrite
+          in: query
+          required: false
+          description: 明确替换同名旧版本；完全相同内容仍按重复上传拒绝
+          schema:
+            type: boolean
+            default: false
+        - name: allow_similar
+          in: query
+          required: false
+          description: 明确允许与已有文档高度相似的内容作为独立文档保留
+          schema:
+            type: boolean
+            default: false
       requestBody:
         required: true
         content:
           text/plain:
             schema: { type: string, format: binary }
           text/markdown:
+            schema: { type: string, format: binary }
+          application/pdf:
+            schema: { type: string, format: binary }
+          application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
             schema: { type: string, format: binary }
       responses:
         "201":
@@ -303,6 +321,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "409":
+          description: 文档已存在或同名内容冲突
         "422":
           $ref: "#/components/responses/ValidationError"
         "500":
@@ -327,6 +347,74 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "500":
           $ref: "#/components/responses/InternalError"
+  /knowledge/files/{document_id}:
+    get:
+      tags: [Knowledge]
+      operationId: getKnowledgeFile
+      x-required-role: admin
+      responses:
+        "200":
+          description: 知识文件详情
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    patch:
+      tags: [Knowledge]
+      operationId: updateKnowledgeFile
+      x-required-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateKnowledgeFileRequest"
+      responses:
+        "200":
+          description: 知识文件已更新
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/StorageUnavailable"
+    delete:
+      tags: [Knowledge]
+      operationId: deleteKnowledgeFile
+      x-required-role: admin
+      responses:
+        "200":
+          description: 知识文件已删除
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/StorageUnavailable"
   /knowledge/reindex:
     post:
       tags: [Knowledge]
@@ -519,6 +607,32 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SessionEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/StorageUnavailable"
+    delete:
+      tags: [Sessions]
+      operationId: deleteSession
+      summary: 删除当前用户的会话及其关联记录
+      x-required-role: user
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: 会话及关联记录已删除
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteSessionEnvelope"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -1478,6 +1592,24 @@ components:
           properties:
             data:
               $ref: "#/components/schemas/Session"
+    DeleteSessionResult:
+      type: object
+      additionalProperties: false
+      required: [session_id, deleted]
+      properties:
+        session_id:
+          $ref: "#/components/schemas/Uuid"
+        deleted:
+          type: boolean
+          const: true
+    DeleteSessionEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/ApiEnvelopeBase"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: "#/components/schemas/DeleteSessionResult"
     KnowledgeFile:
       type: object
       additionalProperties: false
@@ -1507,6 +1639,28 @@ components:
           minimum: 0
         uploaded_at:
           $ref: "#/components/schemas/Timestamp"
+        original_filename:
+          type: string
+          maxLength: 180
+          nullable: true
+        sha256:
+          type: string
+          minLength: 64
+          maxLength: 64
+          pattern: "^[0-9a-f]{64}$"
+          nullable: true
+        ingest_status:
+          type: string
+          enum: [indexed, local, error]
+          default: indexed
+        document_version:
+          type: string
+          maxLength: 128
+          nullable: true
+        last_indexed_at:
+          allOf:
+            - $ref: "#/components/schemas/Timestamp"
+          nullable: true
     KnowledgeFileEnvelope:
       allOf:
         - $ref: "#/components/schemas/ApiEnvelopeBase"
@@ -1515,6 +1669,34 @@ components:
           properties:
             data:
               $ref: "#/components/schemas/KnowledgeFile"
+    UpdateKnowledgeFileRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 120
+        original_filename:
+          type: string
+          minLength: 1
+          maxLength: 180
+    DeleteKnowledgeFileResult:
+      type: object
+      required: [id, deleted_at]
+      properties:
+        id:
+          type: string
+        deleted_at:
+          $ref: "#/components/schemas/Timestamp"
+    DeleteKnowledgeFileEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/ApiEnvelopeBase"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: "#/components/schemas/DeleteKnowledgeFileResult"
     KnowledgeFilePage:
       type: object
       additionalProperties: false

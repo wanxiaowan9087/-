@@ -191,6 +191,42 @@ class MemoryPlatformRepository:
         item = self.sessions.get(session_id)
         return item if item and item.owner_id == owner_id else None
 
+    async def delete_session(self, owner_id: str, session_id: UUID) -> bool:
+        if await self.get_session(owner_id, session_id) is None:
+            return False
+        message_ids = {
+            item.id for item in self.messages.values()
+            if item.owner_id == owner_id and item.session_id == session_id
+        }
+        run_ids = {
+            item.id for item in self.runs.values()
+            if item.owner_id == owner_id and item.session_id == session_id
+        }
+        review_ids = {
+            item.id for item in self.reviews.values()
+            if item.owner_id == owner_id and item.session_id == session_id
+        }
+        for collection, identifiers in (
+            (self.feedback, {item.id for item in self.feedback.values() if item.message_id in message_ids}),
+            (self.memories, {item.id for item in self.memories.values() if item.source_message_id in message_ids}),
+            (self.reviews, review_ids),
+            (self.runs, run_ids),
+            (self.messages, message_ids),
+            (self.summary_jobs, {item.id for item in self.summary_jobs.values() if item.session_id == session_id}),
+        ):
+            for identifier in identifiers:
+                collection.pop(identifier, None)
+        self.review_audits = [item for item in self.review_audits if item.review_id not in review_ids]
+        for run_id in run_ids:
+            self.events.pop(run_id, None)
+        for event in self.usage_events.values():
+            if event.session_id == session_id:
+                event.session_id = None
+            if event.message_id in message_ids:
+                event.message_id = None
+        self.sessions.pop(session_id, None)
+        return True
+
     async def update_session_title(
         self, owner_id: str, session_id: UUID, title: str, now: datetime
     ) -> SessionRecord | None:

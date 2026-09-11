@@ -19,7 +19,9 @@ from backend.app.core.security import Principal
 from backend.app.domain.records import IdempotencyRecord, StreamEventRecord
 from backend.app.rag.chunking import DocumentChunker
 from backend.app.rag.ingestion import KnowledgeIndexer
+from backend.app.rag.knowledge_catalog import KnowledgeCatalog
 from backend.app.rag.models import DocumentRecord, DocumentType
+from backend.app.rag.parsers import SUPPORTED_SUFFIXES, parse_knowledge_payload
 from backend.app.repositories.ports import PlatformRepository, PlatformTransaction
 from backend.app.schemas.common import Envelope, Page, PageInfo
 from backend.app.schemas.resources import (
@@ -29,6 +31,7 @@ from backend.app.schemas.resources import (
     CreateSessionRequest,
     DeactivateMemoryRequest,
     DeleteMemoryResult,
+    DeleteSessionResult,
     ExternalIdentityMapping,
     Feedback,
     KnowledgeFile,
@@ -48,7 +51,7 @@ from backend.app.schemas.resources import (
 )
 
 DEFAULT_SESSION_TITLES = {"", "新会话", "New agent session", "Agent session", "Untitled session"}
-SUPPORTED_KNOWLEDGE_SUFFIXES = {".txt", ".md", ".markdown"}
+SUPPORTED_KNOWLEDGE_SUFFIXES = SUPPORTED_SUFFIXES
 MAX_KNOWLEDGE_FILE_BYTES = 2 * 1024 * 1024
 
 
@@ -230,6 +233,18 @@ class PlatformService:
         if item is None:
             raise not_found()
         return Envelope(data=Session.model_validate(item), request_id=request_id_var.get())
+
+    async def delete_session(
+        self, principal: Principal, session_id: UUID
+    ) -> Envelope[DeleteSessionResult]:
+        async with self.repository.transaction() as tx:
+            deleted = await tx.delete_session(principal.subject_id, session_id)
+        if not deleted:
+            raise not_found()
+        return Envelope(
+            data=DeleteSessionResult(session_id=session_id),
+            request_id=request_id_var.get(),
+        )
 
     async def list_messages(
         self, principal: Principal, session_id: UUID, cursor: str | None, limit: int
@@ -670,6 +685,8 @@ class PlatformService:
         content_type: str,
         payload: bytes,
         uploads_dir: str,
+        overwrite: bool = False,
+        allow_similar: bool = False,
     ) -> Envelope[KnowledgeFile]:
         del principal
         if not payload:
@@ -680,47 +697,95 @@ class PlatformService:
                 "knowledge file must be 2 MB or smaller",
                 400,
             )
-        if content_type and not (
-            content_type.startswith("text/")
-            or content_type in {"application/octet-stream", "application/x-markdown"}
-        ):
+        allowed_types = {
+            "application/octet-stream",
+            "application/x-markdown",
+            "application/pdf",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        }
+        if content_type and not (content_type.startswith("text/") or content_type in allowed_types):
             raise AppError(
                 "UNSUPPORTED_KNOWLEDGE_FILE",
-                "knowledge upload expects a UTF-8 text or markdown file",
+                "knowledge upload expects UTF-8 text, PDF, or .xlsx file",
                 400,
             )
+        digest = hashlib.sha256(payload).hexdigest()
+        catalog = KnowledgeCatalog(uploads_dir, self.knowledge_indexer)
+        existing = await catalog.find_existing(filename, digest)
+        if existing is not None:
+            outcome, item = existing
+            if outcome == "duplicate":
+                raise AppError(
+                    "KNOWLEDGE_DUPLICATE",
+                    "该文档已入库，无需重复处理",
+                    409,
+                    {"ingest_status": "duplicate", "existing_file_id": item.id, "sha256": digest},
+                )
+            if not overwrite:
+                raise AppError(
+                    "KNOWLEDGE_NAME_CONFLICT",
+                    "检测到同名但内容不同的知识文件，请修改文件名、覆盖旧版本或跳过",
+                    409,
+                    {
+                        "ingest_status": "conflict",
+                        "existing_file_id": item.id,
+                        "existing_filename": item.original_filename or item.filename,
+                        "existing_sha256": item.sha256,
+                        "new_sha256": digest,
+                    },
+                )
+
         try:
-            text = payload.decode("utf-8")
-        except UnicodeDecodeError as error:
-            raise AppError(
-                "INVALID_KNOWLEDGE_FILE",
-                "knowledge file must be encoded as UTF-8 text",
-                400,
-            ) from error
-        if not text.strip():
-            raise AppError("EMPTY_KNOWLEDGE_FILE", "knowledge file must contain text", 400)
+            similarity_document = parse_knowledge_payload(
+                filename,
+                payload,
+                document_id=str(uuid5(NAMESPACE_URL, f"knowledge-parse:{filename}")),
+                title=Path(filename).stem or "knowledge",
+                source=f"file://uploads/knowledge/{Path(filename).name}",
+            )
+        except (ValueError, RuntimeError) as error:
+            raise AppError("INVALID_KNOWLEDGE_FILE", str(error), 400) from error
+        if existing is None and not allow_similar:
+            similar = await catalog.find_similar(similarity_document.content)
+            if similar is not None:
+                similar_item, similarity = similar
+                raise AppError(
+                    "KNOWLEDGE_SIMILAR",
+                    "检测到与已有资料高度相似的内容，请确认作为独立文档保留或跳过",
+                    409,
+                    {
+                        "ingest_status": "similar",
+                        "similarity": round(similarity, 4),
+                        "similar_file_id": similar_item.id,
+                        "similar_filename": similar_item.original_filename or similar_item.filename,
+                    },
+                )
 
         safe_name = safe_knowledge_filename(filename, payload)
         target_dir = Path(uploads_dir) / "knowledge"
         target_dir.mkdir(parents=True, exist_ok=True)
         target = target_dir / safe_name
-        target.write_text(text, encoding="utf-8", newline="\n")
-
         title = summarize_session_title(Path(filename).stem, max_length=120)
-        document = DocumentRecord(
-            document_id=str(uuid5(NAMESPACE_URL, f"knowledge-upload:{safe_name}")),
-            title=title,
-            source=f"file://uploads/knowledge/{safe_name}",
-            document_type=(
-                DocumentType.MARKDOWN if target.suffix.lower() == ".md" else DocumentType.TEXT
-            ),
-            content=text,
+        document_id = (
+            existing[1].id
+            if existing is not None and existing[0] == "conflict" and overwrite
+            else str(uuid5(NAMESPACE_URL, f"knowledge-upload:{safe_name}"))
         )
+        source = f"file://uploads/knowledge/{safe_name}"
+        try:
+            document = parse_knowledge_payload(
+                filename, payload, document_id=document_id, title=title, source=source
+            )
+        except (ValueError, RuntimeError) as error:
+            raise AppError("INVALID_KNOWLEDGE_FILE", str(error), 400) from error
+        target.write_bytes(payload)
         chunks = DocumentChunker().split(document)
+        document_version: str | None = None
         if self.knowledge_indexer is not None:
             try:
                 report = await self.knowledge_indexer.ingest(document)
                 chunk_count = report.chunks_indexed
+                document_version = report.document_version
             except Exception as error:
                 target.unlink(missing_ok=True)
                 raise AppError(
@@ -731,16 +796,31 @@ class PlatformService:
                 ) from error
         else:
             chunk_count = len(chunks)
+        result = KnowledgeFile(
+            id=document.document_id,
+            filename=safe_name,
+            title=title,
+            source=document.source,
+            size_bytes=len(payload),
+            chunk_count=chunk_count,
+            uploaded_at=datetime.now(UTC),
+            original_filename=Path(filename).name,
+            sha256=digest,
+            ingest_status="indexed" if self.knowledge_indexer is not None else "local",
+            document_version=document_version,
+        )
+        try:
+            await catalog.register(result)
+            if existing is not None and existing[0] == "conflict" and overwrite:
+                old_filename = existing[1].filename
+                if old_filename != safe_name:
+                    (target_dir / old_filename).unlink(missing_ok=True)
+                    catalog.remove(old_filename)
+        except Exception as error:
+            target.unlink(missing_ok=True)
+            raise AppError("KNOWLEDGE_CATALOG_FAILED", "知识库清单写入失败，文档未发布", 503, {"retryable": True}) from error
         return Envelope(
-            data=KnowledgeFile(
-                id=document.document_id,
-                filename=safe_name,
-                title=title,
-                source=document.source,
-                size_bytes=len(payload),
-                chunk_count=chunk_count,
-                uploaded_at=datetime.now(UTC),
-            ),
+            data=result,
             request_id=request_id_var.get(),
         )
 

@@ -55,7 +55,7 @@ class DocumentChunker:
                     ),
                     title=document.title,
                     source=document.source,
-                    content=cleaned,
+                    content=_contextualize_chunk(document, cleaned, location),
                     document_type=document.document_type,
                     location=location,
                     metadata={**document.metadata, **metadata},
@@ -141,6 +141,26 @@ class DocumentChunker:
     def _table(
         self, document: DocumentRecord
     ) -> list[ChunkPiece]:
+        # Excel adapters emit one human-readable row per line rather than CSV;
+        # keep those rows atomic so field names remain searchable.
+        lines = [line.strip() for line in document.content.splitlines() if line.strip()]
+        if lines and "," not in lines[0] and "\t" not in lines[0]:
+            sheet = ""
+            pieces: list[ChunkPiece] = []
+            row_number = 0
+            for line in lines:
+                if line.startswith("工作表："):
+                    sheet = line.removeprefix("工作表：").strip()
+                    continue
+                row_number += 1
+                pieces.append(
+                    (
+                        line,
+                        SourceLocation(section=sheet or None, row=row_number),
+                        {"row": row_number, "sheet": sheet} if sheet else {"row": row_number},
+                    )
+                )
+            return pieces or self._text(document)
         rows = list(csv.DictReader(io.StringIO(document.content)))
         if not rows:
             return self._text(document)
@@ -176,6 +196,27 @@ class DocumentChunker:
 
 def _clean(content: str) -> str:
     return re.sub(r"[ \t]+", " ", content.replace("\x00", "")).strip()
+
+
+def _contextualize_chunk(
+    document: DocumentRecord,
+    content: str,
+    location: SourceLocation,
+) -> str:
+    """Add stable document identity to indexed text without changing metadata.
+
+    Titles, model names, and Markdown sections are retrieval features.  Keeping
+    them in the indexed content prevents otherwise similar model manuals from
+    being ranked as interchangeable by embedding and lexical retrieval.
+    """
+    context = [f"文档标题：{_clean(document.title)}"]
+    model = _clean(str(document.metadata.get("model", "")))
+    if model and model.casefold() not in {"通用", "通用型号", "unknown", "all"}:
+        context.append(f"型号：{model}")
+    section = _clean(location.section or "")
+    if section and section.casefold() not in {"document", "文档"}:
+        context.append(f"章节：{section}")
+    return "\n".join((*context, "正文：", content))
 
 
 def _nearest_break(text: str, start: int, target: int) -> int:

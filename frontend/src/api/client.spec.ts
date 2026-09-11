@@ -173,4 +173,23 @@ describe('SSE API client', () => {
     expect(fetcher.mock.calls[0][0]).toBe('/api/v1/knowledge/files')
     expect(fetcher.mock.calls[1][0]).toBe('/api/v1/knowledge/reindex')
   })
+
+  it('supports an overridden knowledge filename and deletes a session', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        code: 'OK', message: 'success', request_id: 'request-upload',
+        data: { id: 'document-1', filename: 'new-name.md', title: 'new name', source: 'file://uploads/knowledge/new-name.md', size_bytes: 20, chunk_count: 1, uploaded_at: '2026-09-09T00:00:00Z' },
+      }), { status: 201 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        code: 'OK', message: 'success', request_id: 'request-delete',
+        data: { session_id: 'session-1', deleted: true },
+      }), { status: 200 }))
+    const api = createAgentApi({ baseUrl: '/api/v1', accessToken: 'token', fetcher })
+
+    await api.uploadKnowledgeFile(new File(['contents'], 'old-name.md', { type: 'text/markdown' }), 'new-name.md')
+    await expect(api.deleteSession('session-1')).resolves.toEqual({ session_id: 'session-1', deleted: true })
+    expect(fetcher.mock.calls[0][0]).toBe('/api/v1/knowledge/files?filename=new-name.md')
+    expect(fetcher.mock.calls[1][0]).toBe('/api/v1/sessions/session-1')
+    expect((fetcher.mock.calls[1][1] as RequestInit).method).toBe('DELETE')
+  })
 })

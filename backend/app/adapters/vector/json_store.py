@@ -77,6 +77,16 @@ class JsonVectorStore:
             if chunk_id in self._records
         )
 
+    async def delete_document(self, document_id: str) -> None:
+        async with self._lock:
+            self._reload()
+            self._records = {
+                chunk_id: record
+                for chunk_id, record in self._records.items()
+                if record[0].document_id != document_id
+            }
+            self._persist()
+
     def load_all_chunks(self) -> tuple[Chunk, ...]:
         self._reload()
         return tuple(chunk for chunk, _ in self._records.values())

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from evals.run_rag_eval import (
     SupportingSource,
     _load_support_annotations,
     _read_jsonl,
+    _resolve_expected_chunks,
     _score_citation_support,
     evaluate,
 )
@@ -105,3 +107,56 @@ def test_support_annotation_rejects_missing_answerable_case(tmp_path: Path) -> N
 
     with pytest.raises(ValueError, match="should_answer"):
         _load_support_annotations(path, _read_jsonl(DEFAULT_DATASET))
+
+
+def test_v2_dataset_has_frozen_distribution() -> None:
+    root = Path(__file__).resolve().parents[3]
+    cases = _read_jsonl(root / "evals" / "datasets" / "zenmop-rag-v2.jsonl")
+    manifest = json.loads(
+        (root / "evals" / "datasets" / "zenmop-rag-v2.manifest.json").read_text(encoding="utf-8")
+    )
+
+    assert len(cases) == 120
+    assert len({case["case_id"] for case in cases}) == 120
+    assert manifest["distribution"] == {
+        "direct": 40,
+        "multi_source": 20,
+        "model_comparison": 15,
+        "troubleshooting": 15,
+        "rewrite_or_colloquial": 10,
+        "unanswerable": 10,
+        "parameter_boundary": 5,
+        "prompt_injection": 5,
+    }
+
+
+@pytest.mark.asyncio
+async def test_v2_section_selectors_survive_chunk_configuration_changes() -> None:
+    root = Path(__file__).resolve().parents[3]
+    corpus = _read_jsonl(root / "evals" / "corpus" / "zenmop-rag-v2.jsonl")
+    case = next(
+        item
+        for item in _read_jsonl(root / "evals" / "datasets" / "zenmop-rag-v2.jsonl")
+        if item["case_id"] == "direct-s8luna-feature"
+    )
+    from backend.app.rag.chunking import DocumentChunker
+    from backend.app.rag.models import DocumentRecord, DocumentType
+
+    for size, overlap in ((600, 80), (450, 60), (350, 50)):
+        chunks = []
+        for raw in corpus:
+            chunks.extend(
+                DocumentChunker(text_chunk_size=size, text_overlap=overlap).split(
+                    DocumentRecord(
+                        document_id=raw["document_id"],
+                        version=raw["version"],
+                        title=raw["title"],
+                        source=raw["source"],
+                        document_type=DocumentType(raw["document_type"]),
+                        content=raw["content"],
+                        metadata=raw["metadata"],
+                    )
+                )
+            )
+        resolved = _resolve_expected_chunks(case["expected_sources"], chunks)
+        assert resolved

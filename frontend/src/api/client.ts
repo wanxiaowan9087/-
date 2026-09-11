@@ -1,4 +1,4 @@
-import type { ApiErrorBody, AuthSession, AuthUser, ChatRequest, Envelope, KnowledgeFile, LegalDocument, Memory, Message, Page, Session, SmsPurpose, StreamEvent, UsageEvent, UsageSummary } from './contracts'
+import type { ApiErrorBody, AuthSession, AuthUser, ChatRequest, DeleteKnowledgeFileResult, Envelope, KnowledgeFile, LegalDocument, Memory, Message, Page, Session, SmsPurpose, StreamEvent, UpdateKnowledgeFileRequest, UsageEvent, UsageSummary } from './contracts'
 import { parseSseStream } from './sse'
 
 export class ApiClientError extends Error {
@@ -6,6 +6,7 @@ export class ApiClientError extends Error {
     message: string,
     readonly status: number,
     readonly code: string = 'NETWORK_ERROR',
+    readonly data: Record<string, unknown> | null = null,
   ) {
     super(message)
   }
@@ -60,7 +61,12 @@ export function createAgentApi(options: AgentApiOptions) {
     }
     if (!response.ok || !isSuccessEnvelope<T>(body)) {
       const error = body as ApiErrorBody
-      throw new ApiClientError(error.message || 'Request failed', response.status, error.code)
+      throw new ApiClientError(
+        error.message || 'Request failed',
+        response.status,
+        error.code,
+        error.data && typeof error.data === 'object' ? error.data as Record<string, unknown> : null,
+      )
     }
     if (authenticated) options.onAuthenticatedResponse?.()
     return body.data
@@ -143,9 +149,9 @@ export function createAgentApi(options: AgentApiOptions) {
       return readJson<AuthUser>(response, true)
     },
 
-    async uploadKnowledgeFile(file: File): Promise<KnowledgeFile> {
+    async uploadKnowledgeFile(file: File, filename = file.name, overwrite = false, allowSimilar = false): Promise<KnowledgeFile> {
       const response = await fetcher(
-        `${options.baseUrl}/knowledge/files?filename=${encodeURIComponent(file.name)}`,
+        `${options.baseUrl}/knowledge/files?filename=${encodeURIComponent(filename)}${overwrite ? '&overwrite=true' : ''}${allowSimilar ? '&allow_similar=true' : ''}`,
         {
           method: 'POST',
           headers: headers({ 'Content-Type': file.type || 'text/plain' }),
@@ -158,6 +164,28 @@ export function createAgentApi(options: AgentApiOptions) {
     async listKnowledgeFiles(): Promise<Page<KnowledgeFile>> {
       const response = await fetcher(`${options.baseUrl}/knowledge/files`, { headers: headers() })
       return readJson<Page<KnowledgeFile>>(response, true)
+    },
+
+    async getKnowledgeFile(documentId: string): Promise<KnowledgeFile> {
+      const response = await fetcher(`${options.baseUrl}/knowledge/files/${encodeURIComponent(documentId)}`, { headers: headers() })
+      return readJson<KnowledgeFile>(response, true)
+    },
+
+    async updateKnowledgeFile(documentId: string, input: UpdateKnowledgeFileRequest): Promise<KnowledgeFile> {
+      const response = await fetcher(`${options.baseUrl}/knowledge/files/${encodeURIComponent(documentId)}`, {
+        method: 'PATCH',
+        headers: headers({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(input),
+      })
+      return readJson<KnowledgeFile>(response, true)
+    },
+
+    async deleteKnowledgeFile(documentId: string): Promise<DeleteKnowledgeFileResult> {
+      const response = await fetcher(`${options.baseUrl}/knowledge/files/${encodeURIComponent(documentId)}`, {
+        method: 'DELETE',
+        headers: headers(),
+      })
+      return readJson<DeleteKnowledgeFileResult>(response, true)
     },
 
     async reindexKnowledgeFiles(): Promise<{ chunks_indexed: number }> {
@@ -200,6 +228,14 @@ export function createAgentApi(options: AgentApiOptions) {
         headers: headers(),
       })
       return readJson<Page<Message>>(response, true)
+    },
+
+    async deleteSession(sessionId: string): Promise<{ session_id: string; deleted: true }> {
+      const response = await fetcher(`${options.baseUrl}/sessions/${sessionId}`, {
+        method: 'DELETE',
+        headers: headers(),
+      })
+      return readJson<{ session_id: string; deleted: true }>(response, true)
     },
 
     async listMemories(limit = 20): Promise<Page<Memory>> {

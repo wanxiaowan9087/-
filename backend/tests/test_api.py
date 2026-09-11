@@ -155,6 +155,128 @@ async def test_upload_knowledge_file_persists_text_document(tmp_path: Path) -> N
 
 
 @pytest.mark.asyncio
+async def test_knowledge_upload_rejects_duplicate_and_same_name_conflict(tmp_path: Path) -> None:
+    settings = Settings(
+        environment="test",
+        database_url="sqlite+aiosqlite:///./knowledge-dedupe-test.db",
+        redis_url=None,
+        demo_auth_enabled=True,
+        uploads_dir=str(tmp_path),
+    )
+    app = create_app(settings, repository=MemoryPlatformRepository())
+    headers = {"Authorization": "Bearer admin:admin", "Content-Type": "text/markdown"}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        first = await client.post(
+            "/api/v1/knowledge/files?filename=同一份手册.md",
+            headers=headers,
+            content="# 手册\n保持滤网干燥。",
+        )
+        duplicate = await client.post(
+            "/api/v1/knowledge/files?filename=同一份手册.md",
+            headers=headers,
+            content="# 手册\n保持滤网干燥。",
+        )
+        conflict = await client.post(
+            "/api/v1/knowledge/files?filename=同一份手册.md",
+            headers=headers,
+            content="# 手册\n改用新的滤网。",
+        )
+    await app.state.platform_service.close()
+    assert first.status_code == 201
+    assert duplicate.status_code == 409
+    assert duplicate.json()["code"] == "KNOWLEDGE_DUPLICATE"
+    assert duplicate.json()["data"]["ingest_status"] == "duplicate"
+    assert conflict.status_code == 409
+    assert conflict.json()["code"] == "KNOWLEDGE_NAME_CONFLICT"
+    assert conflict.json()["data"]["ingest_status"] == "conflict"
+    assert len(list((tmp_path / "knowledge").glob("*.md"))) == 1
+
+
+@pytest.mark.asyncio
+async def test_knowledge_upload_can_explicitly_overwrite_same_name(tmp_path: Path) -> None:
+    settings = Settings(
+        environment="test",
+        database_url="sqlite+aiosqlite:///./knowledge-overwrite-test.db",
+        redis_url=None,
+        demo_auth_enabled=True,
+        uploads_dir=str(tmp_path),
+    )
+    app = create_app(settings, repository=MemoryPlatformRepository())
+    headers = {"Authorization": "Bearer admin:admin", "Content-Type": "text/markdown"}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        first = await client.post(
+            "/api/v1/knowledge/files?filename=版本手册.md",
+            headers=headers,
+            content="# 旧版本\n旧规则。",
+        )
+        old_id = first.json()["data"]["id"]
+        overwritten = await client.post(
+            "/api/v1/knowledge/files?filename=版本手册.md&overwrite=true",
+            headers=headers,
+            content="# 新版本\n新规则。",
+        )
+        listed = await client.get("/api/v1/knowledge/files", headers=headers)
+    await app.state.platform_service.close()
+    assert first.status_code == 201
+    assert overwritten.status_code == 201
+    assert overwritten.json()["data"]["id"] == old_id
+    assert overwritten.json()["data"]["sha256"] != first.json()["data"]["sha256"]
+    assert len(listed.json()["data"]["items"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_knowledge_upload_warns_on_highly_similar_content_and_can_keep_variant(tmp_path: Path) -> None:
+    settings = Settings(
+        environment="test",
+        database_url="sqlite+aiosqlite:///./knowledge-similar-test.db",
+        redis_url=None,
+        demo_auth_enabled=True,
+        uploads_dir=str(tmp_path),
+    )
+    app = create_app(settings, repository=MemoryPlatformRepository())
+    headers = {"Authorization": "Bearer admin:admin", "Content-Type": "text/markdown"}
+    original = """# 扫地机器人滤网维护\n\n每次清洁后请关闭电源并取出滤网。滤网需要清理灰尘并完全晾干后再安装。\n\n如果滤网破损，请联系售后更换原装配件。"""
+    variant = """# 扫地机器人滤网维护说明\n\n每次清洁后请关闭电源并取出滤网。滤网需要清理灰尘并完全晾干后再安装。\n\n如果滤网破损，请联系售后更换原装配件。适用于新固件。"""
+    app.state.platform_service.knowledge_indexer = None
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        first = await client.post("/api/v1/knowledge/files?filename=滤网维护.md", headers=headers, content=original)
+        similar = await client.post("/api/v1/knowledge/files?filename=滤网维护-新固件.md", headers=headers, content=variant)
+        kept = await client.post("/api/v1/knowledge/files?filename=滤网维护-新固件.md&allow_similar=true", headers=headers, content=variant)
+    await app.state.platform_service.close()
+    assert first.status_code == 201
+    assert similar.status_code == 409
+    assert similar.json()["code"] == "KNOWLEDGE_SIMILAR"
+    assert kept.status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_knowledge_catalog_keeps_manifest_entries_when_source_is_unmounted(tmp_path: Path) -> None:
+    settings = Settings(
+        environment="test",
+        database_url="sqlite+aiosqlite:///./knowledge-manifest-test.db",
+        redis_url=None,
+        demo_auth_enabled=True,
+        uploads_dir=str(tmp_path),
+    )
+    app = create_app(settings, repository=MemoryPlatformRepository())
+    headers = {"Authorization": "Bearer admin:admin", "Content-Type": "text/markdown"}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        uploaded = await client.post(
+            "/api/v1/knowledge/files?filename=历史资料.md",
+            headers=headers,
+            content="# 历史资料\n这是已经入库的资料。",
+        )
+        filename = uploaded.json()["data"]["filename"]
+        (tmp_path / "knowledge" / filename).unlink()
+        listed = await client.get("/api/v1/knowledge/files", headers=headers)
+    await app.state.platform_service.close()
+    assert listed.status_code == 200
+    item = listed.json()["data"]["items"][0]
+    assert item["original_filename"] == "历史资料.md"
+    assert item["chunk_count"] >= 1
+
+
+@pytest.mark.asyncio
 async def test_knowledge_upload_is_admin_only(tmp_path: Path) -> None:
     settings = Settings(
         environment="test",
@@ -171,6 +293,28 @@ async def test_knowledge_upload_is_admin_only(tmp_path: Path) -> None:
         )
     await app.state.platform_service.close()
     assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_delete_session_removes_its_transcript_and_is_owner_scoped(client: AsyncClient) -> None:
+    created = await client.post(
+        "/api/v1/sessions",
+        headers={**USER, "Idempotency-Key": "session-key-delete-001"},
+        json={"title": "待删除会话"},
+    )
+    session_id = created.json()["data"]["id"]
+    await client.post(
+        "/api/v1/chat/stream",
+        headers={**USER, "Idempotency-Key": "stream-key-delete-001"},
+        json={"mode": "new", "session_id": session_id, "content": "删除后不应保留"},
+    )
+    forbidden = await client.delete(f"/api/v1/sessions/{session_id}", headers=REVIEWER)
+    deleted = await client.delete(f"/api/v1/sessions/{session_id}", headers=USER)
+    missing = await client.get(f"/api/v1/sessions/{session_id}/messages", headers=USER)
+    assert forbidden.status_code == 404
+    assert deleted.status_code == 200
+    assert deleted.json()["data"] == {"session_id": session_id, "deleted": True}
+    assert missing.status_code == 404
 
 
 @pytest.mark.asyncio

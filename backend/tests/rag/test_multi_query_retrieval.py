@@ -54,3 +54,14 @@ async def test_deterministic_query_rewrite_preserves_original_query() -> None:
     assert plan.original == "filter cleaning"
     assert plan.queries == ("filter cleaning",)
     assert plan.strategy == "original-query-fallback"
+
+
+@pytest.mark.asyncio
+async def test_deterministic_query_rewrite_normalizes_colloquial_terms_without_extra_branches() -> (
+    None
+):
+    plan = await DeterministicQueryRewriter().rewrite("皓月拖布怎么老是湿哒哒的？")
+
+    assert plan.original == "皓月拖布怎么老是湿哒哒的？"
+    assert plan.queries == ("皓月拖布怎么持续潮湿的？",)
+    assert plan.strategy == "deterministic-query-normalization"

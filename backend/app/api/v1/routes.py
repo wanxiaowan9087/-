@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
@@ -35,6 +36,8 @@ from backend.app.schemas.resources import (
     CreateFeedbackRequest,
     CreateSessionRequest,
     DeleteMemoryResult,
+    DeleteSessionResult,
+    DeleteKnowledgeFileResult,
     ExternalIdentityMapping,
     ExternalIdentityMappingRequest,
     Feedback,
@@ -59,6 +62,7 @@ from backend.app.schemas.resources import (
     SmsCodeRequest,
     SmsCodeResult,
     UpdateMemoryRequest,
+    UpdateKnowledgeFileRequest,
     UpdateProfileRequest,
     UsageEvent,
     UsageEventRequest,
@@ -383,11 +387,13 @@ async def upload_current_user_avatar(
     status_code=201,
     operation_id="uploadKnowledgeFile",
     tags=["Knowledge"],
-    responses=error_responses(400, 401, 403, 422, 500, 503),
+    responses=error_responses(400, 401, 403, 409, 422, 500, 503),
 )
 async def upload_knowledge_file(
     request: Request,
     filename: Annotated[str, Query(min_length=1, max_length=180)],
+    overwrite: Annotated[bool, Query()] = False,
+    allow_similar: Annotated[bool, Query()] = False,
     payload: bytes = Body(media_type="text/plain"),
     principal: Principal = Depends(require_admin),
     service: PlatformService = Depends(get_service),
@@ -399,6 +405,8 @@ async def upload_knowledge_file(
         content_type=request.headers.get("content-type", ""),
         payload=payload,
         uploads_dir=settings.uploads_dir,
+        overwrite=overwrite,
+        allow_similar=allow_similar,
     )
 
 
@@ -420,6 +428,79 @@ async def list_knowledge_files(
         raise RuntimeError("knowledge catalog is not configured")
     return Envelope(
         data=Page(items=await catalog.list_files(), page={"next_cursor": None, "has_more": False}),
+        request_id=request_id_var.get(),
+    )
+
+
+@router.get(
+    "/knowledge/files/{document_id}",
+    response_model=Envelope[KnowledgeFile],
+    operation_id="getKnowledgeFile",
+    tags=["Knowledge"],
+    responses=error_responses(401, 403, 404, 500),
+)
+async def get_knowledge_file(
+    document_id: str,
+    request: Request,
+    _: Principal = Depends(require_admin),
+) -> Envelope[KnowledgeFile]:
+    from backend.app.rag.knowledge_catalog import KnowledgeCatalog
+
+    catalog = request.app.state.knowledge_catalog
+    if not isinstance(catalog, KnowledgeCatalog):
+        raise RuntimeError("knowledge catalog is not configured")
+    item = await catalog.get_file(document_id)
+    if item is None:
+        raise AppError("KNOWLEDGE_FILE_NOT_FOUND", "知识文档不存在", 404)
+    return Envelope(data=item, request_id=request_id_var.get())
+
+
+@router.patch(
+    "/knowledge/files/{document_id}",
+    response_model=Envelope[KnowledgeFile],
+    operation_id="updateKnowledgeFile",
+    tags=["Knowledge"],
+    responses=error_responses(400, 401, 403, 404, 409, 422, 500, 503),
+)
+async def update_knowledge_file(
+    document_id: str,
+    payload: UpdateKnowledgeFileRequest,
+    request: Request,
+    _: Principal = Depends(require_admin),
+) -> Envelope[KnowledgeFile]:
+    from backend.app.rag.knowledge_catalog import KnowledgeCatalog
+
+    catalog = request.app.state.knowledge_catalog
+    if not isinstance(catalog, KnowledgeCatalog):
+        raise RuntimeError("knowledge catalog is not configured")
+    item = await catalog.update_file(
+        document_id,
+        title=payload.title,
+        original_filename=payload.original_filename,
+    )
+    return Envelope(data=item, request_id=request_id_var.get())
+
+
+@router.delete(
+    "/knowledge/files/{document_id}",
+    response_model=Envelope[DeleteKnowledgeFileResult],
+    operation_id="deleteKnowledgeFile",
+    tags=["Knowledge"],
+    responses=error_responses(401, 403, 404, 409, 422, 500, 503),
+)
+async def delete_knowledge_file(
+    document_id: str,
+    request: Request,
+    _: Principal = Depends(require_admin),
+) -> Envelope[DeleteKnowledgeFileResult]:
+    from backend.app.rag.knowledge_catalog import KnowledgeCatalog
+
+    catalog = request.app.state.knowledge_catalog
+    if not isinstance(catalog, KnowledgeCatalog):
+        raise RuntimeError("knowledge catalog is not configured")
+    await catalog.delete_file(document_id)
+    return Envelope(
+        data=DeleteKnowledgeFileResult(id=document_id, deleted_at=datetime.now(UTC)),
         request_id=request_id_var.get(),
     )
 
@@ -532,6 +613,21 @@ async def get_session(
     service: PlatformService = Depends(get_service),
 ) -> Envelope[Session]:
     return await service.get_session(principal, session_id)
+
+
+@router.delete(
+    "/sessions/{session_id}",
+    response_model=Envelope[DeleteSessionResult],
+    operation_id="deleteSession",
+    tags=["Sessions"],
+    responses=error_responses(401, 403, 404, 422, 500, 503),
+)
+async def delete_session(
+    session_id: UUID,
+    principal: Principal = Depends(get_principal),
+    service: PlatformService = Depends(get_service),
+) -> Envelope[DeleteSessionResult]:
+    return await service.delete_session(principal, session_id)
 
 
 @router.get(

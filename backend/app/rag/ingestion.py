@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass
 
 from .chunking import DocumentChunker
@@ -65,3 +66,38 @@ class KnowledgeIndexer:
             document_version=version,
             chunks_indexed=len(chunks),
         )
+
+    async def delete_document(self, document_id: str) -> None:
+        await self._vector_store.delete_document(document_id)
+        await self._keyword_index.delete_document(document_id)
+
+    async def indexed_documents(self) -> tuple[tuple[DocumentRecord, int, str], ...]:
+        """Return durable documents currently present in the vector index.
+
+        The upload directory is only a source-of-truth for uploaded files; this
+        view also preserves built-in or previously indexed documents whose
+        source file is no longer mounted in the API container.
+        """
+        load_all_chunks = getattr(self._vector_store, "load_all_chunks", None)
+        if load_all_chunks is None:
+            return ()
+        chunks = await load_all_chunks()
+        grouped: dict[tuple[str, str], list] = defaultdict(list)
+        for chunk in chunks:
+            grouped[(chunk.document_id, chunk.document_version)].append(chunk)
+        documents: list[tuple[DocumentRecord, int, str]] = []
+        for (document_id, version), items in grouped.items():
+            first = items[0]
+            documents.append((
+                DocumentRecord(
+                    document_id=document_id,
+                    title=first.title,
+                    source=first.source,
+                    document_type=first.document_type,
+                    content="\n\n".join(item.content for item in items),
+                    version=version,
+                ),
+                len(items),
+                version,
+            ))
+        return tuple(documents)

@@ -1,4 +1,4 @@
-# 归元 Agent 平台
+# ZENMOP Agent 平台
 
 面向 AI 应用开发实习展示的 Vue 3 + FastAPI Agent/RAG 工程。项目把旧版单体 Agent 拆分为可测试的前端、平台 API、RAG、Agent Runtime 和人工审核链路。
 
@@ -42,7 +42,7 @@ pip install --require-hashes -r requirements.lock
 $env:DASHSCOPE_API_KEY='your-key'
 ```
 
-真实运行时使用 `qwen3-max` 与 `text-embedding-v4`，Chroma 数据默认写入后端的 `data/chroma`；Docker Compose 使用独立 `agent-chroma` 卷保持向量数据。服务启动时会由已持久化的 Chroma 分片重建内存 BM25 索引，因此重启后仍保持向量 + 词法的混合检索。
+真实运行时使用 `qwen3-max` 与 `text-embedding-v4`，生产环境通过 PostgreSQL + pgvector 持久化向量数据，并以 HNSW 索引支持余弦相似度检索；服务启动时从 pgvector 分片重建内存 BM25 索引，因此重启后仍保持向量 + 词法的混合检索。开发环境可使用配置的本地 JSON 向量适配器，不能将其描述为生产数据源。
 
 知识导入不新增面向普通用户的 HTTP 接口，而是使用显式的运维命令和版本化 JSONL 清单（示例见 [`docs/knowledge-manifest.example.jsonl`](docs/knowledge-manifest.example.jsonl)）：
 

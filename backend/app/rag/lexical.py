@@ -101,3 +101,10 @@ class BM25KeywordIndex:
             ranked.append(ScoredChunk(chunk=chunk, score=score))
         ranked.sort(key=lambda item: (-item.score, item.chunk.chunk_id))
         return tuple(ranked[:limit])
+
+    async def delete_document(self, document_id: str) -> None:
+        self._chunks = {
+            chunk_id: chunk
+            for chunk_id, chunk in self._chunks.items()
+            if chunk.document_id != document_id
+        }

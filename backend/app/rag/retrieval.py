@@ -32,7 +32,12 @@ class IdentityReranker:
 
 
 class LexicalReranker:
-    """Replaceable deterministic reranker used by fixed evaluations."""
+    """Replaceable deterministic reranker used by fixed evaluations.
+
+    The identity signal gives explicit model/title/section matches a small
+    boost. This is important for manuals whose operational language is nearly
+    identical across models, and costs no extra embedding or LLM call.
+    """
 
     async def rerank(
         self, query: str, hits: Sequence[SearchHit], limit: int
@@ -41,12 +46,25 @@ class LexicalReranker:
         reranked: list[SearchHit] = []
         for hit in hits:
             document_terms = set(tokenize(hit.chunk.content))
-            overlap = (
-                len(query_terms & document_terms) / len(query_terms)
-                if query_terms
-                else 0.0
+            overlap = len(query_terms & document_terms) / len(query_terms) if query_terms else 0.0
+            identity = " ".join(
+                (
+                    hit.chunk.title,
+                    str(hit.chunk.metadata.get("model", "")),
+                    str(hit.chunk.metadata.get("heading", "")),
+                    hit.chunk.location.section or "",
+                )
             )
-            score = min(1.0, 0.62 * overlap + 0.38 * hit.fused_score)
+            identity_terms = set(tokenize(identity))
+            identity_overlap = (
+                len(query_terms & identity_terms) / len(query_terms) if query_terms else 0.0
+            )
+            # Preserve the calibrated base score so identity-aware ordering
+            # cannot turn otherwise answerable evidence into a false refusal.
+            score = min(
+                1.0,
+                0.62 * overlap + 0.38 * hit.fused_score + 0.08 * identity_overlap,
+            )
             reranked.append(replace(hit, rerank_score=score))
         reranked.sort(key=lambda item: (-item.score, item.chunk.chunk_id))
         return tuple(reranked[:limit])
@@ -98,15 +116,9 @@ class HybridRetriever:
         if not vectors and not keywords and len(degraded) == 2:
             raise RetrievalUnavailable("all retrieval dependencies failed")
 
-        fused = reciprocal_rank_fusion(
-            vectors, keywords, rrf_k=self._rrf_k
-        )
+        fused = reciprocal_rank_fusion(vectors, keywords, rrf_k=self._rrf_k)
         try:
-            reranked = tuple(
-                await self._reranker.rerank(
-                    query, fused, self._result_limit
-                )
-            )
+            reranked = tuple(await self._reranker.rerank(query, fused, self._result_limit))
         except Exception:
             logger.warning(
                 "reranker degraded; using fused order",
@@ -125,9 +137,7 @@ class HybridRetriever:
 
     async def _vector_search(self, query: str) -> Sequence[ScoredChunk]:
         query_vector = await self._embeddings.embed_query(query)
-        return await self._vector_store.search(
-            query_vector, self._candidate_limit
-        )
+        return await self._vector_store.search(query_vector, self._candidate_limit)
 
     async def rerank_candidates(
         self, query: str, hits: Sequence[SearchHit], limit: int
@@ -210,9 +220,7 @@ class MultiQueryRetriever:
         successes = [item for item in branch_results if isinstance(item, RetrievalResult)]
         if not successes:
             raise RetrievalUnavailable("all multi-query retrieval branches failed")
-        hits = reciprocal_rank_fusion_hits(
-            [item.hits for item in successes], rrf_k=self._rrf_k
-        )
+        hits = reciprocal_rank_fusion_hits([item.hits for item in successes], rrf_k=self._rrf_k)
         try:
             reranked = tuple(
                 await self._retriever.rerank_candidates(plan.original, hits, self._result_limit)
@@ -226,9 +234,12 @@ class MultiQueryRetriever:
             hits=reranked,
             confidence=_evidence_confidence(reranked),
             strategy=f"{plan.strategy}+multi-query+vector+bm25+rrf+rerank",
-            degraded_dependencies=tuple(dict.fromkeys(
-                dependency for item in successes for dependency in item.degraded_dependencies
-            )) + reranker_degraded,
+            degraded_dependencies=tuple(
+                dict.fromkeys(
+                    dependency for item in successes for dependency in item.degraded_dependencies
+                )
+            )
+            + reranker_degraded,
             conflicting_sources=any(item.conflicting_sources for item in successes)
             or _has_conflicts(reranked),
         )
@@ -316,11 +327,7 @@ def _evidence_confidence(hits: Sequence[SearchHit]) -> float:
     if not hits:
         return 0.0
     top = hits[0]
-    raw = max(
-        value
-        for value in (top.vector_score, top.keyword_score, 0.0)
-        if value is not None
-    )
+    raw = max(value for value in (top.vector_score, top.keyword_score, 0.0) if value is not None)
     dual_bonus = 0.08 if top.modalities == 2 else 0.0
     agreement_bonus = 0.04 if len(hits) > 1 and hits[1].score >= 0.55 else 0.0
     rank_calibration = top.score + (0.12 if top.modalities == 2 else 0.03)

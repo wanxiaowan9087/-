@@ -9,7 +9,7 @@ export interface ApiErrorBody {
   code: string
   message: string
   request_id: string
-  data?: { retryable?: boolean; retry_after_seconds?: number | null } | null
+  data?: { retryable?: boolean; retry_after_seconds?: number | null; [key: string]: unknown } | null
 }
 
 export interface Session {
@@ -88,6 +88,21 @@ export interface KnowledgeFile {
   size_bytes: number
   chunk_count: number
   uploaded_at: string
+  original_filename?: string | null
+  sha256?: string | null
+  ingest_status?: 'indexed' | 'local' | 'error'
+  document_version?: string | null
+  last_indexed_at?: string | null
+}
+
+export interface UpdateKnowledgeFileRequest {
+  title?: string
+  original_filename?: string
+}
+
+export interface DeleteKnowledgeFileResult {
+  id: string
+  deleted_at: string
 }
 
 export interface AuthUser {

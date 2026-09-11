@@ -7,29 +7,29 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from backend.app.adapters.llm.deterministic_executor import DeterministicRunExecutor
 from backend.app.adapters.llm.langchain_react import LangChainReActEngine
 from backend.app.adapters.llm.platform_executor import RuntimeRunExecutor
-from backend.app.adapters.llm.query_rewriter import LangChainQueryRewriter
 from backend.app.adapters.mcp.robot_catalog import recommend_robots
 from backend.app.adapters.memory.platform_runtime import PlatformMemoryRuntime
+from backend.app.adapters.sms.aliyun import AliyunDypnsapiProvider
+from backend.app.adapters.sms.fake import FakeSmsProvider
 from backend.app.adapters.vector.dashscope import DashScopeEmbeddingAdapter
 from backend.app.adapters.vector.pgvector_store import PgVectorStore
-from backend.app.application.usage_summary import UsageSummaryProvider
 from backend.app.agent.customer_tools import build_customer_tool_registry
 from backend.app.agent.report_tools import ReportWorkflow
 from backend.app.agent.runtime import AgentRuntime
 from backend.app.agent.tooling import ToolExecutor
 from backend.app.application.ports import RunExecutorPort, UnavailableRunExecutor
 from backend.app.application.sms_verification import SmsProvider
-from backend.app.adapters.sms.fake import FakeSmsProvider
-from backend.app.adapters.sms.aliyun import AliyunDypnsapiProvider
+from backend.app.application.usage_summary import UsageSummaryProvider
 from backend.app.core.config import Settings
 from backend.app.rag.chunking import DocumentChunker
 from backend.app.rag.ingestion import KnowledgeIndexer
 from backend.app.rag.lexical import BM25KeywordIndex
 from backend.app.rag.local_corpus import LocalTextCorpusRetriever
 from backend.app.rag.models import DocumentRecord, DocumentType
+from backend.app.rag.query_rewrite import DeterministicQueryRewriter
 from backend.app.rag.retrieval import (
     HybridRetriever,
-    IdentityReranker,
+    LexicalReranker,
     MergedRetriever,
     MultiQueryRetriever,
 )
@@ -45,7 +45,11 @@ def build_sms_provider(settings: Settings) -> SmsProvider:
     if settings.sms_provider == "fake":
         return FakeSmsProvider()
     if settings.sms_provider == "aliyun":
-        if not settings.aliyun_access_key_id or not settings.aliyun_access_key_secret or not settings.aliyun_sms_sign_name:
+        if (
+            not settings.aliyun_access_key_id
+            or not settings.aliyun_access_key_secret
+            or not settings.aliyun_sms_sign_name
+        ):
             raise AgentRuntimeBootstrapError("Aliyun SMS credentials and sign name are required")
         return AliyunDypnsapiProvider(
             access_key_id=settings.aliyun_access_key_id,
@@ -97,13 +101,15 @@ def build_run_executor(
             embeddings,
             vector_store,
             keyword_index,
-            IdentityReranker(),
+            LexicalReranker(),
         )
         # Keep the hybrid stack live even when the process starts with an empty
         # vector store. Admin uploads mutate these shared indexes at runtime;
         # using only the local fallback here would silently bypass rewrite/RRF.
         retriever = MergedRetriever(
-            MultiQueryRetriever(hybrid, LangChainQueryRewriter(model)),
+            # Keep query rewriting deterministic: one normalized query avoids
+            # an extra model call and keeps retrieval latency/token cost bounded.
+            MultiQueryRetriever(hybrid, DeterministicQueryRewriter()),
             local_corpus,
         )
         memory = PlatformMemoryRuntime(repository) if repository is not None else None
@@ -145,9 +151,9 @@ def build_run_executor(
     async def initialize_knowledge_index() -> None:
         chunks_by_document: dict[tuple[str, str], list] = {}
         for chunk in await vector_store.load_all_chunks():
-            chunks_by_document.setdefault(
-                (chunk.document_id, chunk.document_version), []
-            ).append(chunk)
+            chunks_by_document.setdefault((chunk.document_id, chunk.document_version), []).append(
+                chunk
+            )
         for (document_id, document_version), chunks in chunks_by_document.items():
             await keyword_index.replace_document(document_id, document_version, chunks)
 
@@ -173,4 +179,5 @@ def repository_adapter_resolver(repository: PlatformRepository):
     async def resolve(subject_id: str) -> str | None:
         async with repository.transaction() as tx:
             return await tx.resolve_external_user_id(subject_id)
+
     return resolve
