@@ -29,12 +29,19 @@ let loadedRoot: THREE.Object3D | null = null
 let defaultCameraPosition = new THREE.Vector3()
 let defaultTarget = new THREE.Vector3()
 let modelLoadTimer: ReturnType<typeof globalThis.setTimeout> | null = null
+let modelReadyTimer: ReturnType<typeof globalThis.setTimeout> | null = null
+let modelLoadStartedAt = 0
+let modelLoadRequestId = 0
+
+const MIN_LOADING_VISIBILITY_MS = 420
 
 function setLoadingState() {
   loading.value = true
   error.value = ''
   renderState.value = 'loading'
+  modelLoadStartedAt = globalThis.Date.now()
   if (modelLoadTimer) globalThis.clearTimeout(modelLoadTimer)
+  if (modelReadyTimer) globalThis.clearTimeout(modelReadyTimer)
 }
 
 function setError(message: string) {
@@ -44,6 +51,10 @@ function setError(message: string) {
   if (modelLoadTimer) {
     globalThis.clearTimeout(modelLoadTimer)
     modelLoadTimer = null
+  }
+  if (modelReadyTimer) {
+    globalThis.clearTimeout(modelReadyTimer)
+    modelReadyTimer = null
   }
 }
 
@@ -102,16 +113,18 @@ function resetView() {
 
 function loadModel() {
   if (!scene) return
+  const requestId = ++modelLoadRequestId
   setLoadingState()
   clearLoadedModel()
   modelLoadTimer = globalThis.setTimeout(() => {
+    if (requestId !== modelLoadRequestId) return
     setError('3D 模型加载超时，已保留产品图作为预览。')
   }, 20_000)
   const loader = new GLTFLoader()
   loader.load(
     props.modelUrl,
     (gltf) => {
-      if (!scene) return
+      if (!scene || requestId !== modelLoadRequestId) return
       loadedRoot = gltf.scene
       loadedRoot.traverse((child) => {
         const mesh = child as THREE.Mesh
@@ -128,15 +141,23 @@ function loadModel() {
       }
       scene.add(loadedRoot)
       frameModel(loadedRoot)
-      loading.value = false
-      renderState.value = 'ready'
       if (modelLoadTimer) {
         globalThis.clearTimeout(modelLoadTimer)
         modelLoadTimer = null
       }
+      const finishLoading = () => {
+        if (requestId !== modelLoadRequestId) return
+        loading.value = false
+        renderState.value = 'ready'
+        modelReadyTimer = null
+      }
+      const remaining = Math.max(0, MIN_LOADING_VISIBILITY_MS - (globalThis.Date.now() - modelLoadStartedAt))
+      modelReadyTimer = globalThis.setTimeout(finishLoading, remaining)
     },
     undefined,
-    () => setError('3D 模型暂时无法加载，已保留产品图作为预览。'),
+    () => {
+      if (requestId === modelLoadRequestId) setError('3D 模型暂时无法加载，已保留产品图作为预览。')
+    },
   )
 }
 
@@ -224,7 +245,7 @@ function initScene() {
     controls.maxPolarAngle = Math.PI - 0.01
     controls.minAzimuthAngle = -Infinity
     controls.maxAzimuthAngle = Infinity
-    controls.rotateSpeed = 0.72
+    controls.rotateSpeed = 0.44
     resizeObserver = new ResizeObserver(resize)
     resizeObserver.observe(canvasHost.value)
     document.addEventListener('fullscreenchange', syncFullscreen)
@@ -243,6 +264,8 @@ onBeforeUnmount(() => {
   resizeObserver?.disconnect()
   document.removeEventListener('fullscreenchange', syncFullscreen)
   if (modelLoadTimer) globalThis.clearTimeout(modelLoadTimer)
+  if (modelReadyTimer) globalThis.clearTimeout(modelReadyTimer)
+  modelLoadRequestId += 1
   clearLoadedModel()
   controls?.dispose()
   renderer?.domElement.removeEventListener('webglcontextlost', handleContextLost)

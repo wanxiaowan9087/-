@@ -233,6 +233,19 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(retriever.calls, 0)
         self.assertEqual(engine.requests, [])
 
+    async def test_calendar_question_bypasses_retrieval_and_review_policy(self) -> None:
+        engine = FakeReActEngine()
+        retriever = CountingRetriever(self._retrieval(confidence=0.1))
+        runtime = AgentRuntime(react_engine=engine, retriever=retriever)
+
+        result = await runtime.execute(self._request("今天星期几"))
+
+        self.assertEqual(result.status, RunStatus.COMPLETED)
+        self.assertEqual(result.retrieval_strategy, "calendar-intent")
+        self.assertIn("星期", result.public_content)
+        self.assertEqual(retriever.calls, 0)
+        self.assertEqual(engine.requests, [])
+
     async def test_identity_answer_keeps_knowledge_upload_admin_only(self) -> None:
         engine = FakeReActEngine()
         runtime = AgentRuntime(react_engine=engine, retriever=CountingRetriever(self._retrieval()))

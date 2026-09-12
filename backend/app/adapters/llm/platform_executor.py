@@ -152,9 +152,9 @@ class RuntimeRunExecutor:
             elif result.status is RunStatus.COMPLETED:
                 for index, content in enumerate(_chunks(result.public_content)):
                     yield "delta", {"index": index, "content": content}
-                    # Persisting each small delta also gives the browser time
-                    # to paint, rather than replacing an empty answer at once.
-                    await asyncio.sleep(0.018)
+                    # Character-sized deltas plus a very short pause preserve
+                    # a natural typing cadence without making short replies lag.
+                    await asyncio.sleep(0.022)
                 yield (
                     "done",
                     {
@@ -209,14 +209,9 @@ class RuntimeRunExecutor:
             self._outcomes.clear()
 
 
-def _chunks(content: str, size: int = 48) -> list[str]:
-    """Stream complete paragraphs where possible, splitting only long ones."""
-    chunks: list[str] = []
-    for paragraph in re.split(r"(?<=\n\n)", content):
-        if not paragraph:
-            continue
-        chunks.extend(paragraph[index : index + size] for index in range(0, len(paragraph), size))
-    return chunks
+def _chunks(content: str) -> list[str]:
+    """Emit display characters individually so the SSE transcript visibly types."""
+    return list(content)
 
 
 _PRODUCT_ALIASES: dict[str, tuple[str, ...]] = {

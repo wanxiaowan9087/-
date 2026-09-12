@@ -39,7 +39,7 @@ describe('session message cache', () => {
     ]
 
     expect(visibleTranscriptMessages(messages, {
-      currentUserMessageId: 'user-message', currentRunId: 'run-1', isStreaming: false,
+      currentUserMessageId: 'user-message', currentRunId: 'run-1', pendingUserContent: null, isStreaming: false,
     })).toEqual(messages)
   })
 
@@ -51,8 +51,23 @@ describe('session message cache', () => {
     ]
 
     expect(visibleTranscriptMessages(messages, {
-      currentUserMessageId: 'user-message', currentRunId: 'run-1', isStreaming: true,
+      currentUserMessageId: 'user-message', currentRunId: 'run-1', pendingUserContent: null, isStreaming: true,
     }).map(item => item.id)).toEqual(['previous'])
+  })
+
+  it('hides only the newly persisted pending question before the stream meta arrives', () => {
+    const messages: Message[] = [
+      { ...message('same-question-earlier'), role: 'user', content: '今天星期几' },
+      { ...message('previous-answer'), role: 'assistant', content: '上一次的回答' },
+      { ...message('new-question'), role: 'user', content: '今天星期几' },
+    ]
+
+    expect(visibleTranscriptMessages(messages, {
+      currentUserMessageId: null,
+      currentRunId: null,
+      pendingUserContent: '今天星期几',
+      isStreaming: true,
+    }).map(item => item.id)).toEqual(['same-question-earlier', 'previous-answer'])
   })
 
   it('detects when a streamed answer is safe to replace with its durable transcript', () => {

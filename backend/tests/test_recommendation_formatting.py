@@ -1,8 +1,10 @@
+from datetime import UTC, datetime
+
 from backend.app.adapters.llm.platform_executor import _chunks
 from backend.app.adapters.llm.platform_executor import _filter_recommendations
 from backend.app.adapters.mcp.robot_catalog import RecommendedRobot
 from backend.app.mcp.robot_catalog_server import PRODUCTS
-from backend.app.agent.runtime import format_user_visible_answer
+from backend.app.agent.runtime import answer_calendar_intent, format_user_visible_answer
 
 
 def _robot(product_id: str, name: str) -> RecommendedRobot:
@@ -39,8 +41,14 @@ def test_answer_formatting_preserves_newlines_and_adds_sentence_paragraphs() -> 
     assert format_user_visible_answer(content) == "第一句说明。\n\n第二句说明！\n\n第三句说明？"
 
 
-def test_stream_chunks_keep_paragraph_boundaries() -> None:
-    assert _chunks("第一段。\n\n第二段。") == ["第一段。\n\n", "第二段。"]
+def test_stream_chunks_emit_one_character_at_a_time() -> None:
+    assert _chunks("第一段。\n\n第二段。") == list("第一段。\n\n第二段。")
+
+
+def test_calendar_question_bypasses_knowledge_retrieval_with_china_time() -> None:
+    assert answer_calendar_intent(
+        "今天星期几", now=datetime(2026, 9, 12, 9, tzinfo=UTC)
+    ) == "今天是 2026 年 9 月 12 日，星期六。"
 
 
 def test_catalog_assigns_one_image_key_per_sku() -> None:

@@ -5,8 +5,10 @@ import logging
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from typing import Protocol
 from uuid import NAMESPACE_URL, uuid4, uuid5
+from zoneinfo import ZoneInfo
 
 from ..rag.citations import CitationService
 from ..rag.models import Chunk, Citation, DocumentType, RetrievalResult, SearchHit
@@ -119,6 +121,25 @@ USAGE_SUMMARY_INTENT_PATTERNS = (
     "平台使用总结",
     "使用报告",
 )
+
+_CHINA_TIME_ZONE = ZoneInfo("Asia/Shanghai")
+_WEEKDAY_NAMES = ("星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日")
+
+
+def answer_calendar_intent(user_text: str, *, now: datetime | None = None) -> str | None:
+    """Answer explicit current-date questions without sending them to the RAG policy."""
+    compact = re.sub(r"\s+", "", user_text)
+    asks_today = any(marker in compact for marker in ("今天", "今日", "现在", "当前"))
+    asks_calendar = any(marker in compact for marker in (
+        "星期几", "周几", "礼拜几", "几号", "日期", "几月几日",
+    ))
+    if not asks_today or not asks_calendar:
+        return None
+    current = (now or datetime.now(UTC)).astimezone(_CHINA_TIME_ZONE)
+    return (
+        f"今天是 {current.year} 年 {current.month} 月 {current.day} 日，"
+        f"{_WEEKDAY_NAMES[current.weekday()]}。"
+    )
 
 
 def classify_meaningless_input(text: str) -> bool:
@@ -255,6 +276,33 @@ class AgentRuntime:
                     memory_warning=memory_warning,
                     model_name="deterministic-identity",
                     retrieval_strategy="identity-intent",
+                )
+            calendar_answer = answer_calendar_intent(request.user_text)
+            if calendar_answer is not None:
+                step = trace.start(
+                    StepType.POLICY,
+                    "answering deterministic calendar intent before retrieval",
+                )
+                state.transition(RunStatus.COMPLETED)
+                trace.finish(
+                    step,
+                    StepStatus.SUCCEEDED,
+                    "deterministic China-time calendar answer selected before retrieval",
+                )
+                memory_warning = await self._extract_memory(request)
+                return AgentRunResult(
+                    run_id=run_id,
+                    status=state.status,
+                    public_content=calendar_answer,
+                    candidate_content=None,
+                    citations=(),
+                    trace=trace.snapshot(),
+                    confidence=1.0,
+                    confidence_threshold=self._config.confidence_threshold,
+                    degraded_dependencies=(),
+                    memory_warning=memory_warning,
+                    model_name="deterministic-calendar",
+                    retrieval_strategy="calendar-intent",
                 )
             memory_context = await self._prepare_memory(request, trace, degraded)
             if any(pattern in re.sub(r"\s+", "", request.user_text) for pattern in USAGE_SUMMARY_INTENT_PATTERNS):

@@ -111,7 +111,11 @@ const historicalMessages = computed(() => chat.sessionId ? sessionMessages.value
 const visibleHistoricalMessages = computed(() => visibleTranscriptMessages(historicalMessages.value, {
   currentUserMessageId: chat.userMessageId,
   currentRunId: chat.runId,
-  isStreaming: chat.previewState === 'loading',
+  pendingUserContent: submittedQuestion.value,
+  // Keep the persisted pair hidden until the inline run is safely replaced.
+  // This includes a review/error terminal state, where the inline card still
+  // represents the current turn.
+  isStreaming: Boolean(submittedQuestion.value),
 }))
 
 let revealObserver: IntersectionObserver | undefined
