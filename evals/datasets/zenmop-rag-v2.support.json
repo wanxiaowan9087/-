@@ -1,0 +1,1286 @@
+{
+  "cases": {
+    "compare-air-mini": [
+      {
+        "claim_id": "compare-air-mini-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e5a37484-9955-51d0-b660-66d74b7330ea",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "compare-budget-small": [
+      {
+        "claim_id": "compare-budget-small-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "8bf125c1-9a4b-57aa-bc18-a24d046c9a01",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "compare-carpet": [
+      {
+        "claim_id": "compare-carpet-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "53fa9f5a-a1de-5568-b647-069480aee0aa",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "compare-compact": [
+      {
+        "claim_id": "compare-compact-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e5a37484-9955-51d0-b660-66d74b7330ea",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "compare-dock": [
+      {
+        "claim_id": "compare-dock-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "cd156257-6a78-5bd3-b147-177da809d12b",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "compare-edge-furniture": [
+      {
+        "claim_id": "compare-edge-furniture-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "66865aaf-3ec9-519f-941e-c7867d50b2c3",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "compare-edge-obsidian": [
+      {
+        "claim_id": "compare-edge-obsidian-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "66865aaf-3ec9-519f-941e-c7867d50b2c3",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "compare-feature-boundary": [
+      {
+        "claim_id": "compare-feature-boundary-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "8bf125c1-9a4b-57aa-bc18-a24d046c9a01",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "compare-home-size": [
+      {
+        "claim_id": "compare-home-size-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "cd156257-6a78-5bd3-b147-177da809d12b",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "compare-luna-obsidian": [
+      {
+        "claim_id": "compare-luna-obsidian-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "53fa9f5a-a1de-5568-b647-069480aee0aa",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "compare-model-table": [
+      {
+        "claim_id": "compare-model-table-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "66865aaf-3ec9-519f-941e-c7867d50b2c3",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "compare-night": [
+      {
+        "claim_id": "compare-night-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "cd156257-6a78-5bd3-b147-177da809d12b",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "compare-pet": [
+      {
+        "claim_id": "compare-pet-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "53fa9f5a-a1de-5568-b647-069480aee0aa",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "compare-terra-luna": [
+      {
+        "claim_id": "compare-terra-luna-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "a06c6bb2-b10a-5266-ac61-4358d5323f0d",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "compare-water": [
+      {
+        "claim_id": "compare-water-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "a06c6bb2-b10a-5266-ac61-4358d5323f0d",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "direct-common-boundary": [
+      {
+        "claim_id": "direct-common-boundary-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "fa3cccac-ee80-5277-825c-77df02d6c7de",
+            "section": "4. 参数边界"
+          }
+        ]
+      }
+    ],
+    "direct-common-consumable": [
+      {
+        "claim_id": "direct-common-consumable-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "385fe50d-d8d9-543f-ae84-68a4b5db5ad8",
+            "section": "1. 耗材作用与判断"
+          }
+        ]
+      }
+    ],
+    "direct-common-consumable-ban": [
+      {
+        "claim_id": "direct-common-consumable-ban-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "385fe50d-d8d9-543f-ae84-68a4b5db5ad8",
+            "section": "4. 禁止做法"
+          }
+        ]
+      }
+    ],
+    "direct-common-consumable-diff": [
+      {
+        "claim_id": "direct-common-consumable-diff-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "385fe50d-d8d9-543f-ae84-68a4b5db5ad8",
+            "section": "2. 型号差异"
+          }
+        ]
+      }
+    ],
+    "direct-common-install": [
+      {
+        "claim_id": "direct-common-install-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "6dfb048f-e798-5fba-ade2-ca11cba34f5c",
+            "section": "1. 安装前检查"
+          }
+        ]
+      }
+    ],
+    "direct-common-maintain": [
+      {
+        "claim_id": "direct-common-maintain-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "fa3cccac-ee80-5277-825c-77df02d6c7de",
+            "section": "3. 通用维护节奏"
+          }
+        ]
+      }
+    ],
+    "direct-common-map": [
+      {
+        "claim_id": "direct-common-map-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "6dfb048f-e798-5fba-ade2-ca11cba34f5c",
+            "section": "2. 建图流程"
+          }
+        ]
+      }
+    ],
+    "direct-common-map-error": [
+      {
+        "claim_id": "direct-common-map-error-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "6dfb048f-e798-5fba-ade2-ca11cba34f5c",
+            "section": "4. 建图异常处理"
+          }
+        ]
+      }
+    ],
+    "direct-common-scenario": [
+      {
+        "claim_id": "direct-common-scenario-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "9ff1690f-6c7c-52ed-8530-4f40400c78d0",
+            "section": "配置原则"
+          }
+        ]
+      }
+    ],
+    "direct-common-stop": [
+      {
+        "claim_id": "direct-common-stop-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "fa3cccac-ee80-5277-825c-77df02d6c7de",
+            "section": "2. 必须立即停用的情况"
+          }
+        ]
+      }
+    ],
+    "direct-m6mini-battery": [
+      {
+        "claim_id": "direct-m6mini-battery-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e5a37484-9955-51d0-b660-66d74b7330ea",
+            "section": "4. 电池与充电"
+          }
+        ]
+      }
+    ],
+    "direct-m6mini-feature": [
+      {
+        "claim_id": "direct-m6mini-feature-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e5a37484-9955-51d0-b660-66d74b7330ea",
+            "section": "2. 组件与功能"
+          }
+        ]
+      }
+    ],
+    "direct-m6mini-position": [
+      {
+        "claim_id": "direct-m6mini-position-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e5a37484-9955-51d0-b660-66d74b7330ea",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "direct-m6mini-safety": [
+      {
+        "claim_id": "direct-m6mini-safety-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e5a37484-9955-51d0-b660-66d74b7330ea",
+            "section": "7. 型号专属安全使用"
+          }
+        ]
+      }
+    ],
+    "direct-m6mini-setup": [
+      {
+        "claim_id": "direct-m6mini-setup-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e5a37484-9955-51d0-b660-66d74b7330ea",
+            "section": "3. 推荐使用方式"
+          }
+        ]
+      }
+    ],
+    "direct-m6terra-battery": [
+      {
+        "claim_id": "direct-m6terra-battery-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "a06c6bb2-b10a-5266-ac61-4358d5323f0d",
+            "section": "4. 电池与充电"
+          }
+        ]
+      }
+    ],
+    "direct-m6terra-feature": [
+      {
+        "claim_id": "direct-m6terra-feature-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "a06c6bb2-b10a-5266-ac61-4358d5323f0d",
+            "section": "2. 组件与功能"
+          }
+        ]
+      }
+    ],
+    "direct-m6terra-position": [
+      {
+        "claim_id": "direct-m6terra-position-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "a06c6bb2-b10a-5266-ac61-4358d5323f0d",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "direct-m6terra-safety": [
+      {
+        "claim_id": "direct-m6terra-safety-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "a06c6bb2-b10a-5266-ac61-4358d5323f0d",
+            "section": "7. 型号专属安全使用"
+          }
+        ]
+      }
+    ],
+    "direct-m6terra-setup": [
+      {
+        "claim_id": "direct-m6terra-setup-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "a06c6bb2-b10a-5266-ac61-4358d5323f0d",
+            "section": "3. 推荐使用方式"
+          }
+        ]
+      }
+    ],
+    "direct-s8air-battery": [
+      {
+        "claim_id": "direct-s8air-battery-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "8bf125c1-9a4b-57aa-bc18-a24d046c9a01",
+            "section": "4. 电池与充电"
+          }
+        ]
+      }
+    ],
+    "direct-s8air-feature": [
+      {
+        "claim_id": "direct-s8air-feature-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "8bf125c1-9a4b-57aa-bc18-a24d046c9a01",
+            "section": "2. 组件与功能"
+          }
+        ]
+      }
+    ],
+    "direct-s8air-position": [
+      {
+        "claim_id": "direct-s8air-position-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "8bf125c1-9a4b-57aa-bc18-a24d046c9a01",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "direct-s8air-safety": [
+      {
+        "claim_id": "direct-s8air-safety-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "8bf125c1-9a4b-57aa-bc18-a24d046c9a01",
+            "section": "7. 型号专属安全使用"
+          }
+        ]
+      }
+    ],
+    "direct-s8air-setup": [
+      {
+        "claim_id": "direct-s8air-setup-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "8bf125c1-9a4b-57aa-bc18-a24d046c9a01",
+            "section": "3. 推荐使用方式"
+          }
+        ]
+      }
+    ],
+    "direct-s8luna-battery": [
+      {
+        "claim_id": "direct-s8luna-battery-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "cd156257-6a78-5bd3-b147-177da809d12b",
+            "section": "4. 电池与充电"
+          }
+        ]
+      }
+    ],
+    "direct-s8luna-feature": [
+      {
+        "claim_id": "direct-s8luna-feature-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "cd156257-6a78-5bd3-b147-177da809d12b",
+            "section": "2. 组件与功能"
+          }
+        ]
+      }
+    ],
+    "direct-s8luna-position": [
+      {
+        "claim_id": "direct-s8luna-position-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "cd156257-6a78-5bd3-b147-177da809d12b",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "direct-s8luna-safety": [
+      {
+        "claim_id": "direct-s8luna-safety-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "cd156257-6a78-5bd3-b147-177da809d12b",
+            "section": "7. 型号专属安全使用"
+          }
+        ]
+      }
+    ],
+    "direct-s8luna-setup": [
+      {
+        "claim_id": "direct-s8luna-setup-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "cd156257-6a78-5bd3-b147-177da809d12b",
+            "section": "3. 首次使用与日常运行"
+          }
+        ]
+      }
+    ],
+    "direct-x9edge-battery": [
+      {
+        "claim_id": "direct-x9edge-battery-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "66865aaf-3ec9-519f-941e-c7867d50b2c3",
+            "section": "4. 电池与充电"
+          }
+        ]
+      }
+    ],
+    "direct-x9edge-feature": [
+      {
+        "claim_id": "direct-x9edge-feature-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "66865aaf-3ec9-519f-941e-c7867d50b2c3",
+            "section": "2. 组件与功能"
+          }
+        ]
+      }
+    ],
+    "direct-x9edge-position": [
+      {
+        "claim_id": "direct-x9edge-position-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "66865aaf-3ec9-519f-941e-c7867d50b2c3",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "direct-x9edge-safety": [
+      {
+        "claim_id": "direct-x9edge-safety-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "66865aaf-3ec9-519f-941e-c7867d50b2c3",
+            "section": "7. 型号专属安全使用"
+          }
+        ]
+      }
+    ],
+    "direct-x9edge-setup": [
+      {
+        "claim_id": "direct-x9edge-setup-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "66865aaf-3ec9-519f-941e-c7867d50b2c3",
+            "section": "3. 推荐使用方式"
+          }
+        ]
+      }
+    ],
+    "direct-x9obsidian-battery": [
+      {
+        "claim_id": "direct-x9obsidian-battery-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "53fa9f5a-a1de-5568-b647-069480aee0aa",
+            "section": "4. 电池、基站与水路"
+          }
+        ]
+      }
+    ],
+    "direct-x9obsidian-feature": [
+      {
+        "claim_id": "direct-x9obsidian-feature-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "53fa9f5a-a1de-5568-b647-069480aee0aa",
+            "section": "2. 组件与功能"
+          }
+        ]
+      }
+    ],
+    "direct-x9obsidian-position": [
+      {
+        "claim_id": "direct-x9obsidian-position-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "53fa9f5a-a1de-5568-b647-069480aee0aa",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "direct-x9obsidian-safety": [
+      {
+        "claim_id": "direct-x9obsidian-safety-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "53fa9f5a-a1de-5568-b647-069480aee0aa",
+            "section": "7. 型号专属安全使用"
+          }
+        ]
+      }
+    ],
+    "direct-x9obsidian-setup": [
+      {
+        "claim_id": "direct-x9obsidian-setup-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "53fa9f5a-a1de-5568-b647-069480aee0aa",
+            "section": "3. 首次设置"
+          }
+        ]
+      }
+    ],
+    "fault-air-map": [
+      {
+        "claim_id": "fault-air-map-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "8bf125c1-9a4b-57aa-bc18-a24d046c9a01",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      }
+    ],
+    "fault-air-noise": [
+      {
+        "claim_id": "fault-air-noise-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "8bf125c1-9a4b-57aa-bc18-a24d046c9a01",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      }
+    ],
+    "fault-edge-brush": [
+      {
+        "claim_id": "fault-edge-brush-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "66865aaf-3ec9-519f-941e-c7867d50b2c3",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      }
+    ],
+    "fault-edge-obstacle": [
+      {
+        "claim_id": "fault-edge-obstacle-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "66865aaf-3ec9-519f-941e-c7867d50b2c3",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      }
+    ],
+    "fault-generic-close": [
+      {
+        "claim_id": "fault-generic-close-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "863c681a-2e9e-5a45-80d2-663b24e76315",
+            "section": "3. 关闭工单条件"
+          }
+        ]
+      }
+    ],
+    "fault-generic-path": [
+      {
+        "claim_id": "fault-generic-path-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "863c681a-2e9e-5a45-80d2-663b24e76315",
+            "section": "1. 通用决策路径"
+          }
+        ]
+      }
+    ],
+    "fault-generic-stop": [
+      {
+        "claim_id": "fault-generic-stop-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "fa3cccac-ee80-5277-825c-77df02d6c7de",
+            "section": "2. 必须立即停用的情况"
+          }
+        ]
+      }
+    ],
+    "fault-luna-dock": [
+      {
+        "claim_id": "fault-luna-dock-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "cd156257-6a78-5bd3-b147-177da809d12b",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      }
+    ],
+    "fault-luna-dust": [
+      {
+        "claim_id": "fault-luna-dust-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "cd156257-6a78-5bd3-b147-177da809d12b",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      }
+    ],
+    "fault-mini-return": [
+      {
+        "claim_id": "fault-mini-return-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e5a37484-9955-51d0-b660-66d74b7330ea",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      }
+    ],
+    "fault-mini-timer": [
+      {
+        "claim_id": "fault-mini-timer-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e5a37484-9955-51d0-b660-66d74b7330ea",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      }
+    ],
+    "fault-obsidian-carpet": [
+      {
+        "claim_id": "fault-obsidian-carpet-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "53fa9f5a-a1de-5568-b647-069480aee0aa",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      }
+    ],
+    "fault-obsidian-water": [
+      {
+        "claim_id": "fault-obsidian-water-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "53fa9f5a-a1de-5568-b647-069480aee0aa",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      }
+    ],
+    "fault-terra-brush": [
+      {
+        "claim_id": "fault-terra-brush-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "a06c6bb2-b10a-5266-ac61-4358d5323f0d",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      }
+    ],
+    "fault-terra-water": [
+      {
+        "claim_id": "fault-terra-water-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "a06c6bb2-b10a-5266-ac61-4358d5323f0d",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      }
+    ],
+    "multi-air-small-home": [
+      {
+        "claim_id": "multi-air-small-home-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "8bf125c1-9a4b-57aa-bc18-a24d046c9a01",
+            "section": "1. 型号定位"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-air-small-home-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "8bf125c1-9a4b-57aa-bc18-a24d046c9a01",
+            "section": "3. 推荐使用方式"
+          }
+        ]
+      }
+    ],
+    "multi-air-timer": [
+      {
+        "claim_id": "multi-air-timer-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "8bf125c1-9a4b-57aa-bc18-a24d046c9a01",
+            "section": "7. 型号专属安全使用"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-air-timer-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "fa3cccac-ee80-5277-825c-77df02d6c7de",
+            "section": "1. 必须遵守的安全要求"
+          }
+        ]
+      }
+    ],
+    "multi-consumable-safe": [
+      {
+        "claim_id": "multi-consumable-safe-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "385fe50d-d8d9-543f-ae84-68a4b5db5ad8",
+            "section": "3. 更换流程"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-consumable-safe-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "fa3cccac-ee80-5277-825c-77df02d6c7de",
+            "section": "1. 必须遵守的安全要求"
+          }
+        ]
+      }
+    ],
+    "multi-edge-carpet": [
+      {
+        "claim_id": "multi-edge-carpet-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "66865aaf-3ec9-519f-941e-c7867d50b2c3",
+            "section": "2. 组件与功能"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-edge-carpet-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "fa3cccac-ee80-5277-825c-77df02d6c7de",
+            "section": "1. 必须遵守的安全要求"
+          }
+        ]
+      }
+    ],
+    "multi-edge-pet": [
+      {
+        "claim_id": "multi-edge-pet-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "66865aaf-3ec9-519f-941e-c7867d50b2c3",
+            "section": "2. 组件与功能"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-edge-pet-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "66865aaf-3ec9-519f-941e-c7867d50b2c3",
+            "section": "7. 型号专属安全使用"
+          }
+        ]
+      }
+    ],
+    "multi-fault-close": [
+      {
+        "claim_id": "multi-fault-close-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "863c681a-2e9e-5a45-80d2-663b24e76315",
+            "section": "3. 关闭工单条件"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-fault-close-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "fa3cccac-ee80-5277-825c-77df02d6c7de",
+            "section": "2. 必须立即停用的情况"
+          }
+        ]
+      }
+    ],
+    "multi-luna-maintain": [
+      {
+        "claim_id": "multi-luna-maintain-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "cd156257-6a78-5bd3-b147-177da809d12b",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-luna-maintain-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "fa3cccac-ee80-5277-825c-77df02d6c7de",
+            "section": "1. 必须遵守的安全要求"
+          }
+        ]
+      }
+    ],
+    "multi-luna-night": [
+      {
+        "claim_id": "multi-luna-night-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "cd156257-6a78-5bd3-b147-177da809d12b",
+            "section": "1. 型号定位"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-luna-night-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "cd156257-6a78-5bd3-b147-177da809d12b",
+            "section": "7. 型号专属安全使用"
+          }
+        ]
+      }
+    ],
+    "multi-maintenance-plan": [
+      {
+        "claim_id": "multi-maintenance-plan-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "fa3cccac-ee80-5277-825c-77df02d6c7de",
+            "section": "3. 通用维护节奏"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-maintenance-plan-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "385fe50d-d8d9-543f-ae84-68a4b5db5ad8",
+            "section": "1. 耗材作用与判断"
+          }
+        ]
+      }
+    ],
+    "multi-map-model": [
+      {
+        "claim_id": "multi-map-model-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "6dfb048f-e798-5fba-ade2-ca11cba34f5c",
+            "section": "2. 建图流程"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-map-model-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "6dfb048f-e798-5fba-ade2-ca11cba34f5c",
+            "section": "3. 型号设置重点"
+          }
+        ]
+      }
+    ],
+    "multi-mini-routine": [
+      {
+        "claim_id": "multi-mini-routine-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e5a37484-9955-51d0-b660-66d74b7330ea",
+            "section": "3. 推荐使用方式"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-mini-routine-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "e5a37484-9955-51d0-b660-66d74b7330ea",
+            "section": "5. 维护建议"
+          }
+        ]
+      }
+    ],
+    "multi-mini-safety": [
+      {
+        "claim_id": "multi-mini-safety-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e5a37484-9955-51d0-b660-66d74b7330ea",
+            "section": "7. 型号专属安全使用"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-mini-safety-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "fa3cccac-ee80-5277-825c-77df02d6c7de",
+            "section": "1. 必须遵守的安全要求"
+          }
+        ]
+      }
+    ],
+    "multi-obsidian-carpet": [
+      {
+        "claim_id": "multi-obsidian-carpet-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "53fa9f5a-a1de-5568-b647-069480aee0aa",
+            "section": "2. 组件与功能"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-obsidian-carpet-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "53fa9f5a-a1de-5568-b647-069480aee0aa",
+            "section": "3. 首次设置"
+          }
+        ]
+      }
+    ],
+    "multi-obsidian-water": [
+      {
+        "claim_id": "multi-obsidian-water-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "53fa9f5a-a1de-5568-b647-069480aee0aa",
+            "section": "3. 首次设置"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-obsidian-water-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "53fa9f5a-a1de-5568-b647-069480aee0aa",
+            "section": "7. 型号专属安全使用"
+          }
+        ]
+      }
+    ],
+    "multi-price-boundary": [
+      {
+        "claim_id": "multi-price-boundary-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "2213c2d1-a63c-59fe-9ed7-961623579c0c",
+            "section": "S8-LUNA 皓月"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-price-boundary-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "6dfea4eb-04b0-5d13-a12b-983745a1f658",
+            "section": "不能从表中推断的参数"
+          }
+        ]
+      }
+    ],
+    "multi-scene-choice": [
+      {
+        "claim_id": "multi-scene-choice-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "6dfea4eb-04b0-5d13-a12b-983745a1f658",
+            "section": "推荐决策"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-scene-choice-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "9ff1690f-6c7c-52ed-8530-4f40400c78d0",
+            "section": "配置原则"
+          }
+        ]
+      }
+    ],
+    "multi-stop-fault": [
+      {
+        "claim_id": "multi-stop-fault-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "fa3cccac-ee80-5277-825c-77df02d6c7de",
+            "section": "2. 必须立即停用的情况"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-stop-fault-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "863c681a-2e9e-5a45-80d2-663b24e76315",
+            "section": "1. 通用决策路径"
+          }
+        ]
+      }
+    ],
+    "multi-terra-floor": [
+      {
+        "claim_id": "multi-terra-floor-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "a06c6bb2-b10a-5266-ac61-4358d5323f0d",
+            "section": "3. 推荐使用方式"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-terra-floor-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "a06c6bb2-b10a-5266-ac61-4358d5323f0d",
+            "section": "7. 型号专属安全使用"
+          }
+        ]
+      }
+    ],
+    "multi-terra-maintain": [
+      {
+        "claim_id": "multi-terra-maintain-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "a06c6bb2-b10a-5266-ac61-4358d5323f0d",
+            "section": "5. 维护建议"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-terra-maintain-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "385fe50d-d8d9-543f-ae84-68a4b5db5ad8",
+            "section": "3. 更换流程"
+          }
+        ]
+      }
+    ],
+    "multi-water-fault": [
+      {
+        "claim_id": "multi-water-fault-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "863c681a-2e9e-5a45-80d2-663b24e76315",
+            "section": "2. 标准排查表"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-water-fault-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "fa3cccac-ee80-5277-825c-77df02d6c7de",
+            "section": "2. 必须立即停用的情况"
+          }
+        ]
+      }
+    ],
+    "rewrite-air-small": [
+      {
+        "claim_id": "rewrite-air-small-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "8bf125c1-9a4b-57aa-bc18-a24d046c9a01",
+            "section": "3. 推荐使用方式"
+          }
+        ]
+      }
+    ],
+    "rewrite-edge-corner": [
+      {
+        "claim_id": "rewrite-edge-corner-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "66865aaf-3ec9-519f-941e-c7867d50b2c3",
+            "section": "2. 组件与功能"
+          }
+        ]
+      }
+    ],
+    "rewrite-filter": [
+      {
+        "claim_id": "rewrite-filter-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "385fe50d-d8d9-543f-ae84-68a4b5db5ad8",
+            "section": "1. 耗材作用与判断"
+          }
+        ]
+      }
+    ],
+    "rewrite-luna-dry": [
+      {
+        "claim_id": "rewrite-luna-dry-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "cd156257-6a78-5bd3-b147-177da809d12b",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      }
+    ],
+    "rewrite-map": [
+      {
+        "claim_id": "rewrite-map-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "6dfb048f-e798-5fba-ade2-ca11cba34f5c",
+            "section": "4. 建图异常处理"
+          }
+        ]
+      }
+    ],
+    "rewrite-mini-schedule": [
+      {
+        "claim_id": "rewrite-mini-schedule-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e5a37484-9955-51d0-b660-66d74b7330ea",
+            "section": "7. 型号专属安全使用"
+          }
+        ]
+      }
+    ],
+    "rewrite-obsidian-leak": [
+      {
+        "claim_id": "rewrite-obsidian-leak-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "53fa9f5a-a1de-5568-b647-069480aee0aa",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      }
+    ],
+    "rewrite-pet": [
+      {
+        "claim_id": "rewrite-pet-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "6dfea4eb-04b0-5d13-a12b-983745a1f658",
+            "section": "推荐决策"
+          }
+        ]
+      }
+    ],
+    "rewrite-stop": [
+      {
+        "claim_id": "rewrite-stop-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "fa3cccac-ee80-5277-825c-77df02d6c7de",
+            "section": "2. 必须立即停用的情况"
+          }
+        ]
+      }
+    ],
+    "rewrite-terra-wood": [
+      {
+        "claim_id": "rewrite-terra-wood-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "a06c6bb2-b10a-5266-ac61-4358d5323f0d",
+            "section": "7. 型号专属安全使用"
+          }
+        ]
+      }
+    ]
+  },
+  "description": "Section selectors resolved at evaluation time for each chunking configuration.",
+  "schema_version": 1
+}

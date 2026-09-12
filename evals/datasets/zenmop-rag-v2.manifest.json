@@ -1,0 +1,83 @@
+{
+  "case_count": 120,
+  "dataset_version": "zenmop-demo-v2-20260910",
+  "distribution": {
+    "direct": 40,
+    "model_comparison": 15,
+    "multi_source": 20,
+    "parameter_boundary": 5,
+    "prompt_injection": 5,
+    "rewrite_or_colloquial": 10,
+    "troubleshooting": 15,
+    "unanswerable": 10
+  },
+  "documents": [
+    {
+      "document_id": "cd156257-6a78-5bd3-b147-177da809d12b",
+      "sha256": "b4008e343b45a3965dba5c1d5731a5d1e0caeca79b64abf03a6c19e2c501db05",
+      "source": "file://data/型号使用说明/皓月使用说明.md"
+    },
+    {
+      "document_id": "8bf125c1-9a4b-57aa-bc18-a24d046c9a01",
+      "sha256": "b645a3dca8ee5c36a715c7049570de121c516b6827e1d719b5dae66c51493f68",
+      "source": "file://data/型号使用说明/轻羽使用说明.md"
+    },
+    {
+      "document_id": "53fa9f5a-a1de-5568-b647-069480aee0aa",
+      "sha256": "36fefad26b5088bba5ccd162396db167a2e8fa0dfdf7b0bb166d598d483b8eed",
+      "source": "file://data/型号使用说明/曜石使用说明.md"
+    },
+    {
+      "document_id": "66865aaf-3ec9-519f-941e-c7867d50b2c3",
+      "sha256": "8d6faf96ac8511176e4cb85e91f91dabf1dd6b85722dff2f79772aa7662d9c28",
+      "source": "file://data/型号使用说明/曜石边角版使用说明.md"
+    },
+    {
+      "document_id": "a06c6bb2-b10a-5266-ac61-4358d5323f0d",
+      "sha256": "a9d6710686eb356cdd65394f754706bd12b229a83194519038274873f1160d90",
+      "source": "file://data/型号使用说明/霞陶使用说明.md"
+    },
+    {
+      "document_id": "e5a37484-9955-51d0-b660-66d74b7330ea",
+      "sha256": "25f5f45a927a314caaabd8d2ded49bc622ae391bf88a8f1237ca93445295c013",
+      "source": "file://data/型号使用说明/小径使用说明.md"
+    },
+    {
+      "document_id": "6dfb048f-e798-5fba-ade2-ca11cba34f5c",
+      "sha256": "a5b7e93503da4092a7f755107dfa74dfcfb3c74ff168a110e33200a73889ae82",
+      "source": "file://data/型号使用说明/首次安装与建图指南.md"
+    },
+    {
+      "document_id": "fa3cccac-ee80-5277-825c-77df02d6c7de",
+      "sha256": "cf6c920177ee49ca286fd8a55271624e33ac8cf7e6230f3b5a3b6b7875f205e3",
+      "source": "file://data/型号使用说明/通用安全与维护规范.md"
+    },
+    {
+      "document_id": "385fe50d-d8d9-543f-ae84-68a4b5db5ad8",
+      "sha256": "281a57bb2befd61eb71a1e86207584fb3185dbe59c23f3cde1c92cc54d663231",
+      "source": "file://data/型号使用说明/耗材与更换指南.md"
+    },
+    {
+      "document_id": "863c681a-2e9e-5a45-80d2-663b24e76315",
+      "sha256": "c5d919b817428dc8dc74110d753519840ed8b3e48726a0d26a254628347aaf81",
+      "source": "file://data/型号使用说明/故障诊断决策树.md"
+    },
+    {
+      "document_id": "9ff1690f-6c7c-52ed-8530-4f40400c78d0",
+      "sha256": "c853408b6f22bb5ec5889242debf7a975e158d0c37bfd99720caf4477af8681c",
+      "source": "file://data/型号使用说明/家庭场景配置手册.md"
+    },
+    {
+      "document_id": "6dfea4eb-04b0-5d13-a12b-983745a1f658",
+      "sha256": "accb1f2444e32be303625483f4e09c0a8202cc0c913dbac3bd48021ebdace29a",
+      "source": "file://data/型号使用说明/型号功能与组件对照表.md"
+    },
+    {
+      "document_id": "2213c2d1-a63c-59fe-9ed7-961623579c0c",
+      "sha256": "3eaa3916c909b6c4ba33407fb2b2a305e650b92b033f1e6f0ce7fe2c8b273ad6",
+      "source": "file://data/catalog/zenmop_robot_catalog.md"
+    }
+  ],
+  "source_kind": "project_demo_material",
+  "source_notice": "Not manufacturer documentation. Suitable only for project retrieval evaluation."
+}

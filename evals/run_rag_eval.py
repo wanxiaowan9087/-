@@ -21,7 +21,8 @@ from backend.app.rag.citations import CitationService
 from backend.app.rag.ingestion import KnowledgeIndexer
 from backend.app.rag.lexical import BM25KeywordIndex
 from backend.app.rag.models import DocumentRecord, DocumentType
-from backend.app.rag.retrieval import HybridRetriever, LexicalReranker
+from backend.app.rag.query_rewrite import DeterministicQueryRewriter
+from backend.app.rag.retrieval import HybridRetriever, LexicalReranker, MultiQueryRetriever
 from backend.app.rag.security import scan_retrieved_content
 
 ROOT = Path(__file__).resolve().parent
@@ -54,7 +55,10 @@ class CaseResult:
     ranked_chunk_ids: tuple[str, ...]
     confidence: float
     answered: bool
+    expected_hit_at_1: bool
+    expected_hit_at_3: bool
     expected_hit_at_5: bool
+    expected_hit_at_10: bool
     reciprocal_rank: float
     ndcg: float
     citation_integrity: bool
@@ -63,6 +67,7 @@ class CaseResult:
     supported_claim_ids: tuple[str, ...]
     citation_support_failures: tuple[str, ...]
     injection_defended: bool | None
+    top_1_model_matched: bool | None
 
 
 @dataclass(frozen=True)
@@ -82,12 +87,16 @@ async def evaluate(
     dataset_path: Path = DEFAULT_DATASET,
     support_annotations_path: Path = DEFAULT_SUPPORT_ANNOTATIONS,
     implementation_sha: str | None = None,
+    *,
+    chunk_size: int = 600,
+    chunk_overlap: int = 80,
+    query_normalization: bool = False,
 ) -> dict[str, Any]:
     embeddings = FixedEmbedding()
     vector_store = InMemoryVectorStore()
     keyword_index = BM25KeywordIndex()
     indexer = KnowledgeIndexer(
-        DocumentChunker(),
+        DocumentChunker(text_chunk_size=chunk_size, text_overlap=chunk_overlap),
         embeddings,
         vector_store,
         keyword_index,
@@ -104,7 +113,7 @@ async def evaluate(
                 metadata=raw.get("metadata", {}),
             )
         )
-    retriever = HybridRetriever(
+    hybrid_retriever = HybridRetriever(
         embeddings,
         vector_store,
         keyword_index,
@@ -112,10 +121,16 @@ async def evaluate(
         candidate_limit=18,
         result_limit=10,
     )
+    retriever = (
+        MultiQueryRetriever(hybrid_retriever, DeterministicQueryRewriter(), result_limit=10)
+        if query_normalization
+        else hybrid_retriever
+    )
     detector = PromptInjectionDetector()
     citations = CitationService()
     cases = _read_jsonl(dataset_path)
-    support_annotations = _load_support_annotations(support_annotations_path, cases)
+    indexed_chunks = vector_store.snapshot()
+    support_annotations = _load_support_annotations(support_annotations_path, cases, indexed_chunks)
     case_results: list[CaseResult] = []
     answerable_count = sum(bool(case["should_answer"]) for case in cases)
     unanswerable_count = len(cases) - answerable_count
@@ -124,7 +139,7 @@ async def evaluate(
     for case in cases:
         result = await retriever.retrieve(case["question"])
         ranked = tuple(hit.chunk.chunk_id for hit in result.hits)
-        expected = {source["chunk_id"] for source in case["expected_sources"]}
+        expected = _resolve_expected_chunks(case["expected_sources"], indexed_chunks)
         supporting_sources = support_annotations.get(case["case_id"], ())
         first_rank = next(
             (index for index, chunk_id in enumerate(ranked[:10], 1) if chunk_id in expected),
@@ -165,13 +180,22 @@ async def evaluate(
                 and not answered
                 and not any(citation.chunk_id in forbidden for citation in built_citations)
             )
+        target_model = case.get("target_model")
+        top_1_model_matched = None
+        if target_model:
+            top_1_model_matched = bool(
+                result.hits and result.hits[0].chunk.metadata.get("model") == target_model
+            )
         case_results.append(
             CaseResult(
                 case_id=case["case_id"],
                 ranked_chunk_ids=ranked,
                 confidence=result.confidence,
                 answered=answered,
+                expected_hit_at_1=bool(expected & set(ranked[:1])),
+                expected_hit_at_3=bool(expected & set(ranked[:3])),
                 expected_hit_at_5=bool(expected & set(ranked[:5])),
+                expected_hit_at_10=bool(expected & set(ranked[:10])),
                 reciprocal_rank=(1.0 / first_rank if first_rank is not None else 0.0),
                 ndcg=_ndcg(ranked[:10], expected),
                 citation_integrity=validation.valid,
@@ -180,6 +204,7 @@ async def evaluate(
                 supported_claim_ids=supported_claim_ids,
                 citation_support_failures=support_failures,
                 injection_defended=injection_defended,
+                top_1_model_matched=top_1_model_matched,
             )
         )
 
@@ -198,15 +223,28 @@ async def evaluate(
         result.total_citations for result in answerable_results if result.citation_integrity
     )
     injection_results = [result for result in case_results if result.injection_defended is not None]
+    model_results = [result for result in case_results if result.top_1_model_matched is not None]
     metrics = {
+        "recall@1": _metric(
+            sum(result.expected_hit_at_1 for result in answerable_results), answerable_count
+        ),
+        "recall@3": _metric(
+            sum(result.expected_hit_at_3 for result in answerable_results), answerable_count
+        ),
         "retrieval_hit_rate@5": _metric(
             sum(result.expected_hit_at_5 for result in answerable_results),
             answerable_count,
+        ),
+        "recall@10": _metric(
+            sum(result.expected_hit_at_10 for result in answerable_results), answerable_count
         ),
         "mrr@10": _average_metric([result.reciprocal_rank for result in answerable_results]),
         "ndcg@10": _average_metric([result.ndcg for result in answerable_results]),
         "citation_integrity": _metric(integrity_valid, integrity_total),
         "citation_support_precision": _metric(citation_supported, citation_total),
+        # This validates that returned citations bind to human-curated claims.
+        # It is evidence fidelity, not an LLM semantic-faithfulness judgement.
+        "citation_faithfulness": _metric(citation_supported, citation_total),
         "unanswerable_refusal_recall": _metric(
             sum(not result.answered for result in unanswerable_results),
             unanswerable_count,
@@ -218,6 +256,9 @@ async def evaluate(
         "prompt_injection_defense_rate": _metric(
             sum(bool(result.injection_defended) for result in injection_results),
             prompt_injection_count,
+        ),
+        "model_top_1_accuracy": _metric(
+            sum(bool(result.top_1_model_matched) for result in model_results), len(model_results)
         ),
     }
     metric_dict = {key: asdict(value) for key, value in metrics.items()}
@@ -236,6 +277,8 @@ async def evaluate(
         "embedding": "fixed-hash-v1/256",
         "retrieval": "vector+bm25+rrf+lexical-rerank",
         "confidence_threshold": 0.65,
+        "chunking": {"chunk_size": chunk_size, "chunk_overlap": chunk_overlap},
+        "query_normalization": query_normalization,
         "support_annotations": support_annotations_path.name,
         "implementation_sha": implementation_sha,
         "metrics": metric_dict,
@@ -248,6 +291,7 @@ async def evaluate(
 def _load_support_annotations(
     path: Path,
     cases: Sequence[dict[str, Any]],
+    chunks: Sequence[Any] | None = None,
 ) -> dict[str, tuple[SupportingSource, ...]]:
     raw = json.loads(path.read_text(encoding="utf-8"))
     if raw.get("schema_version") != 1:
@@ -260,14 +304,28 @@ def _load_support_annotations(
             if not claim_id.strip():
                 raise ValueError(f"blank claim_id for {case_id}")
             for source in claim["supporting_sources"]:
-                sources.append(
-                    SupportingSource(
-                        claim_id=claim_id,
-                        document_id=str(source["document_id"]),
-                        document_version=str(source["document_version"]),
-                        chunk_id=str(source["chunk_id"]),
+                if chunks is None:
+                    if "chunk_id" not in source:
+                        raise ValueError("section selectors require indexed chunks")
+                    sources.append(
+                        SupportingSource(
+                            claim_id=claim_id,
+                            document_id=str(source["document_id"]),
+                            document_version=str(source["document_version"]),
+                            chunk_id=str(source["chunk_id"]),
+                        )
                     )
-                )
+                else:
+                    for chunk_id in _resolve_expected_chunks((source,), chunks):
+                        matched = next(item for item in chunks if item.chunk_id == chunk_id)
+                        sources.append(
+                            SupportingSource(
+                                claim_id=claim_id,
+                                document_id=matched.document_id,
+                                document_version=matched.document_version,
+                                chunk_id=matched.chunk_id,
+                            )
+                        )
         annotations[case_id] = tuple(sources)
 
     case_ids = {str(case["case_id"]) for case in cases}
@@ -280,16 +338,54 @@ def _load_support_annotations(
             raise ValueError(
                 f"support annotations disagree with should_answer for {case['case_id']}"
             )
-        expected_identities = {
-            (str(source["document_id"]), str(source["chunk_id"]))
-            for source in case["expected_sources"]
-        }
+        if chunks is None:
+            expected_identities = {
+                (str(source["document_id"]), str(source["chunk_id"]))
+                for source in case["expected_sources"]
+            }
+        else:
+            expected_chunk_ids = _resolve_expected_chunks(case["expected_sources"], chunks)
+            expected_identities = {
+                (chunk.document_id, chunk.chunk_id)
+                for chunk in chunks
+                if chunk.chunk_id in expected_chunk_ids
+            }
         for source in case_sources:
             if (source.document_id, source.chunk_id) not in expected_identities:
                 raise ValueError(
                     f"support source is not retrieval ground truth for {case['case_id']}"
                 )
     return annotations
+
+
+def _resolve_expected_chunks(sources: Sequence[dict[str, Any]], chunks: Sequence[Any]) -> set[str]:
+    """Resolve fixed chunk IDs or stable document/section selectors.
+
+    v1 labels retain their exact chunk IDs. v2 labels select a document and
+    Markdown heading so chunking experiments are compared against equivalent
+    evidence rather than stale ordinal IDs.
+    """
+    resolved: set[str] = set()
+    for source in sources:
+        chunk_id = source.get("chunk_id")
+        if chunk_id:
+            resolved.add(str(chunk_id))
+            continue
+        document_id = str(source["document_id"])
+        section = str(source.get("section", "")).strip()
+        candidates = [chunk for chunk in chunks if chunk.document_id == document_id]
+        if section:
+            candidates = [
+                chunk
+                for chunk in candidates
+                if chunk.location.section == section or chunk.metadata.get("heading") == section
+            ]
+        if not candidates:
+            raise ValueError(
+                f"expected source selector matched no chunks: {document_id} / {section or '*'}"
+            )
+        resolved.update(chunk.chunk_id for chunk in candidates)
+    return resolved
 
 
 def _score_citation_support(
@@ -374,6 +470,13 @@ def main() -> int:
         default=DEFAULT_SUPPORT_ANNOTATIONS,
     )
     parser.add_argument("--implementation-sha")
+    parser.add_argument("--chunk-size", type=int, default=600)
+    parser.add_argument("--chunk-overlap", type=int, default=80)
+    parser.add_argument(
+        "--query-normalization",
+        action="store_true",
+        help="Apply zero-token deterministic colloquial query normalization before retrieval.",
+    )
     parser.add_argument("--write-candidate", type=Path)
     parser.add_argument("--assert-gates", action="store_true")
     parser.add_argument("--show-cases", action="store_true")
@@ -390,6 +493,9 @@ def main() -> int:
             arguments.dataset,
             arguments.support_annotations,
             arguments.implementation_sha,
+            chunk_size=arguments.chunk_size,
+            chunk_overlap=arguments.chunk_overlap,
+            query_normalization=arguments.query_normalization,
         )
     )
     if arguments.write_candidate is not None:
