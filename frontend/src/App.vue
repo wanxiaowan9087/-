@@ -7,6 +7,7 @@ import RobotHero from './features/chat/RobotHero.vue'
 import ProductRecommendations from './features/chat/ProductRecommendations.vue'
 import { toAssistantParagraphs } from './features/chat/content-redaction'
 import {
+  conversationScrollDelta,
   commitSessionMessages,
   hasPersistedCompletedReply,
   loadCompleteTranscript,
@@ -15,7 +16,7 @@ import {
   type SessionRequestTokens,
 } from './features/chat/session-cache'
 import { ApiClientError, createAgentApi } from './api/client'
-import type { AuthSession, AuthUser, ChatRequest, KnowledgeFile, LegalDocument, Memory, Message, Session } from './api/contracts'
+import type { AuthSession, AuthUser, ChatRequest, KnowledgeFile, LegalDocument, Memory, Message, ReviewDecision, ReviewTask, Session } from './api/contracts'
 import { toProductRecommendationView } from './stores/chat'
 import {
   clearStoredAuthSession,
@@ -79,6 +80,12 @@ const knowledgeMutatingId = ref<string | null>(null)
 const knowledgeSearch = ref('')
 const knowledgeDetail = ref<KnowledgeFile | null>(null)
 const knowledgeDetailLoading = ref(false)
+const adminSection = ref<'knowledge' | 'reviews'>('knowledge')
+const reviewTasks = ref<ReviewTask[]>([])
+const reviewLoading = ref(false)
+const reviewMutatingId = ref<string | null>(null)
+const reviewNotes = ref<Record<string, string>>({})
+const reviewDrafts = ref<Record<string, string>>({})
 const filteredKnowledgeFiles = computed(() => {
   const query = knowledgeSearch.value.trim().toLocaleLowerCase()
   if (!query) return knowledgeFiles.value
@@ -146,11 +153,13 @@ async function scrollConversationToEnd() {
   if (!lastMessage || !composer) return
   const lastBounds = lastMessage.getBoundingClientRect()
   const composerBounds = composer.getBoundingClientRect()
-  const targetTop = globalThis.scrollY + lastBounds.bottom - composerBounds.top + 24
-  globalThis.scrollTo({
-    top: Math.max(0, targetTop),
-    behavior: globalThis.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+  const delta = conversationScrollDelta({
+    lastMessageBottom: lastBounds.bottom,
+    composerTop: composerBounds.top,
+    gap: 24,
   })
+  if (delta <= 0) return
+  globalThis.scrollBy({ top: delta, behavior: 'auto' })
 }
 
 function scheduleConversationScroll() {
@@ -192,9 +201,9 @@ async function recoverPersistedChat(sessionId: string, question: string): Promis
 }
 
 watch(
-  () => [currentView.value, submittedQuestion.value, chat.assistantText, chat.previewState],
-  () => {
-    if (currentView.value === 'agent') scheduleConversationScroll()
+  () => currentView.value,
+  view => {
+    if (view === 'agent') scheduleConversationScroll()
   },
   { flush: 'post' },
 )
@@ -595,8 +604,70 @@ function openAdminDesk() {
   currentView.value = 'admin'
   chat.closeNav()
   void refreshKnowledgeFiles()
+  void refreshReviews()
   void nextTick(() => observeReveals())
   globalThis.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+function openAdminSection(section: 'knowledge' | 'reviews') {
+  adminSection.value = section
+  chat.closeNav()
+  if (section === 'knowledge') void refreshKnowledgeFiles()
+  else void refreshReviews()
+}
+
+async function refreshReviews() {
+  if (!isAdmin.value || reviewLoading.value) return
+  reviewLoading.value = true
+  try {
+    const page = await api.listReviews('pending', 50)
+    reviewTasks.value = page.items
+    reviewDrafts.value = Object.fromEntries(
+      page.items.map(item => [item.id, reviewDrafts.value[item.id] ?? item.candidate_content]),
+    )
+  } catch (error) {
+    if (error instanceof ApiClientError && error.status === 401) {
+      expireAuthentication({ type: 'agent' })
+      return
+    }
+    showToast(error instanceof Error ? error.message : '审核队列加载失败。', 'error')
+  } finally {
+    reviewLoading.value = false
+  }
+}
+
+async function submitReviewDecision(task: ReviewTask, decision: ReviewDecision['decision']) {
+  if (reviewMutatingId.value) return
+  const note = reviewNotes.value[task.id]?.trim() || ''
+  const editedContent = reviewDrafts.value[task.id]?.trim() || ''
+  if (decision === 'reject' && !note) {
+    showToast('驳回前请填写审核说明。', 'warning')
+    return
+  }
+  if (decision === 'edit_and_publish' && !editedContent) {
+    showToast('编辑后发布的正文不能为空。', 'warning')
+    return
+  }
+  const input: ReviewDecision = decision === 'approve'
+    ? { decision, expected_version: task.version, note: note || null }
+    : decision === 'reject'
+      ? { decision, expected_version: task.version, note }
+      : { decision, expected_version: task.version, edited_content: editedContent, note: note || null }
+  reviewMutatingId.value = task.id
+  try {
+    await api.decideReview(task.id, input)
+    reviewTasks.value = reviewTasks.value.filter(item => item.id !== task.id)
+    showToast(decision === 'reject' ? '审核任务已驳回。' : '审核内容已发布。', 'success')
+  } catch (error) {
+    if (error instanceof ApiClientError && error.status === 401) {
+      expireAuthentication({ type: 'agent' })
+      return
+    }
+    if (error instanceof ApiClientError && error.status === 409) await refreshReviews()
+    showToast(error instanceof Error ? error.message : '审核决定提交失败。', 'error')
+  } finally {
+    reviewMutatingId.value = null
+  }
 }
 
 function requestProductAccess(productId: string) {
@@ -652,7 +723,10 @@ async function executeChat(request: ChatRequest, question: string) {
           idempotencyKey,
           lastEventId: chat.lastEventId ?? undefined,
           signal: controller.signal,
-          onEvent: event => chat.receiveStreamEvent(event),
+          onEvent: event => {
+            chat.receiveStreamEvent(event)
+            if (event.event_type === 'delta') scheduleConversationScroll()
+          },
         })
         break
       } catch (error) {
@@ -661,7 +735,13 @@ async function executeChat(request: ChatRequest, question: string) {
       }
     }
     draft.value = ''
-    await refreshConversationState()
+    const [sessionPage, memoryPage] = await Promise.all([
+      api.listSessions(),
+      api.listMemories(),
+      refreshSessionMessages(request.session_id),
+    ])
+    sessions.value = sessionPage.items
+    memories.value = memoryPage.items
     replaceStreamWithPersistedTranscript(request.session_id)
     scheduleConversationScroll()
   } catch (error) {
@@ -688,9 +768,13 @@ async function sendMessage() {
   }
   let sessionId = chat.sessionId
   try {
-    sessionId = sessionId ?? (await api.createSession(summarizeSessionTitle(content))).id
-    if (!chat.sessionId) chat.sessionId = sessionId
-    void refreshConversationState()
+    if (!sessionId) {
+      const createdSession = await api.createSession(summarizeSessionTitle(content))
+      sessionId = createdSession.id
+      chat.sessionId = sessionId
+      sessions.value = [createdSession, ...sessions.value.filter(item => item.id !== sessionId)]
+      sessionMessages.value = { ...sessionMessages.value, [sessionId]: [] }
+    }
   } catch (error) {
     if (error instanceof ApiClientError && error.status === 401) {
       expireAuthentication({ type: 'agent' })
@@ -969,9 +1053,12 @@ async function confirmCancelActiveRun() {
       </template>
       <template v-else>
         <button class="showcase-return" type="button" @click="openAgentDesk"><span>←</span> 返回客服工作台</button>
-        <div class="brand-lockup brand-lockup--admin"><span class="brand-mark">管</span><div class="brand-lockup__copy"><span>知识库管理</span><small>ADMIN CONSOLE</small></div></div>
+        <div class="brand-lockup brand-lockup--admin"><span class="brand-mark">管</span><div class="brand-lockup__copy"><span>运营管理台</span><small>ADMIN CONSOLE</small></div></div>
         <div class="sidebar-label">管理功能</div>
-        <nav class="session-list admin-nav"><button class="session active" type="button"><b>知识文件</b><span>上传并纳入检索</span></button></nav>
+        <nav class="session-list admin-nav">
+          <button class="session" :class="{ active: adminSection === 'knowledge' }" type="button" @click="openAdminSection('knowledge')"><b>知识文件</b><span>上传并纳入检索</span></button>
+          <button class="session" :class="{ active: adminSection === 'reviews' }" type="button" @click="openAdminSection('reviews')"><b>人工审核</b><span>{{ reviewTasks.length }} 项待处理</span></button>
+        </nav>
         <div class="sidebar-foot"><span class="presence"></span><div><b>{{ authUser?.nickname }}</b><small>管理员</small></div><button type="button" @click="signOut">退出</button></div>
       </template>
     </aside>
@@ -1018,17 +1105,15 @@ async function confirmCancelActiveRun() {
         <article v-if="submittedQuestion" class="message customer" data-reveal><div class="message-meta"><span class="message-avatar user"><img :src="authUser?.avatar_url || defaultAvatarUrl" :alt="`${authUser?.nickname || '用户'}的头像`" /><i>{{ userInitial }}</i></span><b>{{ authUser?.nickname || '用户' }}</b><time>刚刚</time></div><p>{{ submittedQuestion }}</p></article>
 
         <article v-if="chat.runId" class="message agent" data-reveal :class="{ withheld: Boolean(chat.review) }">
-          <div class="message-meta"><span class="message-avatar bot">程</span><b>小智</b><span class="model-chip">{{ chat.previewState === 'loading' ? '正在生成' : chat.review ? '等待审核' : chat.runOutcome === 'cancelled' ? '已取消' : '已完成' }}</span><time>刚刚</time></div>
-          <section v-if="chat.review" class="withheld-card" aria-label="候选答案已扣留，等待人工审核">
+          <div class="message-meta"><span class="message-avatar bot">程</span><b>小智</b><span class="model-chip">{{ chat.previewState === 'loading' ? '正在生成' : chat.review ? '暂时无法确认' : chat.runOutcome === 'cancelled' ? '已取消' : '已完成' }}</span><time>刚刚</time></div>
+          <section v-if="chat.review" class="withheld-card" aria-label="现有信息不足">
             <div class="withheld-seal" aria-hidden="true"><span></span><span></span><span></span></div>
-            <div><p class="eyebrow">DRAFT WITHHELD</p><h2>候选答案等待人工审核</h2><p>{{ chat.review.reasonCodes.join(' · ') || '运行策略要求人工审核' }}</p></div>
-            <span class="withheld-code">{{ chat.review.reviewId || 'PENDING' }}</span>
+            <div><p class="eyebrow">INFORMATION REQUIRED</p><h2>现有信息不足</h2><p>我暂时无法给出可靠结论。请补充更具体的问题、产品型号或使用场景。</p></div>
           </section>
           <section v-else-if="chat.assistantText" class="answer-card" aria-live="polite"><p v-for="(paragraph, index) in toAssistantParagraphs(chat.assistantText)" :key="`stream:${index}`">{{ paragraph }}</p></section>
           <section v-else class="tool-card"><div class="tool-top"><span class="tool-icon">↻</span><div><b>{{ chat.runOutcome === 'cancelled' ? '本次运行已取消' : latestTool ? `工具：${latestTool.toolName}` : '正在调用受控 Agent' }}</b><small>{{ chat.runOutcome === 'cancelled' ? '已通知服务端停止执行，候选内容不会发布。' : latestTool?.detail || chat.lastStatus || '检索、重排与安全策略检查中' }}</small></div><span class="tool-ok">{{ chat.runOutcome === 'cancelled' ? '已取消' : latestTool?.outcome || '运行中' }}</span></div></section>
           <section v-if="chat.citations.length" class="sources"><div class="sources-head"><span>依据资料</span><small>{{ chat.citations.length }} 条可定位引用</small></div><div class="source-grid"><button v-for="(citation, index) in chat.citations" :key="`${citation.documentVersion}:${citation.chunkId}`" class="source-card" type="button"><span class="source-index">{{ String(index + 1).padStart(2, '0') }}</span><div><b>{{ citation.title }}</b><p>{{ citation.locator }}</p></div><i>↗</i></button></div></section>
           <ProductRecommendations :recommendations="chat.productRecommendations" @select="openRecommendedProduct" />
-          <section v-if="chat.review" class="review-card"><div class="review-mark">◉</div><div><p class="eyebrow">HUMAN REVIEW</p><b>审核队列已接收</b><small>候选正文不会向普通用户透露；批准后才会发布。</small></div><span class="review-status">待审核</span></section>
         </article>
         <div v-if="chat.previewState === 'loading'" class="streaming-indicator" role="status" aria-live="polite"><span class="runner" aria-hidden="true">🏃</span><span>小智正在整理资料并生成回答</span></div>
 
@@ -1042,12 +1127,26 @@ async function confirmCancelActiveRun() {
       <footer class="composer-wrap"><form class="composer" @submit.prevent="sendMessage"><textarea v-model="draft" aria-label="消息输入" placeholder="询问知识库，或输入一条客服处理需求…" :disabled="chat.previewState === 'disabled' || chat.previewState === 'loading'" @keydown.enter.exact.prevent="sendMessage"></textarea><p v-if="chat.previewState === 'error' && chat.errorMessage" class="composer-error" role="alert">{{ chat.errorMessage }}</p><div class="composer-bar"><span>回答仅基于受控知识库；需更新资料请联系管理员。</span><button v-if="chat.previewState === 'loading' && chat.runId" type="button" class="send" @click="requestCancelActiveRun">停止</button><button v-else type="submit" class="send" :disabled="chat.previewState === 'disabled' || chat.previewState === 'loading' || !draft.trim()">发送 <b>↑</b></button></div></form></footer>
       </template>
       <template v-else>
-        <header class="topbar"><button class="menu-button" type="button" aria-label="打开管理导航" @click="chat.toggleNav">☰</button><div class="agent-heading"><span>ADMIN / KNOWLEDGE</span><b>知识库入库管理</b></div><div class="header-actions"><button class="avatar" type="button" :aria-label="`${authUser?.nickname}，打开个人资料`" @click="openProfile"><img :src="authUser?.avatar_url || defaultAvatarUrl" :alt="`${authUser?.nickname}的头像`" /><span>{{ userInitial }}</span></button></div></header>
-        <section class="admin-stage">
+        <header class="topbar"><button class="menu-button" type="button" aria-label="打开管理导航" @click="chat.toggleNav">☰</button><div class="agent-heading"><span>ADMIN / {{ adminSection === 'knowledge' ? 'KNOWLEDGE' : 'REVIEW' }}</span><b>{{ adminSection === 'knowledge' ? '知识库入库管理' : '人工审核队列' }}</b></div><div class="header-actions"><button class="avatar" type="button" :aria-label="`${authUser?.nickname}，打开个人资料`" @click="openProfile"><img :src="authUser?.avatar_url || defaultAvatarUrl" :alt="`${authUser?.nickname}的头像`" /><span>{{ userInitial }}</span></button></div></header>
+        <section v-if="adminSection === 'knowledge'" class="admin-stage">
           <p class="eyebrow">CONTROLLED KNOWLEDGE</p><h1>将经过审核的资料纳入客服检索。</h1><p>上传前会校验原始文件名和 SHA-256；完全重复的文档不会再次切片、Embedding，同名不同内容会被拦截并提示。</p>
           <div class="admin-upload-card"><div class="admin-upload-card__copy"><b>批量上传知识文件</b><small>支持 .txt、.md、.pdf、.xlsx，单个文件不超过 2 MB。PDF 按页解析，Excel 按工作表和行保留字段上下文。</small></div><input ref="knowledgeInput" class="knowledge-file-input" type="file" multiple accept=".txt,.md,.markdown,.pdf,.xlsx,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" @change="uploadKnowledgeFiles(Array.from(($event.target as HTMLInputElement).files || []))" /><div class="admin-upload-card__actions"><button type="button" class="send" :disabled="knowledgeUploading" @click="knowledgeInput?.click()">{{ knowledgeUploading ? `入库中 ${knowledgeUploadProgress.current}/${knowledgeUploadProgress.total}` : '选择多个文件' }}</button><button type="button" class="send send--secondary" :disabled="knowledgeReindexing" @click="reindexKnowledgeFiles">{{ knowledgeReindexing ? '重建中…' : '重建索引' }}</button></div></div>
           <div class="admin-file-list"><div class="admin-file-list__head"><div><b>已入库资料</b><small>统一管理已发布到 pgvector 与关键词索引的文档</small></div><div class="admin-file-list__tools"><input v-model.trim="knowledgeSearch" type="search" placeholder="搜索标题、文件名或状态" aria-label="搜索知识文件" /><span>{{ filteredKnowledgeFiles.length }} / {{ knowledgeFiles.length }} 个文件</span></div></div><p v-if="!knowledgeFiles.length" class="admin-file-empty">暂无已入库文件。</p><p v-else-if="!filteredKnowledgeFiles.length" class="admin-file-empty">没有匹配的知识文件。</p><div v-else class="admin-file-table" role="table" aria-label="知识文件清单"><div class="admin-file-table__row admin-file-table__row--header" role="row"><span>资料</span><span>索引状态</span><span>切片</span><span>摘要</span><span>最近更新</span><span>操作</span></div><article v-for="file in filteredKnowledgeFiles" :key="file.id" class="admin-file-table__row" role="row"><div class="admin-file-identity"><b>{{ file.title }}</b><small>{{ file.original_filename || file.filename }} · {{ (file.size_bytes / 1024).toFixed(1) }} KB</small></div><span class="knowledge-status" :class="`knowledge-status--${file.ingest_status || 'indexed'}`">{{ knowledgeStatusLabel(file.ingest_status) }}</span><span>{{ file.chunk_count }} 段</span><code>{{ knowledgeDigest(file) }}</code><time>{{ new Date(file.last_indexed_at || file.uploaded_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) }}</time><div class="admin-file-actions"><button type="button" class="batch-keep" :disabled="knowledgeDetailLoading" @click="viewKnowledgeFile(file)">查看</button><button type="button" class="batch-retry" :disabled="knowledgeMutatingId === file.id" @click="editKnowledgeFile(file)">修改</button><button type="button" class="batch-skip" :disabled="knowledgeMutatingId === file.id" @click="deleteKnowledgeFile(file)">删除</button></div></article></div></div>
           <p v-if="historyError" class="session-error">{{ historyError }}</p>
+        </section>
+        <section v-else class="admin-stage admin-review-stage">
+          <p class="eyebrow">CONTROLLED RELEASE</p><h1>只在真正需要人工判断时介入。</h1><p>普通资料不足会直接安全答复用户；高风险、提示词注入、冲突来源或关键工具失败才进入这里。候选正文只对管理员可见。</p>
+          <div class="admin-review-toolbar"><div><b>待处理任务</b><small>{{ reviewTasks.length }} 项</small></div><button class="send send--secondary" type="button" :disabled="reviewLoading" @click="refreshReviews">{{ reviewLoading ? '刷新中…' : '刷新队列' }}</button></div>
+          <p v-if="!reviewTasks.length" class="admin-review-empty">{{ reviewLoading ? '正在读取审核任务…' : '当前没有待审核内容。' }}</p>
+          <div v-else class="admin-review-list">
+            <article v-for="task in reviewTasks" :key="task.id" class="admin-review-card">
+              <div class="admin-review-meta"><span>置信度 {{ Math.round(task.confidence * 100) }}%</span><time>{{ new Date(task.created_at).toLocaleString('zh-CN') }}</time></div>
+              <div class="admin-review-reasons"><span v-for="reason in task.reason_codes" :key="reason">{{ reason }}</span></div>
+              <label>候选答复<textarea v-model="reviewDrafts[task.id]" rows="6" maxlength="100000" /></label>
+              <label>审核说明<input v-model.trim="reviewNotes[task.id]" maxlength="1000" placeholder="驳回时必填；批准或编辑发布时选填" /></label>
+              <div class="admin-review-actions"><button type="button" class="batch-skip" :disabled="Boolean(reviewMutatingId)" @click="submitReviewDecision(task, 'reject')">驳回</button><button type="button" class="batch-retry" :disabled="Boolean(reviewMutatingId)" @click="submitReviewDecision(task, 'edit_and_publish')">编辑后发布</button><button type="button" class="send" :disabled="Boolean(reviewMutatingId)" @click="submitReviewDecision(task, 'approve')">直接批准</button></div>
+            </article>
+          </div>
         </section>
       </template>
     </main>

@@ -174,7 +174,7 @@ docs/                 # 架构、契约、角色约束、Prompt
 - 结构化日志；
 - 面向用户的安全错误信息。
 
-“低置信度”“高风险内容”和“关键工具”采用 `docs/quality/acceptance-gates.md` 的可验收定义。命中规则时 Run 进入 `needs_review`，其状态转换、并发控制和发布语义以 `docs/contracts/api-semantics.md` 为准。人工可以批准、驳回或编辑后发布，所有操作保留审计记录。
+“低置信度”“高风险内容”和“关键工具”采用 `docs/quality/acceptance-gates.md` 的可验收定义。普通低置信度、无可靠引用或缺少普通问答字段时直接返回资料不足，不占用人工队列；高风险、提示词注入、冲突来源、用户明确要求人工或关键工具失败时，Run 进入 `needs_review`。审核状态转换、并发控制和发布语义以 `docs/contracts/api-semantics.md` 为准，所有人工操作保留审计记录。
 
 ## 10. 前端设计流程
 

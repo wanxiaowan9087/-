@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Message } from '../../api/contracts'
 import {
+  conversationScrollDelta,
   commitSessionMessages,
   hasPersistedCompletedReply,
   loadCompleteTranscript,
@@ -10,6 +11,11 @@ import {
 const message = (id: string) => ({ id, content: id } as Message)
 
 describe('session message cache', () => {
+  it('never scrolls the page upward while a streamed answer grows', () => {
+    expect(conversationScrollDelta({ lastMessageBottom: 520, composerTop: 600, gap: 24 })).toBe(0)
+    expect(conversationScrollDelta({ lastMessageBottom: 640, composerTop: 600, gap: 24 })).toBe(64)
+  })
+
   it('keeps the active session transcript when a stale request completes', () => {
     const original = { second: [message('second-message')] }
     const result = commitSessionMessages(original, 'first', 1, 2, [message('first-message')])

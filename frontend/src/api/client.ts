@@ -1,4 +1,4 @@
-import type { ApiErrorBody, AuthSession, AuthUser, ChatRequest, DeleteKnowledgeFileResult, Envelope, KnowledgeFile, LegalDocument, Memory, Message, Page, Session, SmsPurpose, StreamEvent, UpdateKnowledgeFileRequest, UsageEvent, UsageSummary } from './contracts'
+import type { ApiErrorBody, AuthSession, AuthUser, ChatRequest, DeleteKnowledgeFileResult, Envelope, KnowledgeFile, LegalDocument, Memory, Message, Page, ReviewDecision, ReviewDecisionResult, ReviewTask, Session, SmsPurpose, StreamEvent, UpdateKnowledgeFileRequest, UsageEvent, UsageSummary } from './contracts'
 import { parseSseStream } from './sse'
 
 export class ApiClientError extends Error {
@@ -243,6 +243,23 @@ export function createAgentApi(options: AgentApiOptions) {
         headers: headers(),
       })
       return readJson<Page<Memory>>(response, true)
+    },
+
+    async listReviews(status = 'pending', limit = 50): Promise<Page<ReviewTask>> {
+      const query = new URLSearchParams({ status, limit: String(limit) })
+      const response = await fetcher(`${options.baseUrl}/reviews?${query}`, {
+        headers: headers(),
+      })
+      return readJson<Page<ReviewTask>>(response, true)
+    },
+
+    async decideReview(reviewId: string, input: ReviewDecision): Promise<ReviewDecisionResult> {
+      const response = await fetcher(`${options.baseUrl}/reviews/${encodeURIComponent(reviewId)}/decision`, {
+        method: 'POST',
+        headers: headers({ 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() }),
+        body: JSON.stringify(input),
+      })
+      return readJson<ReviewDecisionResult>(response, true)
     },
 
     async getUsageSummary(): Promise<UsageSummary> {

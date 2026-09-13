@@ -324,6 +324,7 @@ class SqlPlatformTransaction:
         await self.session.execute(delete(FeedbackModel).where(FeedbackModel.message_id.in_(message_ids)))
         await self.session.execute(delete(MemoryModel).where(MemoryModel.source_message_id.in_(message_ids)))
         await self.session.execute(delete(StreamEventModel).where(StreamEventModel.run_id.in_(run_ids)))
+        await self.session.execute(delete(IdempotencyModel).where(IdempotencyModel.run_id.in_(run_ids)))
         await self.session.execute(delete(RunModel).where(RunModel.session_id == session_id))
         await self.session.execute(delete(SummaryUpdateJobModel).where(SummaryUpdateJobModel.session_id == session_id))
         await self.session.execute(delete(MessageModel).where(MessageModel.session_id == session_id))

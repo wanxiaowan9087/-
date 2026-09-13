@@ -37,16 +37,20 @@ describe('chat preview state', () => {
     expect(store.citations[0]?.locator).not.toContain('kb://')
   })
 
-  it('withholds candidate content when the runtime requires review', () => {
+  it('withholds candidate content without locking the user out of later questions', () => {
     const store = useChatStore()
     store.beginRun('session-1')
     store.receiveStreamEvent({
       ...streamEvent('review_required'),
       payload: { review_id: 'review-1', reason_codes: ['POLICY_R04'], confidence: 0.86 },
     })
-    store.receiveStreamEvent(streamEvent('done'))
+    store.receiveStreamEvent({
+      ...streamEvent('done'),
+      sequence: 2,
+      payload: { outcome: 'needs_review' },
+    })
 
-    expect(store.previewState).toBe('disabled')
+    expect(store.previewState).toBe('ready')
     expect(store.review).toEqual({ reviewId: 'review-1', reasonCodes: ['POLICY_R04'], confidence: 0.86 })
   })
 

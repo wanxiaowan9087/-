@@ -147,10 +147,14 @@ class DeterministicReviewPolicy:
             or not policy_input.citations_valid
             or policy_input.missing_required_fields
         ):
-            reasons.append(ReviewReason.LOW_CONFIDENCE)
-            if policy_input.policy_rule_hit:
-                reasons.append(ReviewReason.POLICY_RULE)
-            return self._review(reasons, policy_input.confidence)
+            return PolicyDecision(
+                action=PolicyAction.REFUSE,
+                reasons=(ReviewReason.LOW_CONFIDENCE,),
+                confidence=policy_input.confidence,
+                public_content=(
+                    "现有资料不足以支持可靠结论。请补充更具体的问题、产品型号或使用场景。"
+                ),
+            )
 
         if policy_input.policy_rule_hit:
             return self._review(

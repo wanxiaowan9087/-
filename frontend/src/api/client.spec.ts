@@ -192,4 +192,24 @@ describe('SSE API client', () => {
     expect(fetcher.mock.calls[1][0]).toBe('/api/v1/sessions/session-1')
     expect((fetcher.mock.calls[1][1] as RequestInit).method).toBe('DELETE')
   })
+
+  it('lists pending reviews and submits reviewer decisions', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        code: 'OK', message: 'success', request_id: 'request-reviews',
+        data: { items: [], page: { next_cursor: null, has_more: false } },
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        code: 'OK', message: 'success', request_id: 'request-review-decision',
+        data: { review_id: 'review-1', status: 'approved', published_message_id: 'message-1', decided_at: '2026-09-13T00:00:00Z', version: 2 },
+      }), { status: 200 }))
+    const api = createAgentApi({ baseUrl: '/api/v1', accessToken: 'admin-token', fetcher })
+
+    await expect(api.listReviews()).resolves.toMatchObject({ items: [] })
+    await expect(api.decideReview('review-1', { decision: 'approve', expected_version: 1 })).resolves.toMatchObject({ status: 'approved' })
+    expect(fetcher.mock.calls[0][0]).toBe('/api/v1/reviews?status=pending&limit=50')
+    expect(fetcher.mock.calls[1][0]).toBe('/api/v1/reviews/review-1/decision')
+    expect((fetcher.mock.calls[1][1] as RequestInit).method).toBe('POST')
+    expect((fetcher.mock.calls[1][1] as RequestInit).headers).toMatchObject({ 'Idempotency-Key': expect.any(String) })
+  })
 })

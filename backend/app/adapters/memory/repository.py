@@ -217,6 +217,11 @@ class MemoryPlatformRepository:
             for identifier in identifiers:
                 collection.pop(identifier, None)
         self.review_audits = [item for item in self.review_audits if item.review_id not in review_ids]
+        self.idempotency = {
+            key: item
+            for key, item in self.idempotency.items()
+            if item.run_id not in run_ids
+        }
         for run_id in run_ids:
             self.events.pop(run_id, None)
         for event in self.usage_events.values():

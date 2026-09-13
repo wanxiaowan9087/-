@@ -1509,6 +1509,32 @@ textarea:disabled {
 .admin-upload-card small { margin-top: 6px; color: var(--slate-500); font-size: 11px; line-height: 1.5; }
 .admin-upload-card .send { white-space: nowrap; }
 
+.admin-review-toolbar {
+  margin-top: 32px;
+  padding: 16px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.admin-review-toolbar > div { display: flex; align-items: baseline; gap: 10px; }
+.admin-review-toolbar b { color: var(--slate-950); }
+.admin-review-toolbar small { color: var(--muted); }
+.admin-review-empty { margin-top: 18px; padding: 28px; border: 1px dashed var(--line-strong); background: rgba(255, 255, 255, .55); text-align: center; }
+.admin-review-list { margin-top: 18px; display: grid; gap: 16px; }
+.admin-review-card { padding: 22px; border: 1px solid rgba(31, 71, 94, .22); background: rgba(255, 255, 255, .78); box-shadow: 0 14px 40px rgba(27, 61, 85, .07); }
+.admin-review-meta { display: flex; justify-content: space-between; gap: 12px; color: var(--slate-500); font: .72rem var(--font-mono); }
+.admin-review-reasons { margin: 12px 0 18px; display: flex; flex-wrap: wrap; gap: 7px; }
+.admin-review-reasons span { padding: 4px 7px; border: 1px solid #c29142; background: #fff8e8; color: #72531d; font: .68rem var(--font-mono); }
+.admin-review-card label { margin-top: 12px; display: grid; gap: 7px; color: var(--slate-700); font-size: .76rem; font-weight: 700; }
+.admin-review-card textarea,
+.admin-review-card input { width: 100%; padding: 11px 12px; border: 1px solid var(--line-strong); background: #fbfcfd; color: var(--slate-950); font: inherit; line-height: 1.65; resize: vertical; }
+.admin-review-card textarea:focus,
+.admin-review-card input:focus { outline: 2px solid rgba(54, 118, 170, .22); border-color: var(--blue-700); }
+.admin-review-actions { margin-top: 16px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+
 .knowledge-batch-dialog {
   width: min(790px, 100%);
   max-height: min(82vh, 780px);

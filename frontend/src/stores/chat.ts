@@ -162,14 +162,13 @@ export const useChatStore = defineStore('chat', {
           reasonCodes: readStringList(event.payload, 'reason_codes'),
           confidence: readNumber(event.payload, 'confidence'),
         }
-        this.previewState = 'disabled'
       }
       if (event.event_type === 'done') {
         const outcome = readText(event.payload, 'outcome')
         this.runOutcome = outcome === 'completed' || outcome === 'needs_review' || outcome === 'cancelled'
           ? outcome
           : null
-        this.previewState = this.review ? 'disabled' : 'ready'
+        this.previewState = 'ready'
         this.terminal = true
       }
       if (event.event_type === 'error') {

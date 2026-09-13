@@ -3,6 +3,18 @@ import type { Message, Page } from '../../api/contracts'
 export type SessionMessageCache = Record<string, Message[]>
 export type SessionRequestTokens = Record<string, number>
 
+export function conversationScrollDelta({
+  lastMessageBottom,
+  composerTop,
+  gap,
+}: {
+  lastMessageBottom: number
+  composerTop: number
+  gap: number
+}): number {
+  return Math.max(0, lastMessageBottom - composerTop + gap)
+}
+
 export type TranscriptVisibility = {
   currentUserMessageId: string | null
   currentRunId: string | null

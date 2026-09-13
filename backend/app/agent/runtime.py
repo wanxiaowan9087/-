@@ -113,7 +113,19 @@ MODEL_IDENTITY_PATTERNS = (
     "\u5e95\u5c42\u6a21\u578b", "\u6a21\u578b\u63d0\u4f9b\u5546",
 )
 
-PROFILE_INTENT_PATTERNS = ("我的个人信息", "我的资料", "用户信息", "我的使用习惯", "我的偏好")
+PROFILE_INTENT_PATTERNS = (
+    "我的个人信息",
+    "我的资料",
+    "用户信息",
+    "我的使用习惯",
+    "我的偏好",
+    "我叫什么",
+    "我的名字",
+    "我是谁",
+    "用户是谁",
+)
+USER_NAME_INTENT_PATTERNS = ("我叫什么", "我的名字", "我是谁", "用户是谁")
+USER_NAME_FACT_MARKERS = ("名字", "姓名", "昵称", "称呼", "叫我", "我叫")
 USAGE_SUMMARY_INTENT_PATTERNS = (
     "总结我的使用情况",
     "总结我的使用习惯",
@@ -159,6 +171,14 @@ def answer_profile_intent(user_text: str, context: MemoryContext) -> str | None:
     if not any(pattern in compact for pattern in PROFILE_INTENT_PATTERNS):
         return None
     facts = [fact.content for fact in context.facts]
+    if any(pattern in compact for pattern in USER_NAME_INTENT_PATTERNS):
+        identity_facts = [
+            fact for fact in facts
+            if any(marker in fact for marker in USER_NAME_FACT_MARKERS)
+        ]
+        if not identity_facts:
+            return "我目前没有足够的个人资料来确认你的称呼。"
+        return "已确认的称呼记录：" + "；".join(identity_facts)
     preferences = [fact for fact in facts if "偏好" in fact or "喜欢" in fact or "请用" in fact]
     lines = [f"会话摘要：{context.summary}" if context.summary else "会话摘要：暂无已生成摘要。"]
     lines.append("已确认的个人记录：" + ("；".join(facts) if facts else "暂无"))

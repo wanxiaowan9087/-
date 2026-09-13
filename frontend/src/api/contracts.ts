@@ -143,6 +143,33 @@ export interface UsageEvent {
   occurred_at: string
 }
 
+export interface ReviewTask {
+  id: string
+  run_id: string
+  session_id: string
+  user_message_id: string
+  candidate_content: string
+  reason_codes: string[]
+  confidence: number
+  status: 'pending' | 'approved' | 'rejected' | 'edited_and_published'
+  version: number
+  created_at: string
+  decided_at: string | null
+}
+
+export type ReviewDecision =
+  | { decision: 'approve'; expected_version: number; note?: string | null }
+  | { decision: 'reject'; expected_version: number; note: string }
+  | { decision: 'edit_and_publish'; expected_version: number; edited_content: string; note?: string | null }
+
+export interface ReviewDecisionResult {
+  review_id: string
+  status: 'approved' | 'rejected' | 'edited_and_published'
+  published_message_id: string | null
+  decided_at: string
+  version: number
+}
+
 export interface AuthSession {
   access_token: string
   token_type: 'Bearer'

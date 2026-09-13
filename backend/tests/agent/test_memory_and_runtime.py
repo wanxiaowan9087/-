@@ -220,6 +220,32 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(retriever.calls, 0)
         self.assertEqual(engine.requests, [])
 
+    async def test_missing_user_identity_is_answered_from_empty_memory_without_review(self) -> None:
+        class EmptyMemory:
+            async def build_context(self, session_id: str, subject_id: str) -> MemoryContext:
+                return MemoryContext()
+
+            async def extract_best_effort(
+                self, subject_id: str, source: ConversationMessage
+            ) -> str | None:
+                return None
+
+        engine = FakeReActEngine()
+        retriever = CountingRetriever(self._retrieval(confidence=0.1))
+        runtime = AgentRuntime(
+            react_engine=engine,
+            retriever=retriever,
+            memory=EmptyMemory(),
+        )
+
+        result = await runtime.execute(self._request("我叫什么名字？"))
+
+        self.assertEqual(result.status, RunStatus.COMPLETED)
+        self.assertIn("没有足够的个人资料", result.public_content)
+        self.assertEqual(result.retrieval_strategy, "memory-context")
+        self.assertEqual(retriever.calls, 0)
+        self.assertEqual(engine.requests, [])
+
     async def test_model_identity_question_is_answered_as_xiaozhi_without_model(self) -> None:
         engine = FakeReActEngine()
         retriever = CountingRetriever(self._retrieval())

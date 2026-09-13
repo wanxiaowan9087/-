@@ -156,6 +156,23 @@ class SafetyTests(unittest.TestCase):
         self.assertIn("准确型号", release.public_content)
         self.assertIsNone(release.candidate_content)
 
+    def test_ordinary_low_confidence_refuses_without_entering_review_queue(self) -> None:
+        decision = DeterministicReviewPolicy().decide(
+            PolicyInput(
+                confidence=0.2,
+                has_evidence=True,
+                citations_valid=False,
+                missing_required_fields=True,
+            )
+        )
+
+        release = DraftGate().release("unreliable candidate", decision)
+
+        self.assertEqual(decision.action, PolicyAction.REFUSE)
+        self.assertIn("资料不足", release.public_content)
+        self.assertFalse(release.withheld)
+        self.assertIsNone(release.candidate_content)
+
     def test_injection_detector_covers_user_and_retrieved_text(self) -> None:
         detector = PromptInjectionDetector()
         signals = detector.scan(
