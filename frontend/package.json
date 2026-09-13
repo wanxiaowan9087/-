@@ -25,7 +25,7 @@
     "eslint-plugin-vue": "latest",
     "typescript": "latest",
     "typescript-eslint": "latest",
-    "vitest": "latest",
+    "vitest": "4.1.10",
     "vue-tsc": "latest"
   }
 }

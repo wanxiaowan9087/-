@@ -329,16 +329,19 @@ class AgentRuntime:
                 if self._usage_summary is None:
                     # Keep isolated runtime tests and non-platform adapters useful;
                     # the production bootstrap always supplies the durable snapshot provider.
-                    profile_answer = answer_profile_intent(request.user_text, memory_context) or "当前还没有可用的使用总结。"
+                    usage_summary_answer = (
+                        answer_profile_intent(request.user_text, memory_context)
+                        or "当前还没有可用的使用总结。"
+                    )
                 else:
                     tool_result = await get_user_usage_summary(self._usage_summary)
-                    profile_answer = tool_result.display_content
+                    usage_summary_answer = tool_result.display_content
                 state.transition(RunStatus.COMPLETED)
                 memory_warning = await self._extract_memory(request)
                 return AgentRunResult(
                     run_id=run_id,
                     status=state.status,
-                    public_content=profile_answer,
+                    public_content=usage_summary_answer,
                     candidate_content=None,
                     citations=(),
                     trace=trace.snapshot(),
