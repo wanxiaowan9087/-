@@ -3,3 +3,5 @@ services:
     environment:
       APP_ENVIRONMENT: test
       APP_TEST_EXECUTOR_ENABLED: "true"
+      # Keep browser tests deterministic and independent of external SMS credentials.
+      APP_SMS_PROVIDER: fake
