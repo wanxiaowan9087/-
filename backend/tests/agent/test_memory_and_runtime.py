@@ -7,6 +7,7 @@ from backend.app.adapters.llm.fake import FakeReActEngine
 from backend.app.adapters.memory.platform_runtime import _explicit_memory
 from backend.app.agent.contracts import (
     AgentRequest,
+    CatalogProduct,
     ConversationMessage,
     ErrorCode,
     LongTermFact,
@@ -22,7 +23,11 @@ from backend.app.agent.memory import (
     MemoryCoordinator,
 )
 from backend.app.agent.ports import ModelTimeout, ModelUnavailable
-from backend.app.agent.runtime import AgentRuntime, answer_identity_intent, classify_meaningless_input
+from backend.app.agent.runtime import (
+    AgentRuntime,
+    answer_identity_intent,
+    classify_meaningless_input,
+)
 from backend.app.agent.tooling import CancellationToken
 from backend.app.core.config import Settings
 from backend.app.rag.models import (
@@ -216,6 +221,41 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.status, RunStatus.COMPLETED)
         self.assertEqual(result.retrieval_strategy, "input-guard")
+        self.assertEqual(retriever.calls, 0)
+        self.assertEqual(engine.requests, [])
+
+    async def test_catalog_inventory_answer_uses_all_curated_products(self) -> None:
+        engine = FakeReActEngine()
+        retriever = CountingRetriever(self._retrieval())
+        runtime = AgentRuntime(react_engine=engine, retriever=retriever)
+        products = tuple(
+            CatalogProduct(product_id=product_id, model=model, name=name, price=price)
+            for product_id, model, name, price in (
+                ("s8-luna", "S8-LUNA", "S8 皓月", 2999),
+                ("s8-air", "S8-AIR", "S8 Air", 1999),
+                ("x9-obsidian", "X9-OBSIDIAN", "X9 曜石", 4299),
+                ("x9-edge", "X9-EDGE", "X9 Edge", 3599),
+                ("m6-terra", "M6-TERRA", "M6 霞陶", 2499),
+                ("m6-mini", "M6-MINI", "M6 Mini", 1599),
+            )
+        )
+
+        result = await runtime.execute(
+            AgentRequest(
+                request_id="request-1",
+                session_id="session-1",
+                subject_id="subject-1",
+                user_message_id="message-1",
+                user_text="有多少产品适合我",
+                catalog_products=products,
+            )
+        )
+
+        self.assertEqual(result.status, RunStatus.COMPLETED)
+        self.assertEqual(result.retrieval_strategy, "catalog-inventory")
+        self.assertIn("共有 6 款", result.public_content)
+        for name in ("S8 皓月", "S8 Air", "X9 曜石", "X9 Edge", "M6 霞陶", "M6 Mini"):
+            self.assertIn(name, result.public_content)
         self.assertEqual(retriever.calls, 0)
         self.assertEqual(engine.requests, [])
 

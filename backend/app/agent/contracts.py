@@ -16,6 +16,16 @@ class ConversationMode(StrEnum):
     REPORT = "report"
 
 
+@dataclass(frozen=True)
+class CatalogProduct:
+    """Minimal curated-catalog record used for exact inventory answers."""
+
+    product_id: str
+    model: str
+    name: str
+    price: int
+
+
 class RunStatus(StrEnum):
     QUEUED = "queued"
     RUNNING = "running"
@@ -101,6 +111,7 @@ class AgentRequest:
     report_context: str | None = None
     report_tool_executions: Sequence[ToolExecution] = ()
     user_requested_human: bool = False
+    catalog_products: Sequence[CatalogProduct] = ()
 
     def __post_init__(self) -> None:
         if not self.request_id.strip():

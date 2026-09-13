@@ -156,6 +156,9 @@ async def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
         else:
             try:
                 structured = await handler(params.get("arguments", {}))
+                # JSON-RPC is transported over a byte stream. Escaping non-ASCII
+                # characters keeps the protocol UTF-8/locale independent on
+                # Windows as well as Linux containers.
                 result = {"content": [{"type": "text", "text": json.dumps(structured, ensure_ascii=False)}], "structuredContent": structured, "isError": "error" in structured}
             except Exception as error:
                 result = {"content": [{"type": "text", "text": f"Invalid tool input: {error}"}], "isError": True}
@@ -165,14 +168,22 @@ async def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
 
 
 async def serve() -> None:
+    # The MCP client always sends UTF-8 bytes. Windows may otherwise decode
+    # stdin with the active code page before JSON parsing, corrupting Chinese
+    # queries and causing Pydantic to reject them as invalid Unicode.
+    for stream in (sys.stdin, sys.stdout):
+        try:
+            stream.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError):
+            pass
     for line in sys.stdin:
         try:
             request = json.loads(line)
             response = await handle_request(request)
             if response is not None:
-                print(json.dumps(response, ensure_ascii=False), flush=True)
+                print(json.dumps(response, ensure_ascii=True), flush=True)
         except json.JSONDecodeError:
-            print(json.dumps({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "Parse error"}}), flush=True)
+            print(json.dumps({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "Parse error"}}, ensure_ascii=True), flush=True)
 
 
 if __name__ == "__main__":

@@ -9,16 +9,18 @@ from enum import Enum
 from typing import Any, Protocol, cast
 from uuid import UUID
 
+from backend.app.adapters.mcp.robot_catalog import RobotCatalogMcpError, recommend_robots
 from backend.app.agent.contracts import (
     AgentRequest,
     AgentRunResult,
+    CatalogProduct,
     ConversationMode,
     ReportScope,
     RunStatus,
 )
+from backend.app.agent.runtime import is_catalog_inventory_intent
 from backend.app.agent.tooling import CancellationToken
 from backend.app.application.ports import RunExecution
-from backend.app.adapters.mcp.robot_catalog import RobotCatalogMcpError, recommend_robots
 
 
 def _jsonable(value: Any) -> Any:
@@ -65,11 +67,22 @@ class RuntimeRunExecutor:
             self._tokens[execution.run_id] = token
         report = None
         recommendations = ()
+        catalog_products: tuple[CatalogProduct, ...] = ()
         try:
             if _is_robot_recommendation_intent(execution.input_content):
                 # Fetch the complete small catalog first. The final answer is
                 # the source of truth for which cards are safe to display.
                 recommendations = await recommend_robots(execution.input_content, limit=6)
+                if is_catalog_inventory_intent(execution.input_content):
+                    catalog_products = tuple(
+                        CatalogProduct(
+                            product_id=item.product_id,
+                            model=item.model,
+                            name=item.name,
+                            price=item.price,
+                        )
+                        for item in recommendations
+                    )
         except RobotCatalogMcpError:
             recommendations = ()
         try:
@@ -112,6 +125,7 @@ class RuntimeRunExecutor:
             ),
             report_context=report.context if report is not None else None,
             report_tool_executions=report.tool_executions if report is not None else (),
+            catalog_products=catalog_products,
         )
         try:
             for phase in (
@@ -250,11 +264,20 @@ def _month_bounds(month: str) -> tuple[datetime, datetime]:
 
 def _is_robot_recommendation_intent(text: str) -> bool:
     compact = text.replace(" ", "").lower()
-    robot_subject = any(term in compact for term in ("机器人", "扫地机", "扫拖机", "扫拖机器人", "型号", "机型"))
+    robot_subject = any(
+        term in compact
+        for term in ("机器人", "扫地机", "扫拖机", "扫拖机器人", "型号", "机型")
+    )
     recommendation_request = any(term in compact for term in (
         "推荐", "建议买", "选购", "买什么", "买哪款", "哪个型号", "什么型号", "适合我",
     ))
-    color_followup = any(color in compact for color in ("白色", "白的", "黑色", "黑的", "灰色", "灰的", "月白", "云白", "曜石黑", "岩灰")) and any(
+    color_followup = any(
+        color in compact
+        for color in (
+            "白色", "白的", "黑色", "黑的", "灰色", "灰的", "月白", "云白", "曜石黑", "岩灰"
+        )
+    ) and any(
         marker in compact for marker in ("喜欢", "偏好", "想要", "想选", "颜色")
     )
-    return (robot_subject and recommendation_request) or color_followup
+    inventory_request = is_catalog_inventory_intent(compact)
+    return (robot_subject and recommendation_request) or color_followup or inventory_request

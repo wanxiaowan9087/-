@@ -22,6 +22,7 @@ from .contracts import (
     AgentModelRequest,
     AgentRequest,
     AgentRunResult,
+    CatalogProduct,
     ConversationMessage,
     ConversationMode,
     ErrorCode,
@@ -101,6 +102,47 @@ def format_user_visible_answer(content: str) -> str:
     formatted = re.sub(r"(?<=[。！？!?])(?=[^\n])", "\n\n", formatted)
     formatted = re.sub(r"\n{3,}", "\n\n", formatted)
     return re.sub(r"[ \t]{2,}", " ", formatted).strip()
+
+
+def is_catalog_inventory_intent(text: str) -> bool:
+    """Recognize exact catalog count/list questions before generic RAG."""
+    compact = re.sub(r"\s+", "", text).casefold()
+    inventory_markers = (
+        "有多少",
+        "多少款",
+        "多少个",
+        "几款",
+        "有哪些",
+        "全部型号",
+        "型号列表",
+        "产品清单",
+        "产品目录",
+        "全系产品",
+    )
+    if not any(marker in compact for marker in inventory_markers):
+        return False
+    # “产品” is sufficient in this product-only assistant; explicit robot
+    # terms are accepted as well for callers that phrase the question narrowly.
+    return "产品" in compact or any(
+        term in compact for term in ("机器人", "扫地机", "扫拖", "型号", "机型")
+    )
+
+
+def format_catalog_inventory(products: Sequence[CatalogProduct]) -> str:
+    """Render the complete curated catalog without relying on top-k retrieval."""
+    unique: dict[str, CatalogProduct] = {}
+    for product in products:
+        if product.product_id and product.product_id not in unique:
+            unique[product.product_id] = product
+    items = tuple(unique.values())
+    if not items:
+        return "当前没有可用的产品目录资料。"
+    lines = [f"目前目录中共有 {len(items)} 款扫地机器人："]
+    for index, product in enumerate(items, 1):
+        price = f"，参考价 {product.price} 元" if product.price > 0 else ""
+        lines.append(f"{index}. {product.name}（{product.model}）{price}")
+    lines.append("如果你想知道哪一款适合你的家庭，请告诉我房屋面积、地面材质和预算。")
+    return "\n".join(lines)
 
 
 def _humanize_recalled_message(content: str) -> str:
@@ -496,6 +538,32 @@ class AgentRuntime:
                 )
             if request.report_tool_executions:
                 self._record_tool_executions(trace, request.report_tool_executions)
+            if request.catalog_products and is_catalog_inventory_intent(request.user_text):
+                step = trace.start(
+                    StepType.TOOL,
+                    "reading the complete curated robot catalog",
+                )
+                state.transition(RunStatus.COMPLETED)
+                trace.finish(
+                    step,
+                    StepStatus.SUCCEEDED,
+                    f"catalog inventory loaded: {len(request.catalog_products)} products",
+                )
+                memory_warning = await self._extract_memory(request)
+                return AgentRunResult(
+                    run_id=run_id,
+                    status=state.status,
+                    public_content=format_catalog_inventory(request.catalog_products),
+                    candidate_content=None,
+                    citations=(),
+                    trace=trace.snapshot(),
+                    confidence=1.0,
+                    confidence_threshold=self._config.confidence_threshold,
+                    degraded_dependencies=tuple(dict.fromkeys(degraded)),
+                    memory_warning=memory_warning,
+                    model_name="curated-catalog",
+                    retrieval_strategy="catalog-inventory",
+                )
             # Explicit LangGraph route: inspect durable memory first, then
             # perform grounded retrieval.  This keeps ordinary questions from
             # being answered with unrelated profile/device data and gives the

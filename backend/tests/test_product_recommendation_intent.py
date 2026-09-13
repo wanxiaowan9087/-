@@ -15,3 +15,8 @@ def test_unrelated_recommendation_does_not_trigger_robot_catalog() -> None:
 
 def test_color_preference_followup_triggers_catalog_event() -> None:
     assert _is_robot_recommendation_intent("我喜欢白色的")
+
+
+def test_catalog_inventory_questions_trigger_complete_catalog_lookup() -> None:
+    assert _is_robot_recommendation_intent("有多少产品适合我")
+    assert _is_robot_recommendation_intent("扫地机器人一共有几款")
