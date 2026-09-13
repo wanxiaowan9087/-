@@ -1098,7 +1098,7 @@ async function confirmCancelActiveRun() {
         <article v-for="message in visibleHistoricalMessages" :key="message.id" class="message" :class="message.role === 'user' ? 'customer' : 'agent'" data-reveal>
           <div class="message-meta">
             <span v-if="message.role === 'user'" class="message-avatar user"><img :src="authUser?.avatar_url || defaultAvatarUrl" :alt="`${authUser?.nickname || '用户'}的头像`" /><i>{{ userInitial }}</i></span>
-            <span v-else class="message-avatar bot">程</span>
+            <span v-else class="message-avatar bot">智</span>
             <b>{{ message.role === 'user' ? authUser?.nickname || '用户' : '小智' }}</b>
             <span v-if="message.role === 'assistant'" class="model-chip">{{ message.status === 'completed' ? '已完成' : message.status }}</span>
             <time>{{ new Date(message.created_at).toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }}</time>
@@ -1115,7 +1115,7 @@ async function confirmCancelActiveRun() {
         <article v-if="submittedQuestion" class="message customer" data-reveal><div class="message-meta"><span class="message-avatar user"><img :src="authUser?.avatar_url || defaultAvatarUrl" :alt="`${authUser?.nickname || '用户'}的头像`" /><i>{{ userInitial }}</i></span><b>{{ authUser?.nickname || '用户' }}</b><time>刚刚</time></div><p>{{ submittedQuestion }}</p></article>
 
         <article v-if="chat.runId" class="message agent" data-reveal :class="{ withheld: Boolean(chat.review) }">
-          <div class="message-meta"><span class="message-avatar bot">程</span><b>小智</b><span class="model-chip">{{ chat.previewState === 'loading' ? '正在生成' : chat.review ? '暂时无法确认' : chat.runOutcome === 'cancelled' ? '已取消' : '已完成' }}</span><time>刚刚</time></div>
+          <div class="message-meta"><span class="message-avatar bot">智</span><b>小智</b><span class="model-chip">{{ chat.previewState === 'loading' ? '正在生成' : chat.review ? '暂时无法确认' : chat.runOutcome === 'cancelled' ? '已取消' : '已完成' }}</span><time>刚刚</time></div>
           <section v-if="chat.review" class="withheld-card" aria-label="现有信息不足">
             <div class="withheld-seal" aria-hidden="true"><span></span><span></span><span></span></div>
             <div><p class="eyebrow">INFORMATION REQUIRED</p><h2>现有信息不足</h2><p>我暂时无法给出可靠结论。请补充更具体的问题、产品型号或使用场景。</p></div>
