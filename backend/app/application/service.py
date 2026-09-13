@@ -938,6 +938,14 @@ class PlatformService:
         )
         async with self.repository.transaction() as tx:
             items = await tx.list_reviews(status=status, limit=limit + 1, after=marker)
+            # A review task must be actionable on its own.  Resolve the
+            # already-linked user message while the same authorized
+            # transaction is open; this avoids a second endpoint and preserves
+            # object-level ownership checks.
+            user_contents: dict[UUID, str | None] = {}
+            for item in items:
+                message = await tx.get_message(item.owner_id, item.user_message_id)
+                user_contents[item.id] = message.content if message is not None else None
         has_more = len(items) > limit
         visible = items[:limit]
         next_cursor = (
@@ -947,7 +955,12 @@ class PlatformService:
         )
         return Envelope(
             data=Page(
-                items=[ReviewTask.model_validate(item) for item in visible],
+                items=[
+                    ReviewTask.model_validate(item).model_copy(
+                        update={"user_content": user_contents.get(item.id)}
+                    )
+                    for item in visible
+                ],
                 page=PageInfo(next_cursor=next_cursor, has_more=has_more),
             ),
             request_id=request_id_var.get(),

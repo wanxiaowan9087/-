@@ -7,7 +7,6 @@ import RobotHero from './features/chat/RobotHero.vue'
 import ProductRecommendations from './features/chat/ProductRecommendations.vue'
 import { toAssistantParagraphs } from './features/chat/content-redaction'
 import {
-  conversationScrollDelta,
   commitSessionMessages,
   hasPersistedCompletedReply,
   loadCompleteTranscript,
@@ -146,20 +145,20 @@ function observeReveals() {
   })
 }
 
-async function scrollConversationToEnd() {
+function conversationIsNearBottom(): boolean {
+  const stage = document.querySelector<HTMLElement>('#agent-desk')
+  if (!stage) return true
+  return stage.scrollHeight - stage.scrollTop - stage.clientHeight <= 96
+}
+
+async function scrollConversationToEnd(force = false) {
   await nextTick()
-  const lastMessage = document.querySelector<HTMLElement>('#agent-desk article.message:last-of-type')
-  const composer = document.querySelector<HTMLElement>('.workspace--agent .composer-wrap')
-  if (!lastMessage || !composer) return
-  const lastBounds = lastMessage.getBoundingClientRect()
-  const composerBounds = composer.getBoundingClientRect()
-  const delta = conversationScrollDelta({
-    lastMessageBottom: lastBounds.bottom,
-    composerTop: composerBounds.top,
-    gap: 24,
-  })
-  if (delta <= 0) return
-  globalThis.scrollBy({ top: delta, behavior: 'auto' })
+  const stage = document.querySelector<HTMLElement>('#agent-desk')
+  if (!stage || (!force && !conversationIsNearBottom())) return
+  // Scroll only the conversation viewport.  Updating scrollTop directly is
+  // deliberate: repeatedly starting smooth animations for every SSE delta
+  // causes the visible “page shake” reported by users.
+  stage.scrollTop = stage.scrollHeight
 }
 
 function scheduleConversationScroll() {
@@ -193,7 +192,7 @@ async function recoverPersistedChat(sessionId: string, question: string): Promis
     chat.sessionId = sessionId
     submittedQuestion.value = ''
     draft.value = ''
-    scheduleConversationScroll()
+    void scrollConversationToEnd(true)
     return true
   } catch {
     return false
@@ -516,7 +515,7 @@ async function refreshConversationState() {
       await refreshSessionMessages(latest.id)
       if (loadVersion === conversationLoadVersion) {
         chat.setPreviewState(historicalMessages.value.length ? 'ready' : 'empty')
-        if (historicalMessages.value.length) await scrollConversationToEnd()
+        if (historicalMessages.value.length) await scrollConversationToEnd(true)
       }
     }
   } catch (error) {
@@ -571,7 +570,7 @@ async function openSession(sessionId: string) {
     if (chat.sessionId !== sessionId) return
     chat.setPreviewState(historicalMessages.value.length ? 'ready' : 'empty')
     chat.closeNav()
-    if (historicalMessages.value.length) await scrollConversationToEnd()
+    if (historicalMessages.value.length) await scrollConversationToEnd(true)
   } catch (error) {
     historyError.value = error instanceof Error ? error.message : '会话消息加载失败'
     chat.setPreviewState('error')
@@ -716,7 +715,6 @@ async function executeChat(request: ChatRequest, question: string) {
   try {
     chat.beginRun(request.session_id)
     submittedQuestion.value = question
-    scheduleConversationScroll()
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
         await api.streamChat(request, {
@@ -724,8 +722,9 @@ async function executeChat(request: ChatRequest, question: string) {
           lastEventId: chat.lastEventId ?? undefined,
           signal: controller.signal,
           onEvent: event => {
+            const followStream = event.event_type === 'delta' && conversationIsNearBottom()
             chat.receiveStreamEvent(event)
-            if (event.event_type === 'delta') scheduleConversationScroll()
+            if (followStream) scheduleConversationScroll()
           },
         })
         break
@@ -743,7 +742,6 @@ async function executeChat(request: ChatRequest, question: string) {
     sessions.value = sessionPage.items
     memories.value = memoryPage.items
     replaceStreamWithPersistedTranscript(request.session_id)
-    scheduleConversationScroll()
   } catch (error) {
     if (!controller.signal.aborted) {
       if (error instanceof ApiClientError && error.status === 401) {
@@ -757,6 +755,18 @@ async function executeChat(request: ChatRequest, question: string) {
   } finally {
     if (activeAbortController.value === controller) activeAbortController.value = null
   }
+}
+
+function reviewReasonLabel(reason: string): string {
+  const labels: Record<string, string> = {
+    low_confidence: '检索依据不足',
+    high_risk: '涉及安全、隐私或不可逆操作',
+    prompt_injection: '检测到提示词注入风险',
+    critical_tool_failure: '关键工具执行失败',
+    conflicting_sources: '资料之间存在冲突',
+    policy_rule: '命中业务审核规则',
+  }
+  return labels[reason] || reason
 }
 
 async function sendMessage() {
@@ -1141,7 +1151,8 @@ async function confirmCancelActiveRun() {
           <div v-else class="admin-review-list">
             <article v-for="task in reviewTasks" :key="task.id" class="admin-review-card">
               <div class="admin-review-meta"><span>置信度 {{ Math.round(task.confidence * 100) }}%</span><time>{{ new Date(task.created_at).toLocaleString('zh-CN') }}</time></div>
-              <div class="admin-review-reasons"><span v-for="reason in task.reason_codes" :key="reason">{{ reason }}</span></div>
+              <section class="admin-review-question"><small>用户问题</small><p>{{ task.user_content || '原始问题已不可用，请通过运行记录核对。' }}</p></section>
+              <div class="admin-review-reasons"><span v-for="reason in task.reason_codes" :key="reason">{{ reviewReasonLabel(reason) }}</span></div>
               <label>候选答复<textarea v-model="reviewDrafts[task.id]" rows="6" maxlength="100000" /></label>
               <label>审核说明<input v-model.trim="reviewNotes[task.id]" maxlength="1000" placeholder="驳回时必填；批准或编辑发布时选填" /></label>
               <div class="admin-review-actions"><button type="button" class="batch-skip" :disabled="Boolean(reviewMutatingId)" @click="submitReviewDecision(task, 'reject')">驳回</button><button type="button" class="batch-retry" :disabled="Boolean(reviewMutatingId)" @click="submitReviewDecision(task, 'edit_and_publish')">编辑后发布</button><button type="button" class="send" :disabled="Boolean(reviewMutatingId)" @click="submitReviewDecision(task, 'approve')">直接批准</button></div>

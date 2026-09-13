@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Protocol
@@ -12,12 +13,17 @@ from backend.app.agent.contracts import (
     MemoryType,
 )
 from backend.app.domain.records import MessageRecord
-from backend.app.repositories.ports import PlatformRepository
+from backend.app.repositories.ports import PlatformRepository, PlatformTransaction
 
 
 class _HasMessageFields(Protocol):
     role: str
     content: str
+
+
+class _HasMemoryFields(Protocol):
+    content: str
+    status: str
 
 
 class PlatformMemoryRuntime:
@@ -94,6 +100,19 @@ class PlatformMemoryRuntime:
                 limit=12,
                 after=None,
             )
+            # Self-heal explicit facts from messages written before the
+            # extractor supported all Chinese self-introduction forms.  This
+            # is deliberately limited to the bounded recent window and the
+            # same sensitive-content filters used by ``extract_best_effort``;
+            # arbitrary conversation text is never promoted to memory.
+            await _backfill_explicit_memories(tx, subject_id, window_records, memories)
+            memories = await tx.list_memories(
+                subject_id,
+                status="active",
+                memory_type=None,
+                limit=12,
+                after=None,
+            )
 
         window = tuple(
             ConversationMessage(
@@ -115,7 +134,7 @@ class PlatformMemoryRuntime:
                 active=memory.status == "active",
             )
             for memory in memories
-            if memory.status == "active"
+            if memory.status == "active" and _is_valid_persisted_memory(memory.content)
         )
         # Present durable facts in a stable, useful order: concrete device/user
         # facts first, then communication preferences, while preserving the
@@ -224,6 +243,31 @@ def _explicit_memory(content: str) -> tuple[MemoryType, str] | None:
     )
     if lowered.startswith(preference_markers):
         return MemoryType.PREFERENCE, normalized
+    # Names are useful for the profile/identity intent, but only accept a
+    # short explicit self-introduction.  Broad ``我是...`` extraction would
+    # incorrectly store role descriptions (for example “我是小智”) or device
+    # statements as personal data.
+    name_match = re.match(
+        r"^(?:我叫|我的名字是|我名叫|我是)\s*"
+        r"([\u3400-\u4dbf\u4e00-\u9fffA-Za-z][\u3400-\u4dbf\u4e00-\u9fffA-Za-z0-9_·-]{0,19})"
+        # Allow a natural follow-up clause, e.g. “我是小晚，你是谁”，but
+        # stop the name at punctuation so the whole question is not stored.
+        r"(?:\s*(?:[，,。.!！?？;；]|$).*)?$",
+        normalized,
+    )
+    if name_match:
+        candidate = name_match.group(1).strip("·-_")
+        excluded = {
+            "小智", "客服", "助手", "模型", "机器人", "用户", "一个", "学生",
+            "谁", "什么", "哪位", "谁呀", "谁是",
+        }
+        excluded_terms = ("智能", "客服", "助手", "模型", "机器人")
+        if (
+            candidate
+            and candidate not in excluded
+            and not any(term in candidate for term in excluded_terms)
+        ):
+            return MemoryType.USER_FACT, f"我的名字是{candidate}"
     fact_markers = (
         "\u6211\u7684\u578b\u53f7\u662f",
         "\u6211\u4f7f\u7528",
@@ -236,6 +280,61 @@ def _explicit_memory(content: str) -> tuple[MemoryType, str] | None:
     if lowered.startswith(fact_markers):
         return MemoryType.USER_FACT, normalized
     return None
+
+
+def _is_valid_persisted_memory(content: str) -> bool:
+    """Reject facts created by older buggy extractors without deleting data."""
+    compact = re.sub(r"\s+", "", content).casefold()
+    return compact not in {"我的名字是谁", "我的名字是什么", "我的名字是哪位"}
+
+
+async def _backfill_explicit_memories(
+    tx: PlatformTransaction,
+    subject_id: str,
+    messages: Sequence[MessageRecord],
+    existing: Sequence[_HasMemoryFields],
+) -> None:
+    """Persist only explicit, safe facts found in the recent message window."""
+    # ``existing`` is intentionally typed structurally to support both SQL and
+    # in-memory repository records without leaking adapter details here.
+    known = {
+        _canonical_memory(memory.content)
+        for memory in existing
+        if memory.status == "active"
+    }
+    for memory in existing:
+        if memory.status == "active" and not _is_valid_persisted_memory(memory.content):
+            memory_id = getattr(memory, "id", None)
+            version = getattr(memory, "version", None)
+            if memory_id is not None and version is not None:
+                await tx.update_memory(
+                    subject_id,
+                    memory_id,
+                    expected_version=version,
+                    content=None,
+                    deactivate=True,
+                    now=datetime.now(UTC),
+                )
+    now = datetime.now(UTC)
+    for message in messages:
+        if message.role != "user" or message.created_at is None:
+            continue
+        extracted = _explicit_memory(message.content)
+        if extracted is None:
+            continue
+        memory_type, candidate = extracted
+        canonical = _canonical_memory(candidate)
+        if canonical in known:
+            continue
+        await tx.create_memory(
+            subject_id,
+            memory_type=memory_type.value,
+            content=candidate,
+            confidence=0.9,
+            source_message_id=message.id,
+            now=now,
+        )
+        known.add(canonical)
 
 
 def _canonical_memory(content: str) -> str:

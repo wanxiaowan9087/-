@@ -33,8 +33,14 @@ from .contracts import (
     ToolOutcome,
     utc_now,
 )
+from .customer_tools import (
+    get_user_usage_summary,
+    reset_request_context,
+    set_request_context,
+)
 from .memory import NullMemoryCoordinator
 from .ports import ModelTimeout, ModelUnavailable, ReActEnginePort
+from .route_graph import route_memory_then_knowledge
 from .safety import (
     DeterministicReviewPolicy,
     DraftGate,
@@ -46,11 +52,6 @@ from .safety import (
     required_fields_missing,
 )
 from .tooling import CancellationToken
-from .customer_tools import (
-    get_user_usage_summary,
-    reset_request_context,
-    set_request_context,
-)
 from .tracing import RunStateMachine, TraceRecorder
 
 logger = logging.getLogger(__name__)
@@ -123,6 +124,10 @@ PROFILE_INTENT_PATTERNS = (
     "我的名字",
     "我是谁",
     "用户是谁",
+    "我的型号",
+    "我使用的型号",
+    "我用的型号",
+    "我的设备",
 )
 USER_NAME_INTENT_PATTERNS = ("我叫什么", "我的名字", "我是谁", "用户是谁")
 USER_NAME_FACT_MARKERS = ("名字", "姓名", "昵称", "称呼", "叫我", "我叫")
@@ -325,7 +330,8 @@ class AgentRuntime:
                     retrieval_strategy="calendar-intent",
                 )
             memory_context = await self._prepare_memory(request, trace, degraded)
-            if any(pattern in re.sub(r"\s+", "", request.user_text) for pattern in USAGE_SUMMARY_INTENT_PATTERNS):
+            compact_request = re.sub(r"\s+", "", request.user_text)
+            if any(pattern in compact_request for pattern in USAGE_SUMMARY_INTENT_PATTERNS):
                 if self._usage_summary is None:
                     # Keep isolated runtime tests and non-platform adapters useful;
                     # the production bootstrap always supplies the durable snapshot provider.
@@ -352,17 +358,6 @@ class AgentRuntime:
                     model_name="deterministic-user-usage-summary",
                     retrieval_strategy="usage-summary-snapshot",
                 )
-            profile_answer = answer_profile_intent(request.user_text, memory_context)
-            if profile_answer is not None:
-                state.transition(RunStatus.COMPLETED)
-                memory_warning = await self._extract_memory(request)
-                return AgentRunResult(
-                    run_id=run_id, status=state.status, public_content=profile_answer,
-                    candidate_content=None, citations=(), trace=trace.snapshot(),
-                    confidence=1.0, confidence_threshold=self._config.confidence_threshold,
-                    degraded_dependencies=tuple(dict.fromkeys(degraded)), memory_warning=memory_warning,
-                    model_name="deterministic-user-context", retrieval_strategy="memory-context",
-                )
             if classify_meaningless_input(request.user_text):
                 state.transition(RunStatus.COMPLETED)
                 message = "请继续描述具体需求，例如机器人型号、故障现象、使用场景或报告月份。"
@@ -377,10 +372,32 @@ class AgentRuntime:
                 )
             if request.report_tool_executions:
                 self._record_tool_executions(trace, request.report_tool_executions)
-            token.checkpoint()
-            retrieval = await self._retrieve(
-                request.user_text, trace, degraded
+            # Explicit LangGraph route: inspect durable memory first, then
+            # perform grounded retrieval.  This keeps ordinary questions from
+            # being answered with unrelated profile/device data and gives the
+            # no-evidence policy a single, deterministic entry point.
+            route = await route_memory_then_knowledge(
+                request.user_text,
+                memory_context,
+                answer_memory=answer_profile_intent,
+                retrieve=lambda query: self._retrieve(query, trace, degraded),
             )
+            profile_answer = route.get("memory_answer")
+            if profile_answer is not None:
+                state.transition(RunStatus.COMPLETED)
+                memory_warning = await self._extract_memory(request)
+                return AgentRunResult(
+                    run_id=run_id, status=state.status, public_content=profile_answer,
+                    candidate_content=None, citations=(), trace=trace.snapshot(),
+                    confidence=1.0, confidence_threshold=self._config.confidence_threshold,
+                    degraded_dependencies=tuple(dict.fromkeys(degraded)),
+                    memory_warning=memory_warning,
+                    model_name="deterministic-user-context", retrieval_strategy="memory-context",
+                )
+            token.checkpoint()
+            retrieval = route.get("retrieval")
+            if retrieval is None:
+                retrieval = RetrievalResult(hits=(), confidence=0.0, strategy="memory-route")
             if request.mode is ConversationMode.REPORT and request.report_context:
                 retrieval = _with_report_evidence(retrieval, request)
             token.checkpoint()

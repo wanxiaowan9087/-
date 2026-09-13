@@ -2505,6 +2505,10 @@ components:
           $ref: "#/components/schemas/Uuid"
         user_message_id:
           $ref: "#/components/schemas/Uuid"
+        user_content:
+          type: [string, "null"]
+          maxLength: 100000
+          description: 原始用户问题，供 reviewer 判断审核上下文
         candidate_content:
           type: string
           maxLength: 100000

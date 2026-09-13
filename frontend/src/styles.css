@@ -549,6 +549,8 @@ textarea:focus-visible {
 
 .workspace--agent .stage {
   width: min(1020px, 100%);
+  min-height: 0;
+  overflow-y: auto;
   margin: 34px auto 0;
   padding: 46px 52px;
   border: 1px solid rgba(132, 94, 59, .18);
@@ -1526,6 +1528,9 @@ textarea:disabled {
 .admin-review-list { margin-top: 18px; display: grid; gap: 16px; }
 .admin-review-card { padding: 22px; border: 1px solid rgba(31, 71, 94, .22); background: rgba(255, 255, 255, .78); box-shadow: 0 14px 40px rgba(27, 61, 85, .07); }
 .admin-review-meta { display: flex; justify-content: space-between; gap: 12px; color: var(--slate-500); font: .72rem var(--font-mono); }
+.admin-review-question { margin-top: 16px; padding: 13px 15px; border-left: 3px solid var(--blue-700); background: #f3f7fa; }
+.admin-review-question small { display: block; color: var(--muted); font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; }
+.admin-review-question p { margin: 7px 0 0; color: var(--slate-950); font-size: .9rem; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
 .admin-review-reasons { margin: 12px 0 18px; display: flex; flex-wrap: wrap; gap: 7px; }
 .admin-review-reasons span { padding: 4px 7px; border: 1px solid #c29142; background: #fff8e8; color: #72531d; font: .68rem var(--font-mono); }
 .admin-review-card label { margin-top: 12px; display: grid; gap: 7px; color: var(--slate-700); font-size: .76rem; font-weight: 700; }

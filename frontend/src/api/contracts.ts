@@ -148,6 +148,7 @@ export interface ReviewTask {
   run_id: string
   session_id: string
   user_message_id: string
+  user_content: string | null
   candidate_content: string
   reason_codes: string[]
   confidence: number

@@ -340,6 +340,9 @@ async def test_apifox_008_reviewer_decision_and_user_denial(
 
     assert denied.status_code == 403
     assert listed.status_code == 200
+    listed_items = listed.json()["data"]["items"]
+    listed_task = next(item for item in listed_items if item["id"] == str(review.id))
+    assert listed_task["user_content"] == "hello"
     assert approve.status_code == 200
     assert approve.json()["data"]["status"] == "approved"
     assert repeated.status_code == 409

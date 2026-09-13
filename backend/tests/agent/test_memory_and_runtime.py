@@ -4,6 +4,7 @@ import unittest
 from datetime import UTC, datetime
 
 from backend.app.adapters.llm.fake import FakeReActEngine
+from backend.app.adapters.memory.platform_runtime import _explicit_memory
 from backend.app.agent.contracts import (
     AgentRequest,
     ConversationMessage,
@@ -78,6 +79,13 @@ class FailingExtractor:
 
 
 class MemoryTests(unittest.IsolatedAsyncioTestCase):
+    def test_explicit_name_is_stored_as_a_non_sensitive_user_fact(self) -> None:
+        self.assertEqual(
+            _explicit_memory("我叫小晚，请记住"),
+            (MemoryType.USER_FACT, "我的名字是小晚"),
+        )
+        self.assertIsNone(_explicit_memory("我是小智"))
+
     async def test_window_summary_and_fact_source_are_separate(self) -> None:
         messages = tuple(
             ConversationMessage(
@@ -206,7 +214,9 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
                     ),),
                 )
 
-            async def extract_best_effort(self, subject_id: str, source: ConversationMessage) -> str | None:
+            async def extract_best_effort(
+                self, subject_id: str, source: ConversationMessage
+            ) -> str | None:
                 return None
 
         engine = FakeReActEngine()
@@ -219,6 +229,30 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("简洁回答", result.public_content)
         self.assertEqual(retriever.calls, 0)
         self.assertEqual(engine.requests, [])
+
+    async def test_device_profile_intent_uses_memory_before_knowledge_retrieval(self) -> None:
+        class Memory:
+            async def build_context(self, session_id: str, subject_id: str) -> MemoryContext:
+                return MemoryContext(
+                    facts=(LongTermFact(
+                        memory_id="m-device", memory_type=MemoryType.USER_FACT,
+                        content="我的型号是 S8 Air", confidence=0.9,
+                        source_message_id="message-1",
+                    ),),
+                )
+
+            async def extract_best_effort(
+                self, subject_id: str, source: ConversationMessage
+            ) -> str | None:
+                return None
+
+        retriever = CountingRetriever(self._retrieval())
+        result = await AgentRuntime(
+            react_engine=FakeReActEngine(), retriever=retriever, memory=Memory()
+        ).execute(self._request("我的型号是什么？"))
+
+        self.assertIn("S8 Air", result.public_content)
+        self.assertEqual(retriever.calls, 0)
 
     async def test_missing_user_identity_is_answered_from_empty_memory_without_review(self) -> None:
         class EmptyMemory:

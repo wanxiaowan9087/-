@@ -383,6 +383,7 @@ class ReviewTask(ContractModel):
     run_id: UUID
     session_id: UUID
     user_message_id: UUID
+    user_content: str | None = Field(default=None, max_length=100_000)
     candidate_content: str = Field(max_length=100_000)
     reason_codes: list[str] = Field(min_length=1)
     confidence: float = Field(ge=0, le=1)

@@ -43,6 +43,49 @@ async def test_platform_memory_runtime_reads_history_and_persists_explicit_prefe
 
 
 @pytest.mark.asyncio
+async def test_platform_memory_runtime_persists_name_and_reads_it_on_next_turn() -> None:
+    repository = MemoryPlatformRepository()
+    now = datetime.now(UTC)
+    async with repository.transaction() as tx:
+        session = await tx.create_session("subject-1", "memory", now)
+        user, _, _ = await tx.prepare_chat(
+            owner_id="subject-1",
+            session_id=session.id,
+            content="我是小晚，请记住",
+            original_user_message_id=None,
+            session_title=None,
+            now=now,
+        )
+
+    # Do not call extract_best_effort here: this verifies that a previously
+    # stored introduction is repaired when the next turn builds context.
+    runtime = PlatformMemoryRuntime(repository)
+    context = await runtime.build_context(str(session.id), "subject-1")
+
+    assert [fact.content for fact in context.facts] == ["我的名字是小晚"]
+
+
+@pytest.mark.asyncio
+async def test_platform_memory_runtime_deactivates_legacy_mis_extracted_name() -> None:
+    repository = MemoryPlatformRepository()
+    now = datetime.now(UTC)
+    async with repository.transaction() as tx:
+        session = await tx.create_session("subject-1", "memory", now)
+        message_id = uuid4()
+        repository.messages[message_id] = MessageRecord(
+            message_id, session.id, "subject-1", "user", "completed", "我是小晚", None,
+            None, [], now, now,
+        )
+        await tx.create_memory(
+            "subject-1", memory_type="user_fact", content="我的名字是谁", confidence=0.9,
+            source_message_id=message_id, now=now,
+        )
+
+    context = await PlatformMemoryRuntime(repository).build_context(str(session.id), "subject-1")
+    assert [fact.content for fact in context.facts] == ["我的名字是小晚"]
+
+
+@pytest.mark.asyncio
 async def test_platform_memory_runtime_persists_older_turn_summary_and_keeps_last_eight() -> None:
     repository = MemoryPlatformRepository()
     now = datetime.now(UTC)
