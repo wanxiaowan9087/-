@@ -582,6 +582,7 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         result = await runtime.execute(self._request("没有资料的问题"))
         self.assertEqual(result.status, RunStatus.COMPLETED)
         self.assertIn("准确型号", result.public_content)
+        self.assertEqual(result.citations, ())
 
 
 class PromptPolicyTests(unittest.TestCase):

@@ -848,7 +848,10 @@ class AgentRuntime:
             status=state.status,
             public_content=release.public_content,
             candidate_content=release.candidate_content,
-            citations=tuple(citations),
+            # A refusal/review card must not present low-confidence or
+            # unrelated search hits as if they supported the visible answer.
+            # The full retrieval trace remains available to the operator.
+            citations=(),
             trace=trace.snapshot(),
             confidence=retrieval.confidence,
             confidence_threshold=self._config.confidence_threshold,
