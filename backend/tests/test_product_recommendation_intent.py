@@ -11,3 +11,7 @@ def test_common_robot_recommendation_phrasing_triggers_catalog_event() -> None:
 
 def test_unrelated_recommendation_does_not_trigger_robot_catalog() -> None:
     assert not _is_robot_recommendation_intent("推荐一部电影")
+
+
+def test_color_preference_followup_triggers_catalog_event() -> None:
+    assert _is_robot_recommendation_intent("我喜欢白色的")

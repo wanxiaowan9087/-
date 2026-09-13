@@ -6,18 +6,22 @@ import { robotImages } from './robotImages'
 const props = defineProps<{ recommendations: ProductRecommendationView[] }>()
 const emit = defineEmits<{ select: [productId: string] }>()
 
-const productIndex: Record<string, { name: string; subtitle: string; image: string }> = {
-  's8-luna': { name: 'S8 皓月', subtitle: '静音深度清洁', image: robotImages['s8-luna'].src },
-  's8-air': { name: 'S8 Air', subtitle: '小户型轻量方案', image: robotImages['s8-air'].src },
-  'x9-obsidian': { name: 'X9 曜石', subtitle: '全屋导航旗舰', image: robotImages['x9-obsidian'].src },
-  'x9-edge': { name: 'X9 Edge', subtitle: '边角强化清洁', image: robotImages['x9-edge'].src },
-  'm6-terra': { name: 'M6 霞陶', subtitle: '地面精细护理', image: robotImages['m6-terra'].src },
-  'm6-mini': { name: 'M6 Mini', subtitle: '木地板温柔护理', image: robotImages['m6-mini'].src },
+const productIndex: Record<string, { name: string; subtitle: string; image: string; imageKey: string }> = {
+  's8-luna': { name: 'S8 皓月', subtitle: '静音深度清洁', image: robotImages['s8-luna'].src, imageKey: 'robot-s8-luna' },
+  's8-air': { name: 'S8 Air', subtitle: '小户型轻量方案', image: robotImages['s8-air'].src, imageKey: 'robot-s8-air' },
+  'x9-obsidian': { name: 'X9 曜石', subtitle: '全屋导航旗舰', image: robotImages['x9-obsidian'].src, imageKey: 'robot-x9-obsidian' },
+  'x9-edge': { name: 'X9 Edge', subtitle: '边角强化清洁', image: robotImages['x9-edge'].src, imageKey: 'robot-x9-edge' },
+  'm6-terra': { name: 'M6 霞陶', subtitle: '地面精细护理', image: robotImages['m6-terra'].src, imageKey: 'robot-m6-terra' },
+  'm6-mini': { name: 'M6 Mini', subtitle: '木地板温柔护理', image: robotImages['m6-mini'].src, imageKey: 'robot-m6-mini' },
 }
 
 const products = computed(() => props.recommendations.flatMap(recommendation => {
   const product = productIndex[recommendation.productId]
-  return product ? [{ ...product, ...recommendation, name: product.name }] : []
+  return product && (recommendation.imageKey === null || recommendation.imageKey === product.imageKey)
+    // The product id is the authoritative key. Never trust a free-form image
+    // URL from a streamed payload, otherwise one bad recommendation can show
+    // another model's image. Bundled assets are immutable and one-to-one.
+    ? [{ ...product, ...recommendation, name: product.name, image: product.image }] : []
 }))
 </script>
 
@@ -25,8 +29,8 @@ const products = computed(() => props.recommendations.flatMap(recommendation => 
   <section v-if="products.length" class="recommendations" aria-label="推荐产品">
     <p>匹配方案</p>
     <div class="recommendations__grid">
-      <button v-for="product in products" :key="product.productId" type="button" class="recommendation-card" @click="emit('select', product.productId)">
-        <img :src="product.image" :alt="product.name" />
+      <button v-for="product in products" :key="product.productId" type="button" class="recommendation-card" :data-image-key="product.imageKey" @click="emit('select', product.productId)">
+        <img :src="product.image" :alt="product.name" loading="lazy" decoding="async" />
         <span><b>{{ product.name }}</b><small>{{ product.price ? `¥${product.price.toLocaleString()}` : product.subtitle }}</small><em>{{ product.highlights?.slice(0, 2).join(' · ') || product.subtitle }}</em><em v-if="product.reason">{{ product.reason }}</em></span>
         <i>查看</i>
       </button>

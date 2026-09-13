@@ -39,6 +39,18 @@ PRODUCTS: tuple[RobotProduct, ...] = (
     RobotProduct("m6-mini", "M6-MINI", "M6 Mini", 1599, ("紧凑机身", "低噪扫拖", "定时任务"), ("40 平方米以内", "单身公寓", "卧室"), "robot-m6-mini"),
 )
 
+# Presentation metadata is kept alongside the curated catalog so a product ID
+# can never accidentally reuse another model's image.  The frontend resolves
+# these stable keys to its bundled assets.
+PRODUCT_COLORS: dict[str, tuple[str, ...]] = {
+    "s8-luna": ("月白", "白色"),
+    "s8-air": ("云白", "白色"),
+    "x9-obsidian": ("曜石黑", "黑色"),
+    "x9-edge": ("岩灰", "灰色"),
+    "m6-terra": ("霞陶橙", "橙色"),
+    "m6-mini": ("鼠尾草绿", "绿色"),
+}
+
 
 class RecommendInput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -56,6 +68,7 @@ def _to_payload(product: RobotProduct, *, score: float | None = None) -> dict[st
     payload = asdict(product)
     payload["highlights"] = list(product.highlights)
     payload["recommended_for"] = list(product.recommended_for)
+    payload["colors"] = list(PRODUCT_COLORS.get(product.product_id, ()))
     if score is not None:
         payload["score"] = score
     return payload
@@ -68,7 +81,15 @@ async def robot_catalog_recommend(arguments: dict[str, Any]) -> dict[str, Any]:
     terms = tuple(token for token in query.replace("，", " ").replace("。", " ").split() if token)
     ranked: list[tuple[float, RobotProduct]] = []
     for product in PRODUCTS:
-        haystack = " ".join((product.model, product.name, *product.highlights, *product.recommended_for)).lower()
+        haystack = " ".join(
+            (
+                product.model,
+                product.name,
+                *product.highlights,
+                *product.recommended_for,
+                *PRODUCT_COLORS.get(product.product_id, ()),
+            )
+        ).lower()
         score = sum(1.0 for term in terms if term in haystack)
         if any(word in query for word in ("宠物", "猫", "狗")) and "宠物家庭" in product.recommended_for:
             score += 2.0
@@ -77,6 +98,12 @@ async def robot_catalog_recommend(arguments: dict[str, Any]) -> dict[str, Any]:
         if any(word in query for word in ("小户型", "公寓", "宿舍")) and ("小户型" in product.recommended_for or "单身公寓" in product.recommended_for):
             score += 2.0
         if "木地板" in query and "木地板" in product.recommended_for:
+            score += 2.0
+        if any(color in query for color in ("白色", "白的", "月白", "云白")) and "白色" in PRODUCT_COLORS.get(product.product_id, ()):
+            score += 2.0
+        if any(color in query for color in ("黑色", "黑的", "曜石黑")) and "黑色" in PRODUCT_COLORS.get(product.product_id, ()):
+            score += 2.0
+        if any(color in query for color in ("灰色", "灰的", "岩灰")) and "灰色" in PRODUCT_COLORS.get(product.product_id, ()):
             score += 2.0
         if request.budget_max is not None and product.price > request.budget_max:
             continue

@@ -26,6 +26,8 @@ export interface ToolView {
 
 export interface ProductRecommendationView {
   productId: string
+  imageKey: string | null
+  imageUrl: string | null
   name: string | null
   price: number | null
   highlights: string[]
@@ -52,11 +54,11 @@ function readProductRecommendation(payload: Record<string, unknown>): ProductRec
   const productId = readText(payload, 'product_id')
   if (!productId) return null
   const highlights = Array.isArray(payload.highlights) ? payload.highlights.filter((item): item is string => typeof item === 'string') : []
-  return { productId, name: readText(payload, 'name'), price: readNumber(payload, 'price'), highlights, reason: readText(payload, 'reason'), score: readNumber(payload, 'score') }
+  return { productId, imageKey: readText(payload, 'image_key'), imageUrl: readText(payload, 'image_url'), name: readText(payload, 'name'), price: readNumber(payload, 'price'), highlights, reason: readText(payload, 'reason'), score: readNumber(payload, 'score') }
 }
 
 export function toProductRecommendationView(item: ProductRecommendation): ProductRecommendationView {
-  return { productId: item.product_id, name: item.name ?? null, price: item.price ?? null, highlights: item.highlights ?? [], reason: item.reason ?? null, score: item.score ?? null }
+  return { productId: item.product_id, imageKey: item.image_key ?? null, imageUrl: null, name: item.name ?? null, price: item.price ?? null, highlights: item.highlights ?? [], reason: item.reason ?? null, score: item.score ?? null }
 }
 
 export const useChatStore = defineStore('chat', {

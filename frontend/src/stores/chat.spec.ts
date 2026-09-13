@@ -92,6 +92,8 @@ describe('chat preview state', () => {
 
     expect(store.productRecommendations).toEqual([{
       productId: 'x9-edge',
+      imageKey: null,
+      imageUrl: null,
       name: null,
       price: null,
       highlights: [],

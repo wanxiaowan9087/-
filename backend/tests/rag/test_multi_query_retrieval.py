@@ -65,3 +65,11 @@ async def test_deterministic_query_rewrite_normalizes_colloquial_terms_without_e
     assert plan.original == "皓月拖布怎么老是湿哒哒的？"
     assert plan.queries == ("皓月拖布怎么持续潮湿的？",)
     assert plan.strategy == "deterministic-query-normalization"
+
+
+@pytest.mark.asyncio
+async def test_deterministic_query_rewrite_expands_color_only_robot_followup() -> None:
+    plan = await DeterministicQueryRewriter().rewrite("我喜欢白色的")
+
+    assert plan.original == "我喜欢白色的"
+    assert plan.queries == ("我喜欢白色的 扫地机器人 型号 推荐",)

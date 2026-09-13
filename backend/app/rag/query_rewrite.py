@@ -65,4 +65,17 @@ def _canonicalize(value: str) -> str:
     canonical = value
     for source, target in _COLLOQUIAL_REPLACEMENTS:
         canonical = canonical.replace(source, target)
+    # A preference-only follow-up such as “我喜欢白色的” relies on the
+    # preceding chat turn for its subject. Add only known catalog terms so
+    # retrieval can find robot products; no model is inferred here.
+    if any(
+        color in canonical
+        for color in (
+            "白色", "白的", "月白", "云白", "黑色", "黑的", "曜石黑",
+            "灰色", "灰的", "岩灰",
+        )
+    ) and not any(
+        marker in canonical for marker in ("机器人", "扫地", "扫拖", "型号", "机型")
+    ):
+        canonical = f"{canonical} 扫地机器人 型号 推荐"
     return _normalize(canonical)[:240]
