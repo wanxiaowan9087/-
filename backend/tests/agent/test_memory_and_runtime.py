@@ -22,7 +22,7 @@ from backend.app.agent.memory import (
     MemoryCoordinator,
 )
 from backend.app.agent.ports import ModelTimeout, ModelUnavailable
-from backend.app.agent.runtime import AgentRuntime, classify_meaningless_input
+from backend.app.agent.runtime import AgentRuntime, answer_identity_intent, classify_meaningless_input
 from backend.app.agent.tooling import CancellationToken
 from backend.app.core.config import Settings
 from backend.app.rag.models import (
@@ -171,6 +171,26 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
             ),
             confidence=confidence,
         )
+
+    def test_role_questions_use_identity_guard_before_retrieval(self) -> None:
+        for question in ("你会什么", "你会干什么", "你能干嘛"):
+            answer = answer_identity_intent(question)
+            self.assertIsNotNone(answer, question)
+            self.assertIn("小智", answer or "")
+            self.assertNotIn("现有资料不足以支持", answer or "")
+
+    async def test_role_question_does_not_enter_retrieval_route(self) -> None:
+        engine = FakeReActEngine()
+        retriever = CountingRetriever(self._retrieval())
+        runtime = AgentRuntime(react_engine=engine, retriever=retriever)
+
+        result = await runtime.execute(self._request("你会什么"))
+
+        self.assertEqual(result.status, RunStatus.COMPLETED)
+        self.assertIn("我是小智", result.public_content)
+        self.assertNotIn("现有资料不足以支持", result.public_content)
+        self.assertEqual(retriever.calls, 0)
+        self.assertEqual(engine.requests, [])
 
     async def test_meaningless_input_is_blocked_before_retrieval_or_model(self) -> None:
         class FailingRetriever:
