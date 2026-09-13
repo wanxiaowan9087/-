@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -74,11 +75,33 @@ def _to_payload(product: RobotProduct, *, score: float | None = None) -> dict[st
     return payload
 
 
+def _query_terms(query: str) -> tuple[str, ...]:
+    """Extract searchable Chinese phrases and model aliases from a query.
+
+    Chinese questions usually have no whitespace (for example,
+    ``S8 皓月适合什么家庭``). Treating the whole sentence as one token made
+    every product score zero and the fallback price sort could then attach the
+    wrong model card. Explicitly matching curated model/scenario vocabulary
+    keeps MCP results aligned with the product ID used by the frontend.
+    """
+    normalized = query.casefold().replace("-", "").replace("_", "")
+    terms: list[str] = [
+        token
+        for token in re.findall(r"[a-z0-9]+|[\u4e00-\u9fff]{2,}", normalized)
+        if token not in {"什么", "哪款", "哪一款", "哪个", "适合", "推荐", "产品", "机器人"}
+    ]
+    for product in PRODUCTS:
+        aliases = (product.product_id, product.model, product.name)
+        if any(alias.casefold().replace("-", "").replace("_", "") in normalized for alias in aliases):
+            terms.extend((product.model.casefold(), product.name.casefold(), product.product_id))
+    return tuple(dict.fromkeys(terms))
+
+
 async def robot_catalog_recommend(arguments: dict[str, Any]) -> dict[str, Any]:
     """Return up to three structured robot recommendations from the curated catalog."""
     request = RecommendInput.model_validate(arguments)
-    query = request.query.lower()
-    terms = tuple(token for token in query.replace("，", " ").replace("。", " ").split() if token)
+    query = request.query.casefold()
+    terms = _query_terms(query)
     ranked: list[tuple[float, RobotProduct]] = []
     for product in PRODUCTS:
         haystack = " ".join(

@@ -562,24 +562,44 @@ textarea:focus-visible {
 }
 
 .workspace--agent .stage {
-  width: min(1020px, 100%);
+  /* The stage is the scrollable work area, not a decorative card. Let it
+     breathe across the complete right-hand workspace and constrain only the
+     readable content below. */
+  width: 100%;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
   scroll-behavior: auto;
-  margin: 34px auto 0;
-  padding: 46px 52px;
-  border: 1px solid rgba(132, 94, 59, .18);
-  background: rgba(255, 251, 244, .72);
-  box-shadow: 0 22px 64px rgba(77, 49, 25, .09);
+  margin: 0;
+  padding: clamp(30px, 4vw, 56px) clamp(24px, 6vw, 96px) 42px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.workspace--agent .thread-head,
+.workspace--agent .thread-rule,
+.workspace--agent .message,
+.workspace--agent .streaming-indicator {
+  width: min(980px, 100%);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.workspace--agent .message { max-width: 980px; }
+.workspace--agent .message.customer {
+  width: min(760px, calc(100% - 48px));
+  max-width: 760px;
 }
 
 .workspace--agent .thread-rule { border-color: #274f4f; }
 .workspace--agent .thread-head h1 { font-family: var(--font-display); font-size: 34px; }
 .workspace--agent .thread-head p:not(.eyebrow) { font-size: 15px; line-height: 1.75; }
 .workspace--agent .trace-link { border-color: rgba(117, 87, 55, .26); background: #fffaf1; color: #294f50; }
-.workspace--agent .composer-wrap { position: relative; padding: 18px 34px 28px; background: linear-gradient(transparent, rgba(246, 239, 227, .94) 26%); }
+.workspace--agent .composer-wrap { position: relative; padding: 18px clamp(24px, 6vw, 96px) 28px; background: linear-gradient(transparent, rgba(246, 239, 227, .94) 26%); }
+.workspace--agent .state-switcher,
+.workspace--agent .composer { width: min(980px, 100%); }
 .workspace--agent .composer { border-color: rgba(106, 76, 47, .3); background: #fffaf1; box-shadow: 0 14px 36px rgba(76, 49, 26, .12); }
 .workspace--agent textarea { height: 74px; padding: 18px; font-size: 15px; }
 .workspace--agent .composer-bar { border-top-color: rgba(122, 90, 59, .2); font-size: 12px; }

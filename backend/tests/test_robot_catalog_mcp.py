@@ -18,3 +18,12 @@ async def test_catalog_mcp_returns_all_six_products_for_inventory_query() -> Non
         "m6-terra",
         "m6-mini",
     }
+
+
+@pytest.mark.asyncio
+async def test_catalog_mcp_keeps_explicit_model_mapping() -> None:
+    products = await recommend_robots("S8 皓月适合什么家庭", limit=3)
+
+    assert products
+    assert products[0].product_id == "s8-luna"
+    assert products[0].image_key == "robot-s8-luna"

@@ -138,7 +138,22 @@ class RuntimeRunExecutor:
             ):
                 yield "status", {"phase": phase, "detail": None}
             result = await self._runtime.execute(request, cancellation=token)
-            for recommendation in _filter_recommendations(recommendations, result.public_content):
+            selected_recommendations = _filter_recommendations(
+                recommendations, result.public_content
+            )
+            # A recommendation answer may be phrased generically (for
+            # example, “按家庭场景选择即可”) even though the MCP lookup has
+            # already produced authoritative candidates. Keep the image cards
+            # attached to those candidates instead of dropping them entirely;
+            # product_id remains the only key the frontend uses for images.
+            if (
+                not selected_recommendations
+                and recommendations
+                and _is_robot_recommendation_intent(execution.input_content)
+                and result.status is RunStatus.COMPLETED
+            ):
+                selected_recommendations = recommendations[:3]
+            for recommendation in selected_recommendations:
                 yield "product_recommendation", _jsonable(recommendation)
             async with self._lock:
                 self._outcomes[execution.run_id] = result
@@ -263,14 +278,43 @@ def _month_bounds(month: str) -> tuple[datetime, datetime]:
 
 
 def _is_robot_recommendation_intent(text: str) -> bool:
-    compact = text.replace(" ", "").lower()
+    compact = re.sub(r"\s+", "", text).casefold()
     robot_subject = any(
         term in compact
         for term in ("机器人", "扫地机", "扫拖机", "扫拖机器人", "型号", "机型")
     )
-    recommendation_request = any(term in compact for term in (
-        "推荐", "建议买", "选购", "买什么", "买哪款", "哪个型号", "什么型号", "适合我",
-    ))
+    # Product-selection questions are often phrased without the word
+    # “机器人” (for example, “我家最适合哪一款”).  Keep this list narrow so
+    # unrelated requests such as “推荐一部电影” still use the normal route.
+    recommendation_request = any(
+        term in compact
+        for term in (
+            "推荐",
+            "建议买",
+            "选购",
+            "买什么",
+            "买哪款",
+            "哪个型号",
+            "什么型号",
+            "适合我",
+            "最适合",
+            "哪一款",
+            "哪款",
+            "哪一个",
+            "哪个更适合",
+            "应该选",
+            "帮我选",
+            "适合什么家庭",
+        )
+    )
+    # A known model name makes an otherwise short suitability question
+    # unambiguous (e.g. “S8 皓月适合什么家庭”).
+    known_model = any(
+        re.sub(r"[\s\-_]", "", alias.casefold()) in compact
+        for aliases in _PRODUCT_ALIASES.values()
+        for alias in aliases
+        if len(re.sub(r"[\s\-_]", "", alias)) >= 3
+    )
     color_followup = any(
         color in compact
         for color in (
@@ -280,4 +324,12 @@ def _is_robot_recommendation_intent(text: str) -> bool:
         marker in compact for marker in ("喜欢", "偏好", "想要", "想选", "颜色")
     )
     inventory_request = is_catalog_inventory_intent(compact)
-    return (robot_subject and recommendation_request) or color_followup or inventory_request
+    return (
+        (robot_subject and recommendation_request)
+        or (known_model and recommendation_request)
+        or (not robot_subject and recommendation_request and any(
+            marker in compact for marker in ("适合", "选择", "选一", "哪一", "哪款", "哪一个")
+        ))
+        or color_followup
+        or inventory_request
+    )
