@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
 
+from backend.app.adapters.llm.fake import FakeReActEngine
 from backend.app.adapters.llm.platform_executor import RuntimeRunExecutor
+from backend.app.adapters.memory.platform_runtime import PlatformMemoryRuntime
 from backend.app.adapters.memory.repository import MemoryPlatformRepository
-from backend.app.agent.report_tools import ReportWorkflow
 from backend.app.agent.contracts import (
     AgentRequest,
     AgentRunResult,
@@ -17,10 +18,17 @@ from backend.app.agent.contracts import (
     StepType,
     TraceStep,
 )
+from backend.app.agent.report_tools import ReportWorkflow
+from backend.app.agent.runtime import AgentRuntime
 from backend.app.agent.tooling import CancellationToken
 from backend.app.application.ports import RunExecution
 from backend.app.application.streaming import RunCoordinator
-from backend.app.rag.models import Citation
+from backend.app.rag.models import Citation, RetrievalResult
+
+
+class EmptyRetriever:
+    async def retrieve(self, query: str) -> RetrievalResult:
+        return RetrievalResult(hits=(), confidence=0.0, strategy="test-empty")
 
 
 class FixedRuntime:
@@ -211,3 +219,107 @@ async def test_report_intent_reaches_runtime_with_bound_subject_and_preflight_da
         "fetch_external_data",
     ]
     assert events[-1][0] == "done"
+
+
+@pytest.mark.asyncio
+async def test_durable_user_memory_is_recalled_across_sessions_for_same_owner() -> None:
+    repository = MemoryPlatformRepository()
+    memory = PlatformMemoryRuntime(repository)
+    runtime = AgentRuntime(
+        react_engine=FakeReActEngine(), retriever=EmptyRetriever(), memory=memory
+    )
+    now = datetime.now(UTC)
+    async with repository.transaction() as tx:
+        introduction_session = await tx.create_session("subject-1", "intro", now)
+        introduction, _, _ = await tx.prepare_chat(
+            owner_id="subject-1",
+            session_id=introduction_session.id,
+            content="我叫小晚，请记住",
+            original_user_message_id=None,
+            session_title=None,
+            now=now,
+        )
+
+    await runtime.execute(
+        AgentRequest(
+            request_id="request-intro",
+            session_id=str(introduction_session.id),
+            subject_id="subject-1",
+            user_message_id=str(introduction.id),
+            user_text=introduction.content,
+        )
+    )
+
+    async with repository.transaction() as tx:
+        recall_session = await tx.create_session("subject-1", "recall", now)
+        recall, _, _ = await tx.prepare_chat(
+            owner_id="subject-1",
+            session_id=recall_session.id,
+            content="我叫什么名字？",
+            original_user_message_id=None,
+            session_title=None,
+            now=now,
+        )
+    result = await runtime.execute(
+        AgentRequest(
+            request_id="request-recall",
+            session_id=str(recall_session.id),
+            subject_id="subject-1",
+            user_message_id=str(recall.id),
+            user_text=recall.content,
+        )
+    )
+
+    assert result.status is RunStatus.COMPLETED
+    assert "小晚" in result.public_content
+    assert result.retrieval_strategy == "memory-context"
+    stored = [item for item in repository.memories.values() if item.owner_id == "subject-1"]
+    assert [(item.memory_type, item.content, item.status) for item in stored] == [
+        ("user_fact", "我的名字是小晚", "active")
+    ]
+
+
+@pytest.mark.asyncio
+async def test_recent_conversation_is_recalled_from_persisted_session_messages() -> None:
+    repository = MemoryPlatformRepository()
+    now = datetime.now(UTC)
+    async with repository.transaction() as tx:
+        session = await tx.create_session("subject-1", "recall", now)
+        _, assistant, _ = await tx.prepare_chat(
+            owner_id="subject-1",
+            session_id=session.id,
+            content="我家的地板主要是木地板",
+            original_user_message_id=None,
+            session_title=None,
+            now=now,
+        )
+        assistant.content = "可以优先选择控水稳定的型号。"
+        assistant.status = "completed"
+        current, _, _ = await tx.prepare_chat(
+            owner_id="subject-1",
+            session_id=session.id,
+            content="刚才我们说了什么？",
+            original_user_message_id=None,
+            session_title=None,
+            now=now + timedelta(seconds=1),
+        )
+
+    result = await AgentRuntime(
+        react_engine=FakeReActEngine(),
+        retriever=EmptyRetriever(),
+        memory=PlatformMemoryRuntime(repository),
+    ).execute(
+        AgentRequest(
+            request_id="request-recall",
+            session_id=str(session.id),
+            subject_id="subject-1",
+            user_message_id=str(current.id),
+            user_text=current.content,
+        )
+    )
+
+    assert result.status is RunStatus.COMPLETED
+    assert "木地板" in result.public_content
+    assert "控水稳定" in result.public_content
+    assert "刚才我们说了什么" not in result.public_content
+    assert result.retrieval_strategy == "memory-context"

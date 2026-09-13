@@ -1,5 +1,19 @@
 import { expect, test } from '@playwright/test'
 
+async function conversationScrollState(page: import('@playwright/test').Page) {
+  return page.evaluate(() => {
+    const stage = document.querySelector<HTMLElement>('#agent-desk')
+    if (!stage) throw new Error('conversation stage is missing')
+    const maximum = Math.max(0, stage.scrollHeight - stage.clientHeight)
+    return {
+      windowY: window.scrollY,
+      stageTop: stage.scrollTop,
+      maximum,
+      atBottom: Math.abs(maximum - stage.scrollTop) <= 2,
+    }
+  })
+}
+
 test('submits a message through the real Docker API stack', async ({ page }) => {
   const phone = `138${String(Date.now()).slice(-8)}`
   const sessionResponse = page.waitForResponse(
@@ -31,7 +45,29 @@ test('submits a message through the real Docker API stack', async ({ page }) => 
   await expect(page.locator('.answer-card')).toContainText(
     'Deterministic test response: verify browser-to-api integration',
   )
+  await expect.poll(async () => (await conversationScrollState(page)).atBottom).toBe(true)
+  expect((await conversationScrollState(page)).windowY).toBe(0)
   const [session, stream] = await Promise.all([sessionResponse, streamResponse])
   expect(session.status()).toBe(201)
   expect(stream.status()).toBe(200)
+
+  // Reloading and re-entering the desk must restore the persisted transcript
+  // and place only the conversation viewport at its latest message.
+  await page.reload()
+  await page.getByRole('button', { name: /小智问答/ }).last().click()
+  await expect(page.getByText('Deterministic test response: verify browser-to-api integration')).toBeVisible()
+  await expect.poll(async () => (await conversationScrollState(page)).atBottom).toBe(true)
+  expect((await conversationScrollState(page)).windowY).toBe(0)
+
+  const secondStreamResponse = page.waitForResponse(
+    response => response.url().endsWith('/api/v1/chat/stream') && response.request().method() === 'POST',
+  )
+  await page.locator('textarea').fill('继续检查第二轮滚动')
+  await page.locator('form.composer .send').click()
+  await expect(page.locator('.answer-card').last()).toContainText(
+    'Deterministic test response: 继续检查第二轮滚动',
+  )
+  expect((await secondStreamResponse).status()).toBe(200)
+  await expect.poll(async () => (await conversationScrollState(page)).atBottom).toBe(true)
+  expect((await conversationScrollState(page)).windowY).toBe(0)
 })

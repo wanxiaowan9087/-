@@ -33,10 +33,7 @@ async def test_platform_memory_runtime_reads_history_and_persists_explicit_prefe
     )
     context = await runtime.build_context(str(session.id), "subject-1")
 
-    assert any(
-        message.content == "I prefer concise answers."
-        for message in context.window
-    )
+    assert any(message.content == "I prefer concise answers." for message in context.window)
     assert len(context.facts) == 1
     assert context.facts[0].memory_type.value == "preference"
     assert context.facts[0].source_message_id == str(user.id)
@@ -73,16 +70,64 @@ async def test_platform_memory_runtime_deactivates_legacy_mis_extracted_name() -
         session = await tx.create_session("subject-1", "memory", now)
         message_id = uuid4()
         repository.messages[message_id] = MessageRecord(
-            message_id, session.id, "subject-1", "user", "completed", "我是小晚", None,
-            None, [], now, now,
+            message_id,
+            session.id,
+            "subject-1",
+            "user",
+            "completed",
+            "我是小晚",
+            None,
+            None,
+            [],
+            now,
+            now,
         )
         await tx.create_memory(
-            "subject-1", memory_type="user_fact", content="我的名字是谁", confidence=0.9,
-            source_message_id=message_id, now=now,
+            "subject-1",
+            memory_type="user_fact",
+            content="我的名字是谁",
+            confidence=0.9,
+            source_message_id=message_id,
+            now=now,
         )
 
     context = await PlatformMemoryRuntime(repository).build_context(str(session.id), "subject-1")
     assert [fact.content for fact in context.facts] == ["我的名字是小晚"]
+
+
+@pytest.mark.asyncio
+async def test_platform_memory_runtime_deactivates_interrogative_name_fact() -> None:
+    repository = MemoryPlatformRepository()
+    now = datetime.now(UTC)
+    async with repository.transaction() as tx:
+        session = await tx.create_session("subject-1", "memory", now)
+        question_id = uuid4()
+        repository.messages[question_id] = MessageRecord(
+            question_id,
+            session.id,
+            "subject-1",
+            "user",
+            "completed",
+            "我叫什么名字？",
+            None,
+            None,
+            [],
+            now,
+            now,
+        )
+        await tx.create_memory(
+            "subject-1",
+            memory_type="user_fact",
+            content="我的名字是什么名字",
+            confidence=0.9,
+            source_message_id=question_id,
+            now=now,
+        )
+
+    context = await PlatformMemoryRuntime(repository).build_context(str(session.id), "subject-1")
+
+    assert context.facts == ()
+    assert next(iter(repository.memories.values())).status == "inactive"
 
 
 @pytest.mark.asyncio
@@ -146,8 +191,7 @@ async def test_platform_memory_runtime_persists_older_turn_summary_and_keeps_las
 
 
 @pytest.mark.asyncio
-async def test_platform_memory_runtime_upserts_preferences_and_ignores_sensitive_facts(
-) -> None:
+async def test_platform_memory_runtime_upserts_preferences_and_ignores_sensitive_facts() -> None:
     repository = MemoryPlatformRepository()
     now = datetime.now(UTC)
     async with repository.transaction() as tx:
@@ -183,9 +227,7 @@ async def test_platform_memory_runtime_upserts_preferences_and_ignores_sensitive
     for message in messages:
         await runtime.extract_best_effort(
             "subject-1",
-            ConversationMessage(
-                str(message.id), message.role, message.content, message.created_at
-            ),
+            ConversationMessage(str(message.id), message.role, message.content, message.created_at),
         )
     context = await runtime.build_context(str(session.id), "subject-1")
     assert [(fact.memory_type.value, fact.content) for fact in context.facts] == [

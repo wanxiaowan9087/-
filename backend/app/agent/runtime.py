@@ -108,10 +108,16 @@ IDENTITY_INTENT_PATTERNS = (
 )
 
 MODEL_IDENTITY_PATTERNS = (
-    "\u4ec0\u4e48\u6a21\u578b", "\u4ec0\u4e48\u5927\u6a21\u578b",
-    "\u4f60\u662f\u6a21\u578b\u5417", "\u4f60\u662f\u4e0d\u662f\u5c0f\u667a",
-    "\u4f60\u662f\u5c0f\u667a\u5417", "qwen", "\u901a\u4e49", "\u5343\u95ee",
-    "\u5e95\u5c42\u6a21\u578b", "\u6a21\u578b\u63d0\u4f9b\u5546",
+    "\u4ec0\u4e48\u6a21\u578b",
+    "\u4ec0\u4e48\u5927\u6a21\u578b",
+    "\u4f60\u662f\u6a21\u578b\u5417",
+    "\u4f60\u662f\u4e0d\u662f\u5c0f\u667a",
+    "\u4f60\u662f\u5c0f\u667a\u5417",
+    "qwen",
+    "\u901a\u4e49",
+    "\u5343\u95ee",
+    "\u5e95\u5c42\u6a21\u578b",
+    "\u6a21\u578b\u63d0\u4f9b\u5546",
 )
 
 PROFILE_INTENT_PATTERNS = (
@@ -131,6 +137,19 @@ PROFILE_INTENT_PATTERNS = (
 )
 USER_NAME_INTENT_PATTERNS = ("我叫什么", "我的名字", "我是谁", "用户是谁")
 USER_NAME_FACT_MARKERS = ("名字", "姓名", "昵称", "称呼", "叫我", "我叫")
+RECENT_HISTORY_INTENT_PATTERNS = (
+    "刚才说了什么",
+    "刚才说什么",
+    "刚才我们说了什么",
+    "刚才我们说什么",
+    "刚才聊了什么",
+    "刚才我们聊了什么",
+    "刚才问了什么",
+    "上一条说了什么",
+    "上一句说了什么",
+    "回顾刚才",
+    "总结刚才",
+)
 USAGE_SUMMARY_INTENT_PATTERNS = (
     "总结我的使用情况",
     "总结我的使用习惯",
@@ -147,9 +166,17 @@ def answer_calendar_intent(user_text: str, *, now: datetime | None = None) -> st
     """Answer explicit current-date questions without sending them to the RAG policy."""
     compact = re.sub(r"\s+", "", user_text)
     asks_today = any(marker in compact for marker in ("今天", "今日", "现在", "当前"))
-    asks_calendar = any(marker in compact for marker in (
-        "星期几", "周几", "礼拜几", "几号", "日期", "几月几日",
-    ))
+    asks_calendar = any(
+        marker in compact
+        for marker in (
+            "星期几",
+            "周几",
+            "礼拜几",
+            "几号",
+            "日期",
+            "几月几日",
+        )
+    )
     if not asks_today or not asks_calendar:
         return None
     current = (now or datetime.now(UTC)).astimezone(_CHINA_TIME_ZONE)
@@ -178,8 +205,7 @@ def answer_profile_intent(user_text: str, context: MemoryContext) -> str | None:
     facts = [fact.content for fact in context.facts]
     if any(pattern in compact for pattern in USER_NAME_INTENT_PATTERNS):
         identity_facts = [
-            fact for fact in facts
-            if any(marker in fact for marker in USER_NAME_FACT_MARKERS)
+            fact for fact in facts if any(marker in fact for marker in USER_NAME_FACT_MARKERS)
         ]
         if not identity_facts:
             return "我目前没有足够的个人资料来确认你的称呼。"
@@ -189,6 +215,55 @@ def answer_profile_intent(user_text: str, context: MemoryContext) -> str | None:
     lines.append("已确认的个人记录：" + ("；".join(facts) if facts else "暂无"))
     lines.append("使用偏好：" + ("；".join(preferences) if preferences else "暂无稳定偏好记录"))
     return "\n".join(lines)
+
+
+def answer_recent_history_intent(user_text: str, context: MemoryContext) -> str | None:
+    """Answer explicit conversation-recall questions from the scoped message window.
+
+    ``prepare_chat`` persists the current user message before the runtime builds
+    context, so the last matching user message must be removed first.  Without
+    this rule, "我刚才说了什么" would simply echo itself instead of recalling
+    the preceding turn.
+    """
+    compact = re.sub(r"\s+", "", user_text)
+    if not any(pattern in compact for pattern in RECENT_HISTORY_INTENT_PATTERNS):
+        return None
+    messages = list(context.window)
+    if (
+        messages
+        and messages[-1].role == "user"
+        and re.sub(r"\s+", "", messages[-1].content) == compact
+    ):
+        messages.pop()
+    messages = [message for message in messages if message.content.strip()]
+    if not messages:
+        if context.summary:
+            return f"当前短期窗口里没有更早的消息。较早的会话摘要是：{context.summary}"
+        return "当前会话里还没有可以回顾的上一条内容。"
+
+    if "我刚才" in compact or "我上一" in compact:
+        previous = next((item for item in reversed(messages) if item.role == "user"), None)
+        if previous is None:
+            return "当前会话里还没有可以回顾的上一条用户消息。"
+        return f"你刚才说的是：“{previous.content.strip()}”"
+    if "你刚才" in compact or "你上一" in compact:
+        previous = next((item for item in reversed(messages) if item.role == "assistant"), None)
+        if previous is None:
+            return "当前会话里还没有可以回顾的小智上一条回答。"
+        return f"小智刚才回答的是：“{previous.content.strip()}”"
+
+    recent = messages[-4:]
+    lines = [
+        f"{('你' if item.role == 'user' else '小智')}：{item.content.strip()}" for item in recent
+    ]
+    return "刚才的对话是：\n" + "\n".join(lines)
+
+
+def answer_memory_intent(user_text: str, context: MemoryContext) -> str | None:
+    """Single memory-routing entry: short-term recall, then durable user facts."""
+    return answer_recent_history_intent(user_text, context) or answer_profile_intent(
+        user_text, context
+    )
 
 
 def answer_identity_intent(user_text: str) -> str | None:
@@ -364,11 +439,17 @@ class AgentRuntime:
                 if memory_context.window or memory_context.summary:
                     message = "我还在当前会话中。请补充完整问题，或继续上一个问题的具体细节。"
                 return AgentRunResult(
-                    run_id=run_id, status=state.status, public_content=message,
-                    candidate_content=None, citations=(), trace=trace.snapshot(),
-                    confidence=1.0, confidence_threshold=self._config.confidence_threshold,
+                    run_id=run_id,
+                    status=state.status,
+                    public_content=message,
+                    candidate_content=None,
+                    citations=(),
+                    trace=trace.snapshot(),
+                    confidence=1.0,
+                    confidence_threshold=self._config.confidence_threshold,
                     degraded_dependencies=tuple(dict.fromkeys(degraded)),
-                    model_name="deterministic-input-guard", retrieval_strategy="input-guard",
+                    model_name="deterministic-input-guard",
+                    retrieval_strategy="input-guard",
                 )
             if request.report_tool_executions:
                 self._record_tool_executions(trace, request.report_tool_executions)
@@ -379,7 +460,7 @@ class AgentRuntime:
             route = await route_memory_then_knowledge(
                 request.user_text,
                 memory_context,
-                answer_memory=answer_profile_intent,
+                answer_memory=answer_memory_intent,
                 retrieve=lambda query: self._retrieve(query, trace, degraded),
             )
             profile_answer = route.get("memory_answer")
@@ -387,12 +468,18 @@ class AgentRuntime:
                 state.transition(RunStatus.COMPLETED)
                 memory_warning = await self._extract_memory(request)
                 return AgentRunResult(
-                    run_id=run_id, status=state.status, public_content=profile_answer,
-                    candidate_content=None, citations=(), trace=trace.snapshot(),
-                    confidence=1.0, confidence_threshold=self._config.confidence_threshold,
+                    run_id=run_id,
+                    status=state.status,
+                    public_content=profile_answer,
+                    candidate_content=None,
+                    citations=(),
+                    trace=trace.snapshot(),
+                    confidence=1.0,
+                    confidence_threshold=self._config.confidence_threshold,
                     degraded_dependencies=tuple(dict.fromkeys(degraded)),
                     memory_warning=memory_warning,
-                    model_name="deterministic-user-context", retrieval_strategy="memory-context",
+                    model_name="deterministic-user-context",
+                    retrieval_strategy="memory-context",
                 )
             token.checkpoint()
             retrieval = route.get("retrieval")
@@ -402,18 +489,10 @@ class AgentRuntime:
                 retrieval = _with_report_evidence(retrieval, request)
             token.checkpoint()
 
-            user_injection = self._detector.scan(
-                request.user_text, source="user"
-            )
-            retrieved_injection = scan_retrieved_content(
-                retrieval.hits, self._detector
-            )
-            high_risk, sensitive_claim, warranty_claim = classify_user_risk(
-                request.user_text
-            )
-            missing_required_fields = required_fields_missing(
-                request.user_text
-            )
+            user_injection = self._detector.scan(request.user_text, source="user")
+            retrieved_injection = scan_retrieved_content(retrieval.hits, self._detector)
+            high_risk, sensitive_claim, warranty_claim = classify_user_risk(request.user_text)
+            missing_required_fields = required_fields_missing(request.user_text)
             preliminary_citations = self._citations.build(
                 retrieval.hits, limit=self._config.citation_limit
             )
@@ -425,26 +504,20 @@ class AgentRuntime:
                 PolicyInput(
                     confidence=retrieval.confidence,
                     has_evidence=retrieval.has_evidence,
-                    citations_valid=(
-                        bool(preliminary_citations)
-                        and preliminary_validation.valid
-                    ),
+                    citations_valid=(bool(preliminary_citations) and preliminary_validation.valid),
                     high_risk=high_risk,
                     safety_or_repair_claim=sensitive_claim,
                     warranty_claim=warranty_claim,
                     missing_required_fields=missing_required_fields,
                     conflicting_sources=retrieval.conflicting_sources,
-                    prompt_injection=bool(
-                        user_injection or retrieved_injection
-                    ),
+                    prompt_injection=bool(user_injection or retrieved_injection),
                     user_requested_human=request.user_requested_human,
                 )
             )
             if preliminary_decision.action is not PolicyAction.PUBLISH:
                 candidate = (
                     "检测到需要人工确认的请求，未生成可发布结论。"
-                    if preliminary_decision.action
-                    is PolicyAction.WITHHOLD_FOR_REVIEW
+                    if preliminary_decision.action is PolicyAction.WITHHOLD_FOR_REVIEW
                     else ""
                 )
                 return await self._finalize_without_model(
@@ -468,9 +541,7 @@ class AgentRuntime:
                         run_id=run_id,
                         mode=request.mode,
                         user_text=request.user_text,
-                        rendered_context=render_untrusted_context(
-                            retrieval.hits
-                        ),
+                        rendered_context=render_untrusted_context(retrieval.hits),
                         short_term_messages=memory_context.window,
                         conversation_summary=memory_context.summary,
                         long_term_facts=memory_context.facts,
@@ -528,12 +599,8 @@ class AgentRuntime:
                 selected_chunk_ids=draft.cited_chunk_ids,
                 limit=self._config.citation_limit,
             )
-            validation = self._citations.validate(
-                citations, [hit.chunk for hit in retrieval.hits]
-            )
-            policy_step = trace.start(
-                StepType.POLICY, "checking deterministic release policy"
-            )
+            validation = self._citations.validate(citations, [hit.chunk for hit in retrieval.hits])
+            policy_step = trace.start(StepType.POLICY, "checking deterministic release policy")
             final_decision = self._policy.decide(
                 PolicyInput(
                     confidence=retrieval.confidence,
@@ -549,9 +616,7 @@ class AgentRuntime:
                     tool_executions=draft.tool_executions,
                 )
             )
-            release = self._draft_gate.release(
-                draft.content, final_decision
-            )
+            release = self._draft_gate.release(draft.content, final_decision)
             if final_decision.action is PolicyAction.WITHHOLD_FOR_REVIEW:
                 state.transition(RunStatus.NEEDS_REVIEW)
                 trace.finish(
@@ -581,11 +646,7 @@ class AgentRuntime:
                 review_reasons=final_decision.reasons,
                 degraded_dependencies=tuple(dict.fromkeys(degraded)),
                 memory_warning=memory_warning,
-                error_code=(
-                    ErrorCode.REVIEW_REQUIRED
-                    if release.withheld
-                    else None
-                ),
+                error_code=(ErrorCode.REVIEW_REQUIRED if release.withheld else None),
                 model_name=draft.model_name,
                 retrieval_strategy=retrieval.strategy,
                 review_id=review_id,
@@ -624,7 +685,7 @@ class AgentRuntime:
                 error_code=ErrorCode.INTERNAL_ERROR,
             )
         finally:
-            if 'context_token' in locals():
+            if "context_token" in locals():
                 reset_request_context(context_token)
 
     async def _prepare_memory(
@@ -633,13 +694,9 @@ class AgentRuntime:
         trace: TraceRecorder,
         degraded: list[str],
     ) -> MemoryContext:
-        step = trace.start(
-            StepType.CONTEXT, "preparing window, summary, and sourced facts"
-        )
+        step = trace.start(StepType.CONTEXT, "preparing window, summary, and sourced facts")
         try:
-            context = await self._memory.build_context(
-                request.session_id, request.subject_id
-            )
+            context = await self._memory.build_context(request.session_id, request.subject_id)
             trace.finish(
                 step,
                 StepStatus.SUCCEEDED,
@@ -714,9 +771,7 @@ class AgentRuntime:
         citations: Sequence[Citation],
         degraded: list[str],
     ) -> AgentRunResult:
-        step = trace.start(
-            StepType.POLICY, "applying deterministic pre-generation policy"
-        )
+        step = trace.start(StepType.POLICY, "applying deterministic pre-generation policy")
         release = self._draft_gate.release(candidate, decision)
         if decision.action is PolicyAction.WITHHOLD_FOR_REVIEW:
             state.transition(RunStatus.NEEDS_REVIEW)
@@ -747,9 +802,7 @@ class AgentRuntime:
             review_reasons=decision.reasons,
             degraded_dependencies=tuple(dict.fromkeys(degraded)),
             memory_warning=memory_warning,
-            error_code=(
-                ErrorCode.REVIEW_REQUIRED if release.withheld else None
-            ),
+            error_code=(ErrorCode.REVIEW_REQUIRED if release.withheld else None),
             retrieval_strategy=retrieval.strategy,
             review_id=review_id,
         )
@@ -773,14 +826,10 @@ class AgentRuntime:
             # answer into an internal failure.
             return "memory_extraction_degraded"
 
-    def _record_tool_steps(
-        self, trace: TraceRecorder, draft: ModelDraft
-    ) -> None:
+    def _record_tool_steps(self, trace: TraceRecorder, draft: ModelDraft) -> None:
         self._record_tool_executions(trace, draft.tool_executions)
 
-    def _record_tool_executions(
-        self, trace: TraceRecorder, executions: Sequence[object]
-    ) -> None:
+    def _record_tool_executions(self, trace: TraceRecorder, executions: Sequence[object]) -> None:
         for execution in executions:
             step = trace.start(
                 StepType.TOOL,
@@ -830,16 +879,10 @@ class AgentRuntime:
         )
 
 
-def _with_report_evidence(
-    retrieval: RetrievalResult, request: AgentRequest
-) -> RetrievalResult:
+def _with_report_evidence(retrieval: RetrievalResult, request: AgentRequest) -> RetrievalResult:
     """Treat a completed report preflight as grounded, traceable evidence."""
     document_id = str(uuid5(NAMESPACE_URL, "agent://external-usage-records"))
-    month = (
-        request.report_scope.start_at.strftime("%Y-%m")
-        if request.report_scope
-        else "unknown"
-    )
+    month = request.report_scope.start_at.strftime("%Y-%m") if request.report_scope else "unknown"
     chunk = Chunk(
         document_id=document_id,
         document_version=month,

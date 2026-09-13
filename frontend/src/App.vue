@@ -145,16 +145,10 @@ function observeReveals() {
   })
 }
 
-function conversationIsNearBottom(): boolean {
-  const stage = document.querySelector<HTMLElement>('#agent-desk')
-  if (!stage) return true
-  return stage.scrollHeight - stage.scrollTop - stage.clientHeight <= 96
-}
-
-async function scrollConversationToEnd(force = false) {
+async function scrollConversationToEnd() {
   await nextTick()
   const stage = document.querySelector<HTMLElement>('#agent-desk')
-  if (!stage || (!force && !conversationIsNearBottom())) return
+  if (!stage) return
   // Scroll only the conversation viewport.  Updating scrollTop directly is
   // deliberate: repeatedly starting smooth animations for every SSE delta
   // causes the visible “page shake” reported by users.
@@ -192,7 +186,7 @@ async function recoverPersistedChat(sessionId: string, question: string): Promis
     chat.sessionId = sessionId
     submittedQuestion.value = ''
     draft.value = ''
-    void scrollConversationToEnd(true)
+    void scrollConversationToEnd()
     return true
   } catch {
     return false
@@ -515,7 +509,7 @@ async function refreshConversationState() {
       await refreshSessionMessages(latest.id)
       if (loadVersion === conversationLoadVersion) {
         chat.setPreviewState(historicalMessages.value.length ? 'ready' : 'empty')
-        if (historicalMessages.value.length) await scrollConversationToEnd(true)
+        if (historicalMessages.value.length) await scrollConversationToEnd()
       }
     }
   } catch (error) {
@@ -553,6 +547,7 @@ function replaceStreamWithPersistedTranscript(sessionId: string) {
   chat.$reset()
   chat.sessionId = sessionId
   submittedQuestion.value = ''
+  scheduleConversationScroll()
 }
 
 async function openSession(sessionId: string) {
@@ -570,7 +565,7 @@ async function openSession(sessionId: string) {
     if (chat.sessionId !== sessionId) return
     chat.setPreviewState(historicalMessages.value.length ? 'ready' : 'empty')
     chat.closeNav()
-    if (historicalMessages.value.length) await scrollConversationToEnd(true)
+    if (historicalMessages.value.length) await scrollConversationToEnd()
   } catch (error) {
     historyError.value = error instanceof Error ? error.message : '会话消息加载失败'
     chat.setPreviewState('error')
@@ -586,7 +581,6 @@ function openAgentDesk() {
   chat.closeNav()
   void refreshConversationState()
   void nextTick(() => observeReveals())
-  globalThis.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 function openAdminDesk() {
@@ -715,6 +709,10 @@ async function executeChat(request: ChatRequest, question: string) {
   try {
     chat.beginRun(request.session_id)
     submittedQuestion.value = question
+    // A submitted turn always becomes the user's current reading position.
+    // Keep all subsequent stream updates pinned inside the conversation pane;
+    // never move the document viewport itself.
+    scheduleConversationScroll()
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
         await api.streamChat(request, {
@@ -722,9 +720,10 @@ async function executeChat(request: ChatRequest, question: string) {
           lastEventId: chat.lastEventId ?? undefined,
           signal: controller.signal,
           onEvent: event => {
-            const followStream = event.event_type === 'delta' && conversationIsNearBottom()
             chat.receiveStreamEvent(event)
-            if (followStream) scheduleConversationScroll()
+            if (event.event_type === 'delta' || event.event_type === 'done') {
+              scheduleConversationScroll()
+            }
           },
         })
         break
@@ -742,6 +741,7 @@ async function executeChat(request: ChatRequest, question: string) {
     sessions.value = sessionPage.items
     memories.value = memoryPage.items
     replaceStreamWithPersistedTranscript(request.session_id)
+    scheduleConversationScroll()
   } catch (error) {
     if (!controller.signal.aborted) {
       if (error instanceof ApiClientError && error.status === 401) {
@@ -1037,7 +1037,7 @@ async function confirmCancelActiveRun() {
 </script>
 
 <template>
-  <div class="app-shell" :class="{ 'nav-open': chat.navOpen }">
+  <div class="app-shell" :class="{ 'nav-open': chat.navOpen, 'app-shell--agent': currentView === 'agent' }">
     <aside class="sidebar" :class="{ 'sidebar--showcase': currentView === 'showcase' }" :aria-label="currentView === 'showcase' ? '产品导航' : '会话导航'">
       <template v-if="currentView === 'showcase'">
         <div class="showcase-brand"><span class="showcase-brand__mark">Z</span><div><b>ZENMOP</b><small>SMART HOME CARE</small></div></div>

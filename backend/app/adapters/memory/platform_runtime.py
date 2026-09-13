@@ -80,9 +80,7 @@ class PlatformMemoryRuntime:
                 )
                 eligible = _messages_before(pending, first_window)[: self._summary_batch_messages]
                 if eligible:
-                    summary = _append_summary(
-                        summary, eligible, max_chars=self._summary_max_chars
-                    )
+                    summary = _append_summary(summary, eligible, max_chars=self._summary_max_chars)
                     last = eligible[-1]
                     assert last.created_at is not None
                     await tx.update_session_memory_summary(
@@ -173,9 +171,7 @@ class PlatformMemoryRuntime:
         """User-context tool adapter; keeps repository access behind this port."""
         return await self.build_context(session_id, subject_id)
 
-    async def extract_best_effort(
-        self, subject_id: str, source: ConversationMessage
-    ) -> str | None:
+    async def extract_best_effort(self, subject_id: str, source: ConversationMessage) -> str | None:
         extracted = _explicit_memory(source.content)
         if extracted is None:
             return None
@@ -202,9 +198,7 @@ class PlatformMemoryRuntime:
         return None
 
 
-def _messages_before(
-    messages: list[MessageRecord], boundary: MessageRecord
-) -> list[MessageRecord]:
+def _messages_before(messages: list[MessageRecord], boundary: MessageRecord) -> list[MessageRecord]:
     if boundary.created_at is None:
         return []
     return [
@@ -212,8 +206,7 @@ def _messages_before(
         for message in messages
         if message.content
         and message.created_at is not None
-        and (message.created_at, message.id.int)
-        < (boundary.created_at, boundary.id.int)
+        and (message.created_at, message.id.int) < (boundary.created_at, boundary.id.int)
     ]
 
 
@@ -238,8 +231,13 @@ def _explicit_memory(content: str) -> tuple[MemoryType, str] | None:
     if any(marker in lowered for marker in sensitive_markers):
         return None
     preference_markers = (
-        "\u6211\u504f\u597d", "\u6211\u559c\u6b22", "\u8bf7\u7528", "\u8bf7\u4e0d\u8981",
-        "i prefer", "please use", "please do not",
+        "\u6211\u504f\u597d",
+        "\u6211\u559c\u6b22",
+        "\u8bf7\u7528",
+        "\u8bf7\u4e0d\u8981",
+        "i prefer",
+        "please use",
+        "please do not",
     )
     if lowered.startswith(preference_markers):
         return MemoryType.PREFERENCE, normalized
@@ -258,10 +256,32 @@ def _explicit_memory(content: str) -> tuple[MemoryType, str] | None:
     if name_match:
         candidate = name_match.group(1).strip("·-_")
         excluded = {
-            "小智", "客服", "助手", "模型", "机器人", "用户", "一个", "学生",
-            "谁", "什么", "哪位", "谁呀", "谁是",
+            "小智",
+            "客服",
+            "助手",
+            "模型",
+            "机器人",
+            "用户",
+            "一个",
+            "学生",
+            "谁",
+            "什么",
+            "哪位",
+            "谁呀",
+            "谁是",
         }
-        excluded_terms = ("智能", "客服", "助手", "模型", "机器人")
+        excluded_terms = (
+            "智能",
+            "客服",
+            "助手",
+            "模型",
+            "机器人",
+            "什么",
+            "谁",
+            "哪位",
+            "哪个",
+            "啥",
+        )
         if (
             candidate
             and candidate not in excluded
@@ -285,7 +305,10 @@ def _explicit_memory(content: str) -> tuple[MemoryType, str] | None:
 def _is_valid_persisted_memory(content: str) -> bool:
     """Reject facts created by older buggy extractors without deleting data."""
     compact = re.sub(r"\s+", "", content).casefold()
-    return compact not in {"我的名字是谁", "我的名字是什么", "我的名字是哪位"}
+    return not (
+        compact in {"我的名字是谁", "我的名字是什么", "我的名字是哪位"}
+        or re.match(r"^我的名字是(?:什么|谁|哪位|哪个|啥)", compact)
+    )
 
 
 async def _backfill_explicit_memories(
@@ -297,11 +320,7 @@ async def _backfill_explicit_memories(
     """Persist only explicit, safe facts found in the recent message window."""
     # ``existing`` is intentionally typed structurally to support both SQL and
     # in-memory repository records without leaking adapter details here.
-    known = {
-        _canonical_memory(memory.content)
-        for memory in existing
-        if memory.status == "active"
-    }
+    known = {_canonical_memory(memory.content) for memory in existing if memory.status == "active"}
     for memory in existing:
         if memory.status == "active" and not _is_valid_persisted_memory(memory.content):
             memory_id = getattr(memory, "id", None)
