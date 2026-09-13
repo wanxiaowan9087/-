@@ -413,6 +413,61 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result.citations)
         self.assertEqual(len(result.trace), 4)
 
+    async def test_polished_evidence_is_passed_to_react_as_internal_context(self) -> None:
+        engine = FakeReActEngine(
+            {
+                "尘盒怎么清理？": ModelDraft(
+                    content="建议按资料中的步骤清理尘盒。",
+                    model_name="fixed",
+                )
+            }
+        )
+        calls: list[str] = []
+
+        async def polish(query: str, retrieval: RetrievalResult) -> str:
+            calls.append(query)
+            self.assertTrue(retrieval.has_evidence)
+            return "1. 清扫后检查尘盒。\n2. 及时清空。"
+
+        runtime = AgentRuntime(
+            react_engine=engine,
+            retriever=StubRetriever(self._retrieval()),
+            evidence_polisher=polish,
+        )
+        result = await runtime.execute(self._request("尘盒怎么清理？"))
+
+        self.assertEqual(result.status, RunStatus.COMPLETED)
+        self.assertEqual(calls, ["尘盒怎么清理？"])
+        self.assertIn("千问整理的事实摘要", engine.requests[0].rendered_context)
+        self.assertIn("1. 清扫后检查尘盒", engine.requests[0].rendered_context)
+        # Raw evidence is retained so citations and release checks still use
+        # the original retrieved chunks rather than the generated summary.
+        self.assertIn("建议每次清扫后检查尘盒并及时清空", engine.requests[0].rendered_context)
+
+    async def test_polish_failure_keeps_raw_evidence_for_react(self) -> None:
+        engine = FakeReActEngine(
+            {
+                "尘盒怎么清理？": ModelDraft(
+                    content="建议按资料中的步骤清理尘盒。",
+                    model_name="fixed",
+                )
+            }
+        )
+
+        async def polish(_query: str, _retrieval: RetrievalResult) -> str:
+            raise RuntimeError("provider unavailable")
+
+        runtime = AgentRuntime(
+            react_engine=engine,
+            retriever=StubRetriever(self._retrieval()),
+            evidence_polisher=polish,
+        )
+        result = await runtime.execute(self._request("尘盒怎么清理？"))
+
+        self.assertEqual(result.status, RunStatus.COMPLETED)
+        self.assertNotIn("千问整理的事实摘要", engine.requests[0].rendered_context)
+        self.assertIn("建议每次清扫后检查尘盒并及时清空", engine.requests[0].rendered_context)
+
     async def test_model_output_does_not_publish_local_source_paths(self) -> None:
         engine = FakeReActEngine(
             {

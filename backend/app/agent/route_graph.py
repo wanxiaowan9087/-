@@ -9,6 +9,7 @@ service.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable
 from typing import Any, Literal, TypedDict, cast
 
@@ -17,7 +18,9 @@ from .contracts import MemoryContext
 
 MemoryAnswer = Callable[[str, MemoryContext], str | None]
 Retriever = Callable[[str], Awaitable[RetrievalResult]]
+EvidencePolisher = Callable[[str, RetrievalResult], Awaitable[str]]
 RouteName = Literal["memory", "knowledge", "insufficient"]
+logger = logging.getLogger(__name__)
 
 
 class RouteState(TypedDict, total=False):
@@ -25,15 +28,39 @@ class RouteState(TypedDict, total=False):
     memory_context: MemoryContext
     memory_answer: str | None
     retrieval: RetrievalResult | None
+    polished_context: str | None
     route: RouteName
 
 
 class MemoryKnowledgeRoute:
     """Compile and invoke the memory -> knowledge -> evidence graph."""
 
-    def __init__(self, *, answer_memory: MemoryAnswer, retrieve: Retriever) -> None:
+    def __init__(
+        self,
+        *,
+        answer_memory: MemoryAnswer,
+        retrieve: Retriever,
+        polish: EvidencePolisher | None = None,
+    ) -> None:
         self._answer_memory = answer_memory
         self._retrieve = retrieve
+        self._polish = polish
+
+    async def _try_polish(
+        self, user_text: str, retrieval: RetrievalResult
+    ) -> str | None:
+        if self._polish is None:
+            return None
+        try:
+            polished = (await self._polish(user_text, retrieval)).strip()
+        except Exception:
+            logger.warning(
+                "evidence polish degraded; retaining raw retrieval",
+                exc_info=True,
+                extra={"component": "evidence-polisher"},
+            )
+            return None
+        return polished or None
 
     async def invoke(self, user_text: str, memory_context: MemoryContext) -> RouteState:
         try:
@@ -49,14 +76,21 @@ class MemoryKnowledgeRoute:
                     "memory_context": memory_context,
                     "memory_answer": answer,
                     "retrieval": None,
+                    "polished_context": None,
                     "route": "memory",
                 }
             retrieval = await self._retrieve(user_text)
+            polished = (
+                await self._try_polish(user_text, retrieval)
+                if retrieval.has_evidence
+                else None
+            )
             return {
                 "user_text": user_text,
                 "memory_context": memory_context,
                 "memory_answer": None,
                 "retrieval": retrieval,
+                "polished_context": polished,
                 "route": "knowledge" if retrieval.has_evidence else "insufficient",
             }
 
@@ -72,6 +106,12 @@ class MemoryKnowledgeRoute:
 
         async def knowledge_node(_: RouteState) -> RouteState:
             return {"retrieval": await self._retrieve(user_text)}
+
+        async def polish_node(state: RouteState) -> RouteState:
+            retrieval = state.get("retrieval")
+            if retrieval is None or not retrieval.has_evidence:
+                return {"polished_context": None}
+            return {"polished_context": await self._try_polish(user_text, retrieval)}
 
         def evidence_gate_node(state: RouteState) -> RouteState:
             retrieval = state.get("retrieval")
@@ -96,6 +136,7 @@ class MemoryKnowledgeRoute:
         graph.add_node("memory_intent", memory_intent_node)
         graph.add_node("knowledge_retrieval", knowledge_node)
         graph.add_node("evidence_gate", evidence_gate_node)
+        graph.add_node("evidence_polish", polish_node)
         graph.add_edge(START, "memory_context")
         graph.add_edge("memory_context", "memory_intent")
         graph.add_conditional_edges(
@@ -107,8 +148,9 @@ class MemoryKnowledgeRoute:
         graph.add_conditional_edges(
             "evidence_gate",
             route_after_evidence,
-            {"knowledge": END, "insufficient": END},
+            {"knowledge": "evidence_polish", "insufficient": END},
         )
+        graph.add_edge("evidence_polish", END)
         result = await graph.compile().ainvoke(
             {"user_text": user_text, "memory_context": memory_context}
         )
@@ -121,9 +163,10 @@ async def route_memory_then_knowledge(
     *,
     answer_memory: MemoryAnswer,
     retrieve: Retriever,
+    polish: EvidencePolisher | None = None,
 ) -> RouteState:
     """Convenience entry point used by ``AgentRuntime`` and tests."""
 
-    return await MemoryKnowledgeRoute(answer_memory=answer_memory, retrieve=retrieve).invoke(
-        user_text, memory_context
-    )
+    return await MemoryKnowledgeRoute(
+        answer_memory=answer_memory, retrieve=retrieve, polish=polish
+    ).invoke(user_text, memory_context)

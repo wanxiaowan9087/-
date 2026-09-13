@@ -40,7 +40,7 @@ from .customer_tools import (
 )
 from .memory import NullMemoryCoordinator
 from .ports import ModelTimeout, ModelUnavailable, ReActEnginePort
-from .route_graph import route_memory_then_knowledge
+from .route_graph import EvidencePolisher, route_memory_then_knowledge
 from .safety import (
     DeterministicReviewPolicy,
     DraftGate,
@@ -69,6 +69,9 @@ _DOCUMENT_VERSION = re.compile(
     r"(?:文档\s*)?(?:版本|version)\s*[:：]\s*`?[A-Za-z0-9._-]+`?",
     flags=re.IGNORECASE,
 )
+_INTERNAL_MODEL_REFERENCE = re.compile(
+    r"(?i)(?:通义千问|千问|qwen|langgraph|react(?:\s*engine)?|agent(?:\s*runtime|\s*engine)?)"
+)
 
 
 def redact_local_source_paths(content: str) -> str:
@@ -82,6 +85,11 @@ def redact_local_source_paths(content: str) -> str:
     return re.sub(r"[ \t]{2,}", " ", redacted).strip()
 
 
+def redact_internal_model_references(content: str) -> str:
+    """Prevent provider/framework names from leaking into public replies."""
+    return _INTERNAL_MODEL_REFERENCE.sub("小智", content)
+
+
 def format_user_visible_answer(content: str) -> str:
     """Normalize compact model lists so each recommendation remains scannable."""
     formatted = re.sub(
@@ -93,6 +101,17 @@ def format_user_visible_answer(content: str) -> str:
     formatted = re.sub(r"(?<=[。！？!?])(?=[^\n])", "\n\n", formatted)
     formatted = re.sub(r"\n{3,}", "\n\n", formatted)
     return re.sub(r"[ \t]{2,}", " ", formatted).strip()
+
+
+def _humanize_recalled_message(content: str) -> str:
+    """Remove internal speaker labels before quoting an older turn."""
+    cleaned = redact_internal_model_references(redact_local_source_paths(content))
+    cleaned = re.sub(
+        r"(?im)^\s*(?:你|小智|assistant|assistant_message|agent)\s*[:：]\s*",
+        "",
+        cleaned,
+    )
+    return format_user_visible_answer(cleaned)[:2000]
 
 
 IDENTITY_INTENT_PATTERNS = (
@@ -209,11 +228,14 @@ def answer_profile_intent(user_text: str, context: MemoryContext) -> str | None:
         ]
         if not identity_facts:
             return "我目前没有足够的个人资料来确认你的称呼。"
-        return "已确认的称呼记录：" + "；".join(identity_facts)
+        return "记得，你的名字是" + "、".join(
+            re.sub(r"^(?:我的)?(?:名字|姓名|昵称|称呼)是", "", fact).strip()
+            for fact in identity_facts
+        ) + "。"
     preferences = [fact for fact in facts if "偏好" in fact or "喜欢" in fact or "请用" in fact]
     lines = [f"会话摘要：{context.summary}" if context.summary else "会话摘要：暂无已生成摘要。"]
-    lines.append("已确认的个人记录：" + ("；".join(facts) if facts else "暂无"))
-    lines.append("使用偏好：" + ("；".join(preferences) if preferences else "暂无稳定偏好记录"))
+    lines.append("我记得的相关信息：" + ("；".join(facts) if facts else "暂时没有"))
+    lines.append("你的使用偏好：" + ("；".join(preferences) if preferences else "暂时没有稳定记录"))
     return "\n".join(lines)
 
 
@@ -245,18 +267,26 @@ def answer_recent_history_intent(user_text: str, context: MemoryContext) -> str 
         previous = next((item for item in reversed(messages) if item.role == "user"), None)
         if previous is None:
             return "当前会话里还没有可以回顾的上一条用户消息。"
-        return f"你刚才说的是：“{previous.content.strip()}”"
+        return f"你刚才说的是：“{_humanize_recalled_message(previous.content)}”"
     if "你刚才" in compact or "你上一" in compact:
         previous = next((item for item in reversed(messages) if item.role == "assistant"), None)
         if previous is None:
             return "当前会话里还没有可以回顾的小智上一条回答。"
-        return f"小智刚才回答的是：“{previous.content.strip()}”"
+        return f"小智刚才回答的是：“{_humanize_recalled_message(previous.content)}”"
 
     recent = messages[-4:]
-    lines = [
-        f"{('你' if item.role == 'user' else '小智')}：{item.content.strip()}" for item in recent
-    ]
-    return "刚才的对话是：\n" + "\n".join(lines)
+    user_turn = next((item for item in reversed(recent) if item.role == "user"), None)
+    assistant_turn = next((item for item in reversed(recent) if item.role == "assistant"), None)
+    if user_turn and assistant_turn:
+        return (
+            f"刚才你提到：“{_humanize_recalled_message(user_turn.content)}”。"
+            f"小智当时回复：“{_humanize_recalled_message(assistant_turn.content)}”"
+        )
+    if user_turn:
+        return f"刚才你提到：“{_humanize_recalled_message(user_turn.content)}”"
+    if assistant_turn:
+        return f"小智刚才回复：“{_humanize_recalled_message(assistant_turn.content)}”"
+    return "当前会话里还没有可以回顾的内容。"
 
 
 def answer_memory_intent(user_text: str, context: MemoryContext) -> str | None:
@@ -276,7 +306,7 @@ def answer_identity_intent(user_text: str) -> str | None:
     if not any(pattern in compact for pattern in IDENTITY_INTENT_PATTERNS):
         return None
     return (
-        "我是小智智能客服，一个面向扫地/扫拖机器人场景的受控知识库 Agent。"
+        "我是小智智能客服，专门处理扫地和扫拖机器人相关问题。"
         "我会优先基于已接入的产品资料回答选购、使用、维护和故障排查问题；"
         "如果资料不足，我会说明无法确认，避免编造。资料更新请联系管理员处理。"
     )
@@ -321,6 +351,7 @@ class AgentRuntime:
         injection_detector: PromptInjectionDetector | None = None,
         draft_gate: DraftGate | None = None,
         config: RuntimeConfig = RuntimeConfig(),
+        evidence_polisher: EvidencePolisher | None = None,
     ) -> None:
         self._react_engine = react_engine
         self._retriever = retriever
@@ -333,6 +364,7 @@ class AgentRuntime:
         self._detector = injection_detector or PromptInjectionDetector()
         self._draft_gate = draft_gate or DraftGate()
         self._config = config
+        self._evidence_polisher = evidence_polisher
 
     async def execute(
         self,
@@ -462,6 +494,7 @@ class AgentRuntime:
                 memory_context,
                 answer_memory=answer_memory_intent,
                 retrieve=lambda query: self._retrieve(query, trace, degraded),
+                polish=self._evidence_polisher,
             )
             profile_answer = route.get("memory_answer")
             if profile_answer is not None:
@@ -487,6 +520,13 @@ class AgentRuntime:
                 retrieval = RetrievalResult(hits=(), confidence=0.0, strategy="memory-route")
             if request.mode is ConversationMode.REPORT and request.report_context:
                 retrieval = _with_report_evidence(retrieval, request)
+            rendered_evidence = render_untrusted_context(retrieval.hits)
+            polished_context = route.get("polished_context")
+            if polished_context:
+                rendered_evidence = (
+                    "千问整理的事实摘要（仅供组织语言，不能替代下方原始证据）：\n"
+                    f"{polished_context}\n\n{rendered_evidence}"
+                )
             token.checkpoint()
 
             user_injection = self._detector.scan(request.user_text, source="user")
@@ -541,7 +581,7 @@ class AgentRuntime:
                         run_id=run_id,
                         mode=request.mode,
                         user_text=request.user_text,
-                        rendered_context=render_untrusted_context(retrieval.hits),
+                        rendered_context=rendered_evidence,
                         short_term_messages=memory_context.window,
                         conversation_summary=memory_context.summary,
                         long_term_facts=memory_context.facts,
@@ -591,7 +631,9 @@ class AgentRuntime:
 
             draft = replace(
                 draft,
-                content=format_user_visible_answer(redact_local_source_paths(draft.content)),
+                content=format_user_visible_answer(
+                    redact_internal_model_references(redact_local_source_paths(draft.content))
+                ),
             )
             self._record_tool_steps(trace, draft)
             citations = self._citations.build(
