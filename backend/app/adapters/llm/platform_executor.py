@@ -390,8 +390,10 @@ def _is_robot_recommendation_intent(text: str) -> bool:
         marker in compact for marker in ("喜欢", "偏好", "想要", "想选", "颜色")
     )
     inventory_request = is_catalog_inventory_intent(compact)
+    explicit_product_request = "产品" in compact and recommendation_request
     return (
         (robot_subject and recommendation_request)
+        or explicit_product_request
         or (known_model and recommendation_request)
         or (not robot_subject and recommendation_request and any(
             marker in compact for marker in ("适合", "选择", "选一", "哪一", "哪款", "哪一个")

@@ -1,22 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { ProductRecommendationView } from '../../stores/chat'
+import { productPresentations } from './product-recommendation-fallback'
 import { robotImages } from './robotImages'
 
 const props = defineProps<{ recommendations: ProductRecommendationView[] }>()
 const emit = defineEmits<{ select: [productId: string] }>()
 
-const productIndex: Record<string, { name: string; subtitle: string; image: string; imageKey: string }> = {
-  's8-luna': { name: 'S8 皓月', subtitle: '静音深度清洁', image: robotImages['s8-luna'].src, imageKey: 'robot-s8-luna' },
-  's8-air': { name: 'S8 Air', subtitle: '小户型轻量方案', image: robotImages['s8-air'].src, imageKey: 'robot-s8-air' },
-  'x9-obsidian': { name: 'X9 曜石', subtitle: '全屋导航旗舰', image: robotImages['x9-obsidian'].src, imageKey: 'robot-x9-obsidian' },
-  'x9-edge': { name: 'X9 Edge', subtitle: '边角强化清洁', image: robotImages['x9-edge'].src, imageKey: 'robot-x9-edge' },
-  'm6-terra': { name: 'M6 霞陶', subtitle: '地面精细护理', image: robotImages['m6-terra'].src, imageKey: 'robot-m6-terra' },
-  'm6-mini': { name: 'M6 Mini', subtitle: '木地板温柔护理', image: robotImages['m6-mini'].src, imageKey: 'robot-m6-mini' },
-}
-
 const products = computed(() => props.recommendations.flatMap(recommendation => {
-  const product = productIndex[recommendation.productId]
+  const presentation = productPresentations[recommendation.productId]
+  const image = robotImages[recommendation.productId]?.src
+  const product = presentation && image ? { ...presentation, image } : null
   return product && (recommendation.imageKey === null || recommendation.imageKey === product.imageKey)
     // The product id is the authoritative key. Never trust a free-form image
     // URL from a streamed payload, otherwise one bad recommendation can show

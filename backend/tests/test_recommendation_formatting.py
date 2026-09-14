@@ -1,6 +1,10 @@
 from datetime import UTC, datetime
 
-from backend.app.adapters.llm.platform_executor import _chunks, _filter_recommendations
+from backend.app.adapters.llm.platform_executor import (
+    _chunks,
+    _filter_recommendations,
+    _is_robot_recommendation_intent,
+)
 from backend.app.adapters.mcp.robot_catalog import RecommendedRobot
 from backend.app.agent.runtime import answer_calendar_intent, format_user_visible_answer
 from backend.app.mcp.robot_catalog_server import PRODUCTS
@@ -32,6 +36,10 @@ def test_recommendations_are_hidden_when_answer_has_no_explicit_model() -> None:
     candidates = (_robot("s8-luna", "S8 皓月"), _robot("m6-mini", "M6 Mini"))
 
     assert _filter_recommendations(candidates, "可以根据面积和地面材质选择合适方案。") == ()
+
+
+def test_explicit_product_recommendation_request_triggers_catalog_mapping() -> None:
+    assert _is_robot_recommendation_intent("推荐产品给我") is True
 
 
 def test_answer_formatting_preserves_newlines_and_adds_sentence_paragraphs() -> None:

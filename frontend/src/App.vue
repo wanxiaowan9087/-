@@ -6,6 +6,7 @@ import { mockPreview } from './features/chat/mock-data'
 import RobotHero from './features/chat/RobotHero.vue'
 import ProductRecommendations from './features/chat/ProductRecommendations.vue'
 import { toAssistantParagraphs } from './features/chat/content-redaction'
+import { mergeProductRecommendations } from './features/chat/product-recommendation-fallback'
 import {
   commitSessionMessages,
   hasPersistedCompletedReply,
@@ -690,8 +691,16 @@ function recordProductUsageEvent(eventType: 'product_detail_viewed' | 'product_3
 }
 
 function messageRecommendations(message: Message) {
-  return (message.product_recommendations ?? []).map(toProductRecommendationView)
+  return mergeProductRecommendations(
+    (message.product_recommendations ?? []).map(toProductRecommendationView),
+    message.content,
+  )
 }
+
+const activeProductRecommendations = computed(() => mergeProductRecommendations(
+  chat.productRecommendations,
+  chat.assistantText,
+))
 
 function messageCitations(message: Message) {
   const seenDocumentIds = new Set<string>()
@@ -1131,7 +1140,7 @@ async function confirmCancelActiveRun() {
           <section v-else-if="chat.displayAssistantText" class="answer-card" aria-live="polite"><p v-for="(paragraph, index) in toAssistantParagraphs(chat.displayAssistantText)" :key="`stream:${index}`">{{ paragraph }}</p></section>
           <section v-else class="tool-card"><div class="tool-top"><span class="tool-icon">↻</span><div><b>{{ chat.runOutcome === 'cancelled' ? '本次运行已取消' : '小智正在思考' }}</b><small>{{ chat.runOutcome === 'cancelled' ? '已通知服务端停止执行，候选内容不会发布。' : '正在整理相关资料并核对信息' }}</small></div><span class="tool-ok">{{ chat.runOutcome === 'cancelled' ? '已取消' : '处理中' }}</span></div></section>
           <section v-if="chat.citations.length" class="sources"><div class="sources-head"><span>依据资料</span><small>{{ chat.citations.length }} 条可定位引用</small></div><div class="source-grid"><button v-for="(citation, index) in chat.citations" :key="`${citation.documentVersion}:${citation.chunkId}`" class="source-card" type="button"><span class="source-index">{{ String(index + 1).padStart(2, '0') }}</span><div><b>{{ citation.title }}</b><p>{{ citation.locator }}</p></div><i>↗</i></button></div></section>
-          <ProductRecommendations :recommendations="chat.productRecommendations" @select="openRecommendedProduct" />
+          <ProductRecommendations :recommendations="activeProductRecommendations" @select="openRecommendedProduct" />
         </article>
         <div v-if="chat.previewState === 'loading'" class="streaming-indicator" role="status" aria-live="polite"><span class="runner" aria-hidden="true">🏃</span><span>小智正在整理资料并生成回答</span></div>
 
