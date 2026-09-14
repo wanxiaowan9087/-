@@ -59,12 +59,35 @@ describe('redactLocalSourcePaths', () => {
     ])
   })
 
-  it('numbers consecutive bullet points and restarts after normal prose', () => {
+  it('keeps top-level bullet numbering continuous across explanatory prose', () => {
     expect(toAssistantParagraphs('- 第一项\n\n• 第二项\n\n说明结束。\n\n* 新的一项')).toEqual([
       '1. 第一项',
       '2. 第二项',
       '说明结束。',
-      '1. 新的一项',
+      '3. 新的一项',
+    ])
+  })
+
+  it('numbers the real streamed answer shape as 1, 2, 3 instead of repeated 1', () => {
+    const content = [
+      '- 加强散热与防潮管理',
+      '夏季环境温度高。',
+      '',
+      '建议避免高温时段连续使用。',
+      '',
+      '- 高频清理耗材与滚刷',
+      '夏季宠物掉毛严重。',
+      '',
+      '建议每次使用后清空尘盒。',
+      '',
+      '- 定期清洁传感器',
+      '灰尘会影响导航精度。',
+    ].join('\n')
+
+    expect(toAssistantParagraphs(content).filter(paragraph => /^\d+\./.test(paragraph))).toEqual([
+      '1. 加强散热与防潮管理 夏季环境温度高。',
+      '2. 高频清理耗材与滚刷 夏季宠物掉毛严重。',
+      '3. 定期清洁传感器 灰尘会影响导航精度。',
     ])
   })
 })

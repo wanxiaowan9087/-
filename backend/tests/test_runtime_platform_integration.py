@@ -192,6 +192,47 @@ async def test_runtime_executor_forwards_model_tokens_before_generation_finishes
 
 
 @pytest.mark.asyncio
+async def test_runtime_executor_waits_once_before_revealing_streamed_answer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, execution = await _prepared_run()
+    runtime = StreamingRuntime(
+        AgentRunResult(
+            run_id=str(execution.run_id),
+            status=RunStatus.COMPLETED,
+            public_content="首字完成",
+            candidate_content=None,
+            citations=(),
+            trace=_trace(),
+            confidence=0.91,
+            confidence_threshold=0.65,
+        )
+    )
+    sleep_calls: list[float] = []
+
+    async def record_sleep(seconds: float) -> None:
+        sleep_calls.append(seconds)
+
+    monkeypatch.setattr(
+        "backend.app.adapters.llm.platform_executor.asyncio.sleep",
+        record_sleep,
+    )
+    stream = RuntimeRunExecutor(runtime).stream(execution)
+
+    for _ in range(6):
+        await anext(stream)
+    event_type, _ = await anext(stream)
+
+    assert event_type == "delta"
+    assert sleep_calls == [1.0]
+
+    runtime.release.set()
+    remaining = [event async for event in stream]
+    assert remaining[-1][0] == "done"
+    assert sleep_calls == [1.0]
+
+
+@pytest.mark.asyncio
 async def test_withheld_candidate_creates_review_without_publication() -> None:
     repository, execution = await _prepared_run()
     review_id = uuid4()

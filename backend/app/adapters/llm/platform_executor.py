@@ -22,6 +22,8 @@ from backend.app.agent.runtime import is_catalog_inventory_intent
 from backend.app.agent.tooling import CancellationToken
 from backend.app.application.ports import RunExecution
 
+_ANSWER_REVEAL_DELAY_SECONDS = 1.0
+
 
 def _jsonable(value: Any) -> Any:
     if isinstance(value, datetime | date):
@@ -157,12 +159,16 @@ class RuntimeRunExecutor:
                         timed_out = True
                     while len(pending) >= 12:
                         content, pending = pending[:12], pending[12:]
+                        if not streamed_parts:
+                            await asyncio.sleep(_ANSWER_REVEAL_DELAY_SECONDS)
                         streamed_parts.append(content)
                         yield "delta", {"index": delta_index, "content": content}
                         delta_index += 1
                     if pending and (
                         timed_out or (result_task.done() and token_queue.empty())
                     ):
+                        if not streamed_parts:
+                            await asyncio.sleep(_ANSWER_REVEAL_DELAY_SECONDS)
                         streamed_parts.append(pending)
                         yield "delta", {"index": delta_index, "content": pending}
                         delta_index += 1
@@ -212,7 +218,10 @@ class RuntimeRunExecutor:
                 )
             elif result.status is RunStatus.COMPLETED:
                 if not streamed_parts:
-                    for index, content in enumerate(_chunks(result.public_content)):
+                    chunks = _chunks(result.public_content)
+                    if chunks:
+                        await asyncio.sleep(_ANSWER_REVEAL_DELAY_SECONDS)
+                    for index, content in enumerate(chunks):
                         yield "delta", {"index": index, "content": content}
                 yield (
                     "done",

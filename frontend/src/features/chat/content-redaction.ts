@@ -65,10 +65,7 @@ export function toAssistantParagraphs(content: string): string[] {
   let listIndex = 0
   return paragraphs.map(paragraph => {
     const item = paragraph.match(/^(?:[-*•])\s+(.+)$/)
-    if (!item) {
-      listIndex = 0
-      return paragraph
-    }
+    if (!item) return paragraph
     listIndex += 1
     return `${listIndex}. ${item[1]}`
   })
