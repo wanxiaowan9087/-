@@ -40,7 +40,7 @@ from .customer_tools import (
     set_request_context,
 )
 from .memory import NullMemoryCoordinator
-from .ports import ModelTimeout, ModelUnavailable, ReActEnginePort
+from .ports import ModelTimeout, ModelUnavailable, ReActEnginePort, TokenSink
 from .route_graph import EvidencePolisher, route_memory_then_knowledge
 from .safety import (
     DeterministicReviewPolicy,
@@ -457,11 +457,16 @@ class AgentRuntime:
         self._config = config
         self._evidence_polisher = evidence_polisher
 
+    @property
+    def supports_token_streaming(self) -> bool:
+        return bool(getattr(self._react_engine, "supports_token_streaming", False))
+
     async def execute(
         self,
         request: AgentRequest,
         *,
         cancellation: CancellationToken | None = None,
+        on_token: TokenSink | None = None,
     ) -> AgentRunResult:
         token = cancellation or CancellationToken()
         run_id = request.run_id or str(uuid4())
@@ -693,20 +698,23 @@ class AgentRuntime:
                 StepType.GENERATION, "generating answer with ReAct engine"
             )
             try:
-                draft = await self._react_engine.generate(
-                    AgentModelRequest(
-                        run_id=run_id,
-                        mode=request.mode,
-                        user_text=request.user_text,
-                        rendered_context=rendered_evidence,
-                        short_term_messages=memory_context.window,
-                        conversation_summary=memory_context.summary,
-                        long_term_facts=memory_context.facts,
-                        report_scope=request.report_scope,
-                        report_context=request.report_context,
-                    ),
-                    token,
+                model_request = AgentModelRequest(
+                    run_id=run_id,
+                    mode=request.mode,
+                    user_text=request.user_text,
+                    rendered_context=rendered_evidence,
+                    short_term_messages=memory_context.window,
+                    conversation_summary=memory_context.summary,
+                    long_term_facts=memory_context.facts,
+                    report_scope=request.report_scope,
+                    report_context=request.report_context,
                 )
+                if on_token is not None and self.supports_token_streaming:
+                    draft = await self._react_engine.generate(
+                        model_request, token, on_token=on_token
+                    )
+                else:
+                    draft = await self._react_engine.generate(model_request, token)
                 token.checkpoint()
                 trace.finish(
                     generation_step,

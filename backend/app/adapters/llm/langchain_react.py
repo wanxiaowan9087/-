@@ -11,7 +11,7 @@ from ...agent.contracts import (
     ToolExecution,
     ToolOutcome,
 )
-from ...agent.ports import ModelTimeout, ModelUnavailable
+from ...agent.ports import ModelTimeout, ModelUnavailable, TokenSink
 from ...agent.tooling import CancellationToken, ToolExecutor
 from ...rag.models import RetrievalResult
 from ...rag.security import render_untrusted_context
@@ -58,6 +58,8 @@ class LangChainEvidencePolisher:
 class LangChainReActEngine:
     """Production ReAct adapter; all policy remains outside LangChain."""
 
+    supports_token_streaming = True
+
     def __init__(
         self,
         *,
@@ -77,6 +79,8 @@ class LangChainReActEngine:
         self,
         request: AgentModelRequest,
         cancellation: CancellationToken | None = None,
+        *,
+        on_token: TokenSink | None = None,
     ) -> ModelDraft:
         try:
             from langchain.agents import create_agent
@@ -106,18 +110,42 @@ class LangChainReActEngine:
                 "content": _model_input(request),
             }
         ]
+        content_parts: list[str] = []
         try:
-            result = await agent.ainvoke(
+            async for message_chunk, _metadata in agent.astream(
                 cast(Any, {"messages": messages}),
                 context=cast(Any, {"run_id": request.run_id, "mode": request.mode.value}),
-            )
+                stream_mode="messages",
+            ):
+                if cancellation is not None:
+                    cancellation.checkpoint()
+                if not message_chunk.__class__.__name__.startswith("AIMessage"):
+                    continue
+                content = _message_content(getattr(message_chunk, "content", ""))
+                if not content:
+                    continue
+                content_parts.append(content)
+                critical_tool_failed = any(
+                    execution.critical
+                    and execution.outcome
+                    in {
+                        ToolOutcome.FAILED,
+                        ToolOutcome.TIMEOUT,
+                        ToolOutcome.CANCELLED,
+                    }
+                    for execution in executions
+                )
+                if on_token is not None and not critical_tool_failed:
+                    await on_token(content)
         except TimeoutError as error:
             raise ModelTimeout("model execution timed out") from error
         except Exception as error:
             raise ModelUnavailable("model execution failed") from error
         if cancellation is not None:
             cancellation.checkpoint()
-        content = _message_content(result["messages"][-1].content)
+        content = "".join(content_parts)
+        if not content.strip():
+            raise ModelUnavailable("model stream returned no answer content")
         return ModelDraft(
             content=content,
             tool_executions=tuple(executions),

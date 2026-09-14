@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -45,6 +46,29 @@ class FixedRuntime:
         if cancellation is not None:
             cancellation.checkpoint()
         self.requests.append(request)
+        return self.result
+
+
+class StreamingRuntime(FixedRuntime):
+    supports_token_streaming = True
+
+    def __init__(self, result: AgentRunResult) -> None:
+        super().__init__(result)
+        self.release = asyncio.Event()
+        self.completed = False
+
+    async def execute(
+        self,
+        request: AgentRequest,
+        *,
+        cancellation: CancellationToken | None = None,
+        on_token=None,
+    ) -> AgentRunResult:
+        self.requests.append(request)
+        assert on_token is not None
+        await on_token("首字")
+        await self.release.wait()
+        self.completed = True
         return self.result
 
 
@@ -134,6 +158,37 @@ async def test_runtime_result_is_streamed_and_persisted() -> None:
     assert message.citations == run.citations
     assert events[-1].event["event_type"] == "done"
     assert runtime.requests[0].run_id == str(execution.run_id)
+
+
+@pytest.mark.asyncio
+async def test_runtime_executor_forwards_model_tokens_before_generation_finishes() -> None:
+    _, execution = await _prepared_run()
+    runtime = StreamingRuntime(
+        AgentRunResult(
+            run_id=str(execution.run_id),
+            status=RunStatus.COMPLETED,
+            public_content="首字完成",
+            candidate_content=None,
+            citations=(),
+            trace=_trace(),
+            confidence=0.91,
+            confidence_threshold=0.65,
+        )
+    )
+    stream = RuntimeRunExecutor(runtime).stream(execution)
+
+    for _ in range(6):
+        event_type, _ = await anext(stream)
+        assert event_type == "status"
+    event_type, payload = await anext(stream)
+
+    assert event_type == "delta"
+    assert payload["content"] == "首字"
+    assert runtime.completed is False
+
+    runtime.release.set()
+    remaining = [event async for event in stream]
+    assert remaining[-1][0] == "done"
 
 
 @pytest.mark.asyncio

@@ -180,6 +180,11 @@ class RunCoordinator:
                                 expected_statuses={outcome},
                                 status=outcome,
                                 now=now,
+                                assistant_content=(
+                                    rich_outcome.public_content
+                                    if outcome == "completed"
+                                    else None
+                                ),
                                 model=rich_outcome.model_name,
                                 retrieval_strategy=rich_outcome.retrieval_strategy,
                                 confidence_threshold=rich_outcome.confidence_threshold,

@@ -95,7 +95,7 @@ def build_run_executor(
         local_corpus = LocalTextCorpusRetriever(
             settings.agent_local_corpus_dir, include_uploaded_files=False
         )
-        model = ChatTongyi(model=settings.agent_model_name)
+        model = ChatTongyi(model=settings.agent_model_name, streaming=True)
         keyword_index = BM25KeywordIndex()
         hybrid = HybridRetriever(
             embeddings,

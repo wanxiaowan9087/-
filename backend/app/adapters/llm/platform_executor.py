@@ -137,7 +137,39 @@ class RuntimeRunExecutor:
                 "checking_policy",
             ):
                 yield "status", {"phase": phase, "detail": None}
-            result = await self._runtime.execute(request, cancellation=token)
+            streamed_parts: list[str] = []
+            if bool(getattr(self._runtime, "supports_token_streaming", False)):
+                token_queue: asyncio.Queue[str] = asyncio.Queue()
+                result_task = asyncio.create_task(
+                    cast(Any, self._runtime).execute(
+                        request,
+                        cancellation=token,
+                        on_token=token_queue.put,
+                    )
+                )
+                pending = ""
+                delta_index = 0
+                while not result_task.done() or not token_queue.empty():
+                    timed_out = False
+                    try:
+                        pending += await asyncio.wait_for(token_queue.get(), timeout=0.04)
+                    except TimeoutError:
+                        timed_out = True
+                    while len(pending) >= 12:
+                        content, pending = pending[:12], pending[12:]
+                        streamed_parts.append(content)
+                        yield "delta", {"index": delta_index, "content": content}
+                        delta_index += 1
+                    if pending and (
+                        timed_out or (result_task.done() and token_queue.empty())
+                    ):
+                        streamed_parts.append(pending)
+                        yield "delta", {"index": delta_index, "content": pending}
+                        delta_index += 1
+                        pending = ""
+                result = await result_task
+            else:
+                result = await self._runtime.execute(request, cancellation=token)
             selected_recommendations = _filter_recommendations(
                 recommendations, result.public_content
             )
@@ -179,8 +211,9 @@ class RuntimeRunExecutor:
                     },
                 )
             elif result.status is RunStatus.COMPLETED:
-                for index, content in enumerate(_chunks(result.public_content)):
-                    yield "delta", {"index": index, "content": content}
+                if not streamed_parts:
+                    for index, content in enumerate(_chunks(result.public_content)):
+                        yield "delta", {"index": index, "content": content}
                 yield (
                     "done",
                     {

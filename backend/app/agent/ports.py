@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from typing import Protocol
 
 from .contracts import (
@@ -10,6 +10,8 @@ from .contracts import (
     ModelDraft,
 )
 from .tooling import CancellationToken
+
+TokenSink = Callable[[str], Awaitable[None]]
 
 
 class ModelTimeout(TimeoutError):
@@ -27,6 +29,8 @@ class ReActEnginePort(Protocol):
         self,
         request: AgentModelRequest,
         cancellation: CancellationToken | None = None,
+        *,
+        on_token: TokenSink | None = None,
     ) -> ModelDraft: ...
 
 
