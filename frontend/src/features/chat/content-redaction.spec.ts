@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   formatAssistantContent,
+  renumberRepeatedOrderedMarkers,
   redactLocalSourcePaths,
   toAssistantParagraphs,
 } from './content-redaction'
@@ -32,6 +33,15 @@ describe('redactLocalSourcePaths', () => {
   it('preserves line breaks and separates consecutive Chinese sentences', () => {
     expect(formatAssistantContent('第一句说明。第二句说明！第三句说明？')).toBe(
       '第一句说明。\n\n第二句说明！\n\n第三句说明？',
+    )
+  })
+
+  it('renumbers repeated numeric sections even when items contain wrapped prose', () => {
+    expect(renumberRepeatedOrderedMarkers('1. 第一项\n补充说明。\n\n1. 第二项\n补充说明。')).toBe(
+      '1. 第一项\n补充说明。\n\n2. 第二项\n补充说明。',
+    )
+    expect(formatAssistantContent('1. 第一项\n补充说明。\n\n1. 第二项\n补充说明。')).toBe(
+      '1. 第一项\n补充说明。\n\n2. 第二项\n补充说明。',
     )
   })
 

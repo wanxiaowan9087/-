@@ -149,5 +149,30 @@ async def test_grounded_route_does_not_polish_without_evidence() -> None:
     assert calls == 0
 
 
+@pytest.mark.asyncio
+async def test_high_confidence_route_skips_extra_evidence_model_call() -> None:
+    calls = 0
+
+    async def polish(_query: str, _retrieval: RetrievalResult) -> str:
+        nonlocal calls
+        calls += 1
+        return "不应调用"
+
+    high_confidence = RetrievalResult(
+        hits=_retrieval().hits, confidence=0.97, strategy="test"
+    )
+    result = await route_memory_then_knowledge(
+        "滤网多久清理一次？",
+        MemoryContext(),
+        answer_memory=lambda _query, _context: None,
+        retrieve=lambda _query: _retrieve_result(high_confidence),
+        polish=polish,
+    )
+
+    assert result["route"] == "knowledge"
+    assert result.get("polished_context") is None
+    assert calls == 0
+
+
 async def _retrieve_result(result: RetrievalResult) -> RetrievalResult:
     return result

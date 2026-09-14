@@ -95,24 +95,34 @@ def _renumber_ordered_lists(content: str) -> str:
     """Normalize repeated model-generated ordered-list markers.
 
     Models occasionally emit ``1.`` for every item.  Renumber only markers at
-    the beginning of a line (optionally indented), allowing blank lines inside
-    a list and resetting after ordinary prose.  Inline numbers and dates are
-    left untouched.
+    the beginning of a line (optionally indented), including items separated
+    by wrapped explanatory prose. Inline numbers and dates are left untouched.
     """
     lines = content.splitlines()
+    markers = [
+        re.match(r"^\s*(\d+)[.、)]\s*.+?\s*$", line)
+        for line in lines
+    ]
+    # A common provider failure is to emit ``1.`` for every top-level item.
+    # Number all such markers in one answer, even when an item has wrapped
+    # explanatory lines between it and the next marker.
+    repeated_one_markers = (
+        sum(bool(match and match.group(1) == "1") for match in markers) >= 2
+        and all(not match or match.group(1) == "1" for match in markers)
+    )
+    if not repeated_one_markers:
+        return content
+
     output: list[str] = []
     next_number = 1
-    for line in lines:
-        match = re.match(r"^(\s*)\d+[.、)]\s*(.+?)\s*$", line)
+    for line, match in zip(lines, markers, strict=True):
         if match:
-            output.append(f"{match.group(1)}{next_number}. {match.group(2)}")
+            prefix = re.match(r"^(\s*)", line).group(1)
+            body = re.sub(r"^\s*\d+[.、)]\s*", "", line).strip()
+            output.append(f"{prefix}{next_number}. {body}")
             next_number += 1
-            continue
-        if line.strip():
-            # A prose line terminates the current list; a subsequent list
-            # starts again at 1.
-            next_number = 1
-        output.append(line)
+        else:
+            output.append(line)
     return "\n".join(output)
 
 

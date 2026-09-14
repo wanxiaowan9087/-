@@ -181,9 +181,6 @@ class RuntimeRunExecutor:
             elif result.status is RunStatus.COMPLETED:
                 for index, content in enumerate(_chunks(result.public_content)):
                     yield "delta", {"index": index, "content": content}
-                    # Character-sized deltas plus a very short pause preserve
-                    # a natural typing cadence without making short replies lag.
-                    await asyncio.sleep(0.022)
                 yield (
                     "done",
                     {
@@ -238,9 +235,11 @@ class RuntimeRunExecutor:
             self._outcomes.clear()
 
 
-def _chunks(content: str) -> list[str]:
-    """Emit display characters individually so the SSE transcript visibly types."""
-    return list(content)
+def _chunks(content: str, *, size: int = 12) -> list[str]:
+    """Emit small transport chunks; the browser animates them character-by-character."""
+    if size < 1:
+        raise ValueError("chunk size must be positive")
+    return [content[index : index + size] for index in range(0, len(content), size)]
 
 
 _PRODUCT_ALIASES: dict[str, tuple[str, ...]] = {

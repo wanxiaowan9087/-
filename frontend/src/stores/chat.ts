@@ -70,6 +70,9 @@ export const useChatStore = defineStore('chat', {
     userMessageId: null as string | null,
     lastEventId: null as number | null,
     assistantText: '',
+    displayAssistantText: '',
+    displayQueue: '',
+    displayTimer: null as ReturnType<typeof globalThis.setTimeout> | null,
     citations: [] as CitationView[],
     productRecommendations: [] as ProductRecommendationView[],
     review: null as ReviewView | null,
@@ -85,11 +88,14 @@ export const useChatStore = defineStore('chat', {
     toggleNav() { this.navOpen = !this.navOpen },
     closeNav() { this.navOpen = false },
     beginRun(sessionId: string) {
+      this.clearDisplayTimer()
       this.sessionId = sessionId
       this.runId = null
       this.userMessageId = null
       this.lastEventId = null
       this.assistantText = ''
+      this.displayAssistantText = ''
+      this.displayQueue = ''
       this.citations = []
       this.productRecommendations = []
       this.review = null
@@ -131,7 +137,10 @@ export const useChatStore = defineStore('chat', {
         }
       }
       if (event.event_type === 'delta') {
-        this.assistantText += readText(event.payload, 'content') ?? ''
+        const content = readText(event.payload, 'content') ?? ''
+        this.assistantText += content
+        this.displayQueue += content
+        this.drainDisplayQueue()
       }
       if (event.event_type === 'citation') {
         const documentId = readText(event.payload, 'document_id')
@@ -183,6 +192,31 @@ export const useChatStore = defineStore('chat', {
       this.runOutcome = 'cancelled'
       this.previewState = 'ready'
       this.terminal = true
+    },
+    clearDisplayTimer() {
+      if (this.displayTimer !== null) {
+        globalThis.clearTimeout(this.displayTimer)
+        this.displayTimer = null
+      }
+      this.displayQueue = ''
+    },
+    drainDisplayQueue() {
+      if (typeof window === 'undefined') {
+        this.displayAssistantText = this.assistantText
+        this.displayQueue = ''
+        return
+      }
+      if (this.displayTimer !== null) return
+      const drain = () => {
+        if (!this.displayQueue) {
+          this.displayTimer = null
+          return
+        }
+        this.displayAssistantText += this.displayQueue.slice(0, 1)
+        this.displayQueue = this.displayQueue.slice(1)
+        this.displayTimer = globalThis.setTimeout(drain, 8)
+      }
+      drain()
     },
   },
 })

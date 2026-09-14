@@ -50,12 +50,12 @@ def test_answer_formatting_resets_numbering_after_prose() -> None:
     content = "维护建议：\n1. 清洁边刷\n1. 清理滤网\n注意定期断电。\n1. 检查电池"
 
     assert format_user_visible_answer(content) == (
-        "维护建议：\n1. 清洁边刷\n2. 清理滤网\n注意定期断电。\n1. 检查电池"
+        "维护建议：\n1. 清洁边刷\n2. 清理滤网\n注意定期断电。\n3. 检查电池"
     )
 
 
-def test_stream_chunks_emit_one_character_at_a_time() -> None:
-    assert _chunks("第一段。\n\n第二段。") == list("第一段。\n\n第二段。")
+def test_stream_chunks_use_small_transport_batches() -> None:
+    assert _chunks("第一段。\n\n第二段。", size=4) == ["第一段。", "\n\n第二", "段。"]
 
 
 def test_calendar_question_bypasses_knowledge_retrieval_with_china_time() -> None:

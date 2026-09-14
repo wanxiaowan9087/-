@@ -27,7 +27,6 @@ import {
 
 const chat = useChatStore()
 const isOverlay = computed(() => ['empty', 'error'].includes(chat.previewState))
-const latestTool = computed(() => chat.tools.at(-1) ?? null)
 const draft = ref('')
 const submittedQuestion = ref('')
 const activeAbortController = ref<InstanceType<typeof globalThis.AbortController> | null>(null)
@@ -251,7 +250,7 @@ function knowledgeUploadLabel(status: KnowledgeUploadStatus) {
 }
 
 watch(
-  () => [chat.runId, chat.assistantText, chat.previewState],
+  () => [chat.runId, chat.displayAssistantText, chat.previewState],
   async () => {
     await nextTick()
     observeReveals()
@@ -483,6 +482,7 @@ function signOut() {
 }
 
 function resetConversation() {
+  chat.clearDisplayTimer()
   chat.$reset()
   submittedQuestion.value = ''
   draft.value = ''
@@ -1120,8 +1120,8 @@ async function confirmCancelActiveRun() {
             <div class="withheld-seal" aria-hidden="true"><span></span><span></span><span></span></div>
             <div><p class="eyebrow">INFORMATION REQUIRED</p><h2>现有信息不足</h2><p>我暂时无法给出可靠结论。请补充更具体的问题、产品型号或使用场景。</p></div>
           </section>
-          <section v-else-if="chat.assistantText" class="answer-card" aria-live="polite"><p v-for="(paragraph, index) in toAssistantParagraphs(chat.assistantText)" :key="`stream:${index}`">{{ paragraph }}</p></section>
-          <section v-else class="tool-card"><div class="tool-top"><span class="tool-icon">↻</span><div><b>{{ chat.runOutcome === 'cancelled' ? '本次运行已取消' : latestTool ? `工具：${latestTool.toolName}` : '正在调用受控 Agent' }}</b><small>{{ chat.runOutcome === 'cancelled' ? '已通知服务端停止执行，候选内容不会发布。' : latestTool?.detail || chat.lastStatus || '检索、重排与安全策略检查中' }}</small></div><span class="tool-ok">{{ chat.runOutcome === 'cancelled' ? '已取消' : latestTool?.outcome || '运行中' }}</span></div></section>
+          <section v-else-if="chat.displayAssistantText" class="answer-card" aria-live="polite"><p v-for="(paragraph, index) in toAssistantParagraphs(chat.displayAssistantText)" :key="`stream:${index}`">{{ paragraph }}</p></section>
+          <section v-else class="tool-card"><div class="tool-top"><span class="tool-icon">↻</span><div><b>{{ chat.runOutcome === 'cancelled' ? '本次运行已取消' : '小智正在思考' }}</b><small>{{ chat.runOutcome === 'cancelled' ? '已通知服务端停止执行，候选内容不会发布。' : '正在整理相关资料并核对信息' }}</small></div><span class="tool-ok">{{ chat.runOutcome === 'cancelled' ? '已取消' : '处理中' }}</span></div></section>
           <section v-if="chat.citations.length" class="sources"><div class="sources-head"><span>依据资料</span><small>{{ chat.citations.length }} 条可定位引用</small></div><div class="source-grid"><button v-for="(citation, index) in chat.citations" :key="`${citation.documentVersion}:${citation.chunkId}`" class="source-card" type="button"><span class="source-index">{{ String(index + 1).padStart(2, '0') }}</span><div><b>{{ citation.title }}</b><p>{{ citation.locator }}</p></div><i>↗</i></button></div></section>
           <ProductRecommendations :recommendations="chat.productRecommendations" @select="openRecommendedProduct" />
         </article>

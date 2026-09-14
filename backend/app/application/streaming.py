@@ -6,6 +6,7 @@ import logging
 from dataclasses import asdict, is_dataclass
 from datetime import UTC, datetime
 from enum import Enum
+from time import monotonic
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -110,6 +111,8 @@ class RunCoordinator:
         )
         content_parts: list[str] = []
         product_recommendations: list[dict[str, object]] = []
+        stream_started = monotonic()
+        persisted_events = 0
         try:
             async with self._repository.transaction() as tx:
                 await tx.update_run(
@@ -142,11 +145,21 @@ class RunCoordinator:
                     }
                     event_adapter.validate_python(event)
                     await tx.add_event(StreamEventRecord(execution.run_id, sequence, event, now))
+                    persisted_events += 1
                     if event_type == "delta":
                         content_parts.append(str(payload["content"]))
                     elif event_type == "product_recommendation":
                         product_recommendations.append(dict(payload))
                     elif event_type == "done":
+                        logger.info(
+                            "stream persistence completed",
+                            extra={
+                                "component": "streaming",
+                                "duration_ms": round((monotonic() - stream_started) * 1000),
+                                "persisted_events": persisted_events,
+                                "content_chars": len("".join(content_parts)),
+                            },
+                        )
                         outcome = str(payload["outcome"])
                         await tx.update_run(
                             execution.run_id,

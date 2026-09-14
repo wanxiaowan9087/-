@@ -4,6 +4,7 @@ import asyncio
 import logging
 from collections.abc import Sequence
 from dataclasses import replace
+from time import monotonic
 from typing import Any
 
 from .lexical import tokenize
@@ -166,6 +167,7 @@ class MergedRetriever:
         self._result_limit = result_limit
 
     async def retrieve(self, query: str) -> RetrievalResult:
+        started = monotonic()
         primary_task = asyncio.create_task(self._primary.retrieve(query))
         secondary_task = asyncio.create_task(self._secondary.retrieve(query))
         primary, secondary = await asyncio.gather(
@@ -182,6 +184,15 @@ class MergedRetriever:
         if not results:
             raise RetrievalUnavailable("all merged retrieval dependencies failed")
         merged = _merge_hits([hit for result in results for hit in result.hits])
+        logger.info(
+            "merged retrieval completed",
+            extra={
+                "component": "retrieval",
+                "stage": "merged",
+                "duration_ms": round((monotonic() - started) * 1000),
+                "result_count": len(merged[: self._result_limit]),
+            },
+        )
         return RetrievalResult(
             hits=merged[: self._result_limit],
             confidence=max(
@@ -212,7 +223,9 @@ class MultiQueryRetriever:
         self._rrf_k = rrf_k
 
     async def retrieve(self, query: str) -> RetrievalResult:
+        started = monotonic()
         plan = await self._query_rewriter.rewrite(query)
+        rewrite_finished = monotonic()
         branch_results = await asyncio.gather(
             *(self._retriever.retrieve(item) for item in plan.queries),
             return_exceptions=True,
@@ -220,6 +233,7 @@ class MultiQueryRetriever:
         successes = [item for item in branch_results if isinstance(item, RetrievalResult)]
         if not successes:
             raise RetrievalUnavailable("all multi-query retrieval branches failed")
+        retrieval_finished = monotonic()
         hits = reciprocal_rank_fusion_hits([item.hits for item in successes], rrf_k=self._rrf_k)
         try:
             reranked = tuple(
@@ -230,6 +244,18 @@ class MultiQueryRetriever:
             logger.warning("multi-query reranker degraded", exc_info=True)
             reranked = hits[: self._result_limit]
             reranker_degraded = ("reranker",)
+        logger.info(
+            "multi-query retrieval timings",
+            extra={
+                "component": "retrieval",
+                "stage": "multi_query",
+                "query_rewrite_ms": round((rewrite_finished - started) * 1000),
+                "candidate_retrieval_ms": round((retrieval_finished - rewrite_finished) * 1000),
+                "rerank_ms": round((monotonic() - retrieval_finished) * 1000),
+                "branch_count": len(plan.queries),
+                "result_count": len(reranked),
+            },
+        )
         return RetrievalResult(
             hits=reranked,
             confidence=_evidence_confidence(reranked),

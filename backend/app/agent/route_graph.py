@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Awaitable, Callable
+from time import monotonic
 from typing import Any, Literal, TypedDict, cast
 
 from ..rag.models import RetrievalResult
@@ -22,6 +23,7 @@ Retriever = Callable[[str], Awaitable[RetrievalResult]]
 EvidencePolisher = Callable[[str, RetrievalResult], Awaitable[str]]
 RouteName = Literal["memory", "knowledge", "insufficient"]
 logger = logging.getLogger(__name__)
+_POLISH_SKIP_CONFIDENCE = 0.92
 
 
 _CONTEXTUAL_SEASON_RE = re.compile(r"(春季|夏季|秋季|冬季)")
@@ -112,6 +114,16 @@ class MemoryKnowledgeRoute:
     ) -> str | None:
         if self._polish is None:
             return None
+        if retrieval.confidence >= _POLISH_SKIP_CONFIDENCE:
+            logger.info(
+                "evidence polish skipped for high-confidence retrieval",
+                extra={
+                    "component": "evidence-polisher",
+                    "confidence": round(retrieval.confidence, 3),
+                },
+            )
+            return None
+        started = monotonic()
         try:
             polished = (await self._polish(user_text, retrieval)).strip()
         except Exception:
@@ -121,6 +133,14 @@ class MemoryKnowledgeRoute:
                 extra={"component": "evidence-polisher"},
             )
             return None
+        logger.info(
+            "evidence polish completed",
+            extra={
+                "component": "evidence-polisher",
+                "duration_ms": round((monotonic() - started) * 1000),
+                "result_chars": len(polished),
+            },
+        )
         return polished or None
 
     async def invoke(self, user_text: str, memory_context: MemoryContext) -> RouteState:
