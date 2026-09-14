@@ -176,6 +176,22 @@ class RuntimeRunExecutor:
                 result = await result_task
             else:
                 result = await self._runtime.execute(request, cancellation=token)
+            if (
+                not recommendations
+                and result.status is RunStatus.COMPLETED
+                and _answer_mentions_known_product(result.public_content)
+            ):
+                try:
+                    # Follow-up questions are often elliptical (for example,
+                    # “其他同类产品呢”) and therefore do not trigger the
+                    # input-side recommendation intent. Hydrate every model
+                    # explicitly named by the final answer from the catalog so
+                    # its stable product_id/image_key card is still emitted.
+                    recommendations = await recommend_robots(
+                        result.public_content, limit=6
+                    )
+                except RobotCatalogMcpError:
+                    recommendations = ()
             selected_recommendations = _filter_recommendations(
                 recommendations, result.public_content
             )
@@ -305,6 +321,15 @@ def _filter_recommendations(
         if any(re.sub(r"[\s\-_]", "", alias.casefold()) in compact for alias in aliases):
             selected.append(recommendation)
     return tuple(selected)
+
+
+def _answer_mentions_known_product(answer: str) -> bool:
+    compact = re.sub(r"[\s\-_]", "", answer.casefold())
+    return any(
+        re.sub(r"[\s\-_]", "", alias.casefold()) in compact
+        for aliases in _PRODUCT_ALIASES.values()
+        for alias in aliases
+    )
 
 
 def _month_bounds(month: str) -> tuple[datetime, datetime]:

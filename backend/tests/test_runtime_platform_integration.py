@@ -8,6 +8,7 @@ import pytest
 
 from backend.app.adapters.llm.fake import FakeReActEngine
 from backend.app.adapters.llm.platform_executor import RuntimeRunExecutor
+from backend.app.adapters.mcp.robot_catalog import RecommendedRobot
 from backend.app.adapters.memory.platform_runtime import PlatformMemoryRuntime
 from backend.app.adapters.memory.repository import MemoryPlatformRepository
 from backend.app.agent.contracts import (
@@ -230,6 +231,81 @@ async def test_runtime_executor_waits_once_before_revealing_streamed_answer(
     remaining = [event async for event in stream]
     assert remaining[-1][0] == "done"
     assert sleep_calls == [1.0]
+
+
+@pytest.mark.asyncio
+async def test_followup_answer_models_always_emit_matching_product_cards(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, prepared = await _prepared_run()
+    execution = RunExecution(
+        request_id=prepared.request_id,
+        subject_id=prepared.subject_id,
+        session_id=prepared.session_id,
+        run_id=prepared.run_id,
+        user_message_id=prepared.user_message_id,
+        assistant_message_id=prepared.assistant_message_id,
+        input_content="其他同类产品呢",
+    )
+    answer = "供你参考：X9-EDGE 曜石 Edge、S8-LUNA 皓月、X9-OBSIDIAN 曜石。"
+    runtime = FixedRuntime(
+        AgentRunResult(
+            run_id=str(execution.run_id),
+            status=RunStatus.COMPLETED,
+            public_content=answer,
+            candidate_content=None,
+            citations=(),
+            trace=_trace(),
+            confidence=0.91,
+            confidence_threshold=0.65,
+        )
+    )
+    catalog = tuple(
+        RecommendedRobot(
+            product_id=product_id,
+            model=model,
+            name=name,
+            price=price,
+            highlights=(),
+            recommended_for=(),
+            image_key=f"robot-{product_id}",
+            score=1.0,
+            catalog_source="catalog",
+        )
+        for product_id, model, name, price in (
+            ("x9-edge", "X9-EDGE", "X9 Edge", 3599),
+            ("s8-luna", "S8-LUNA", "S8 皓月", 2999),
+            ("x9-obsidian", "X9-OBSIDIAN", "X9 曜石", 4299),
+        )
+    )
+    calls: list[tuple[str, int]] = []
+
+    async def fake_recommend(query: str, *, limit: int = 3):
+        calls.append((query, limit))
+        return catalog
+
+    monkeypatch.setattr(
+        "backend.app.adapters.llm.platform_executor.recommend_robots",
+        fake_recommend,
+    )
+    monkeypatch.setattr(
+        "backend.app.adapters.llm.platform_executor._ANSWER_REVEAL_DELAY_SECONDS",
+        0,
+    )
+
+    events = [event async for event in RuntimeRunExecutor(runtime).stream(execution)]
+    cards = [
+        payload
+        for event_type, payload in events
+        if event_type == "product_recommendation"
+    ]
+
+    assert calls == [(answer, 6)]
+    assert [card["product_id"] for card in cards] == [
+        "x9-edge",
+        "s8-luna",
+        "x9-obsidian",
+    ]
 
 
 @pytest.mark.asyncio
