@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useChatStore } from './chat'
 
@@ -14,6 +14,10 @@ const streamEvent = (eventType: 'meta' | 'status' | 'tool_start' | 'tool_end' | 
 
 describe('chat preview state', () => {
   beforeEach(() => setActivePinia(createPinia()))
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
   it('switches preview states without network access', () => {
     const store = useChatStore()
     store.setPreviewState('error')
@@ -101,5 +105,22 @@ describe('chat preview state', () => {
       reason: '适合墙角较多的户型',
       score: 0.91,
     }])
+  })
+
+  it('animates transport chunks one character at a time in the browser', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('window', {})
+    const store = useChatStore()
+    store.beginRun('session-1')
+
+    store.receiveStreamEvent({ ...streamEvent('delta'), payload: { content: '逐字回答' } })
+
+    expect(store.assistantText).toBe('逐字回答')
+    expect(store.displayAssistantText).toBe('逐')
+    await vi.advanceTimersByTimeAsync(66)
+    expect(store.displayAssistantText).toBe('逐字回答')
+    await vi.advanceTimersByTimeAsync(22)
+    expect(store.displayQueue).toBe('')
+    expect(store.displayTimer).toBeNull()
   })
 })

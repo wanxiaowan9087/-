@@ -5,10 +5,7 @@ from uuid import NAMESPACE_URL, uuid5
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from backend.app.adapters.llm.deterministic_executor import DeterministicRunExecutor
-from backend.app.adapters.llm.langchain_react import (
-    LangChainEvidencePolisher,
-    LangChainReActEngine,
-)
+from backend.app.adapters.llm.langchain_react import LangChainReActEngine
 from backend.app.adapters.llm.platform_executor import RuntimeRunExecutor
 from backend.app.adapters.mcp.robot_catalog import recommend_robots
 from backend.app.adapters.memory.platform_runtime import PlatformMemoryRuntime
@@ -128,10 +125,10 @@ def build_run_executor(
             report_system_prompt=settings.agent_report_system_prompt,
             model_name=settings.agent_model_name,
         )
-        # Use the same ChatTongyi instance for evidence organization and final
-        # generation.  This avoids a second client/connection while keeping
-        # the polishing step explicit in the LangGraph route.
-        evidence_polisher = LangChainEvidencePolisher(model=model)
+        # The final grounded generation already organizes the raw evidence.
+        # A separate pre-polish model call nearly doubles time-to-first-token,
+        # so production chat keeps that optional route adapter disabled.
+        evidence_polisher = None
     except Exception as error:
         raise AgentRuntimeBootstrapError(
             "AI runtime configuration could not be initialized"

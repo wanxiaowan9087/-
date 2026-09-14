@@ -46,6 +46,14 @@ def test_answer_formatting_renumbers_repeated_ordered_items() -> None:
     assert format_user_visible_answer(content) == "1. 清洁边刷\n2. 清理滤网\n3. 检查电池"
 
 
+def test_answer_formatting_renumbers_bold_markdown_ordered_items() -> None:
+    content = "**1. S8-AIR 轻羽**\n补充说明。\n\n**1. M6-MINI 小径**\n补充说明。"
+
+    assert format_user_visible_answer(content) == (
+        "1. S8-AIR 轻羽\n补充说明。\n\n2. M6-MINI 小径\n补充说明。"
+    )
+
+
 def test_answer_formatting_resets_numbering_after_prose() -> None:
     content = "维护建议：\n1. 清洁边刷\n1. 清理滤网\n注意定期断电。\n1. 检查电池"
 

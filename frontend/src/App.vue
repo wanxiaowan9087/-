@@ -702,6 +702,12 @@ function messageCitations(message: Message) {
   })
 }
 
+async function waitForAssistantTyping() {
+  while (chat.displayQueue || chat.displayTimer !== null) {
+    await new Promise(resolve => globalThis.setTimeout(resolve, 24))
+  }
+}
+
 async function executeChat(request: ChatRequest, question: string) {
   const controller = new globalThis.AbortController()
   activeAbortController.value = controller
@@ -733,11 +739,13 @@ async function executeChat(request: ChatRequest, question: string) {
       }
     }
     draft.value = ''
-    const [sessionPage, memoryPage] = await Promise.all([
+    const refreshPromise = Promise.all([
       api.listSessions(),
       api.listMemories(),
       refreshSessionMessages(request.session_id),
     ])
+    await waitForAssistantTyping()
+    const [sessionPage, memoryPage] = await refreshPromise
     sessions.value = sessionPage.items
     memories.value = memoryPage.items
     replaceStreamWithPersistedTranscript(request.session_id)

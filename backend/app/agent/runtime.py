@@ -128,13 +128,15 @@ def _renumber_ordered_lists(content: str) -> str:
 
 def format_user_visible_answer(content: str) -> str:
     """Normalize compact model lists so each recommendation remains scannable."""
+    # Strip emphasis first because providers often wrap the whole marker in
+    # Markdown (``**1. item**``), which otherwise hides it from the list parser.
+    content = re.sub(r"\*\*(.+?)\*\*", r"\1", content)
     content = _renumber_ordered_lists(content)
     formatted = re.sub(
         r"[ \t]+-[ \t]+(?=(?:\*\*)?[A-Z][A-Z0-9-]{1,})",
         "\n\n- ",
         content,
     )
-    formatted = re.sub(r"\*\*(.+?)\*\*", r"\1", formatted)
     formatted = re.sub(r"(?<=[。！？!?])(?=[^\n])", "\n\n", formatted)
     formatted = re.sub(r"\n{3,}", "\n\n", formatted)
     return re.sub(r"[ \t]{2,}", " ", formatted).strip()

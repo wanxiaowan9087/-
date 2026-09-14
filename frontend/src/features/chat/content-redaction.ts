@@ -47,9 +47,9 @@ export function redactLocalSourcePaths(content: string): string {
 }
 
 export function formatAssistantContent(content: string): string {
-  return renumberRepeatedOrderedMarkers(redactLocalSourcePaths(content))
+  const withoutEmphasis = redactLocalSourcePaths(content).replace(/\*\*(.+?)\*\*/g, '$1')
+  return renumberRepeatedOrderedMarkers(withoutEmphasis)
     .replace(/[ \t]+-[ \t]+(?=(?:\*\*)?[A-Z][A-Z0-9-]{1,})/g, '\n\n- ')
-    .replace(/\*\*(.+?)\*\*/g, '$1')
     .replace(/(?<=[。！？!?])(?=[^\n])/g, '\n\n')
     .replace(/\n{3,}/g, '\n\n')
     .replace(/[ \t]{2,}/g, ' ')

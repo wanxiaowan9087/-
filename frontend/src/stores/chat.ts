@@ -214,7 +214,7 @@ export const useChatStore = defineStore('chat', {
         }
         this.displayAssistantText += this.displayQueue.slice(0, 1)
         this.displayQueue = this.displayQueue.slice(1)
-        this.displayTimer = globalThis.setTimeout(drain, 8)
+        this.displayTimer = globalThis.setTimeout(drain, 22)
       }
       drain()
     },

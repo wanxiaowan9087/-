@@ -45,6 +45,12 @@ describe('redactLocalSourcePaths', () => {
     )
   })
 
+  it('renumbers numeric sections wrapped in Markdown emphasis', () => {
+    expect(formatAssistantContent('**1. S8-AIR 轻羽**\n说明。\n\n**1. M6-MINI 小径**\n说明。')).toBe(
+      '1. S8-AIR 轻羽\n说明。\n\n2. M6-MINI 小径\n说明。',
+    )
+  })
+
   it('turns semantic breaks into compact renderable paragraphs', () => {
     expect(toAssistantParagraphs('第一句说明。第二句说明！\n\n- S8-AIR 适合日常清洁。')).toEqual([
       '第一句说明。',
