@@ -91,8 +91,34 @@ def redact_internal_model_references(content: str) -> str:
     return _INTERNAL_MODEL_REFERENCE.sub("小智", content)
 
 
+def _renumber_ordered_lists(content: str) -> str:
+    """Normalize repeated model-generated ordered-list markers.
+
+    Models occasionally emit ``1.`` for every item.  Renumber only markers at
+    the beginning of a line (optionally indented), allowing blank lines inside
+    a list and resetting after ordinary prose.  Inline numbers and dates are
+    left untouched.
+    """
+    lines = content.splitlines()
+    output: list[str] = []
+    next_number = 1
+    for line in lines:
+        match = re.match(r"^(\s*)\d+[.、)]\s*(.+?)\s*$", line)
+        if match:
+            output.append(f"{match.group(1)}{next_number}. {match.group(2)}")
+            next_number += 1
+            continue
+        if line.strip():
+            # A prose line terminates the current list; a subsequent list
+            # starts again at 1.
+            next_number = 1
+        output.append(line)
+    return "\n".join(output)
+
+
 def format_user_visible_answer(content: str) -> str:
     """Normalize compact model lists so each recommendation remains scannable."""
+    content = _renumber_ordered_lists(content)
     formatted = re.sub(
         r"[ \t]+-[ \t]+(?=(?:\*\*)?[A-Z][A-Z0-9-]{1,})",
         "\n\n- ",

@@ -10,6 +10,7 @@ service.
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Awaitable, Callable
 from typing import Any, Literal, TypedDict, cast
 
@@ -21,6 +22,66 @@ Retriever = Callable[[str], Awaitable[RetrievalResult]]
 EvidencePolisher = Callable[[str, RetrievalResult], Awaitable[str]]
 RouteName = Literal["memory", "knowledge", "insufficient"]
 logger = logging.getLogger(__name__)
+
+
+_CONTEXTUAL_SEASON_RE = re.compile(r"(春季|夏季|秋季|冬季)")
+_DOMAIN_MARKERS = (
+    "机器人",
+    "扫地",
+    "扫拖",
+    "保养",
+    "维护",
+    "清洁",
+    "滤网",
+    "电池",
+    "拖布",
+    "型号",
+    "产品",
+)
+
+
+def contextualize_retrieval_query(
+    user_text: str, memory_context: MemoryContext
+) -> str:
+    """Carry the subject of an elliptical follow-up into knowledge retrieval.
+
+    The complete short-term window is still passed to the model.  This small
+    adapter only helps RAG when a user sends a clearly elliptical follow-up
+    such as ``秋季呢`` after asking about robot maintenance in summer.  It
+    deliberately uses the latest earlier user turn and removes seasonal words
+    from that turn so the new season remains the active retrieval constraint.
+    """
+    current = re.sub(r"\s+", " ", user_text).strip()
+    if not current:
+        return current
+
+    compact = re.sub(r"\s+", "", current)
+    has_season = bool(_CONTEXTUAL_SEASON_RE.search(compact))
+    is_short_followup = len(compact) <= 16 and (
+        compact.endswith(("呢", "吗", "？", "?")) or compact.startswith(("那", "再", "还有"))
+    )
+    lacks_subject = not any(marker in compact for marker in _DOMAIN_MARKERS)
+    if not ((has_season and lacks_subject) or is_short_followup):
+        return current
+
+    previous_user = next(
+        (
+            message
+            for message in reversed(memory_context.window)
+            if message.role == "user"
+            and message.content.strip()
+            and re.sub(r"\s+", "", message.content) != compact
+        ),
+        None,
+    )
+    if previous_user is None:
+        return current
+
+    subject = _CONTEXTUAL_SEASON_RE.sub("", previous_user.content)
+    subject = re.sub(r"\s+", " ", subject).strip(" ，,。！？!?；;")
+    if not subject:
+        return current
+    return f"{subject} {current}"[:240]
 
 
 class RouteState(TypedDict, total=False):
@@ -79,7 +140,9 @@ class MemoryKnowledgeRoute:
                     "polished_context": None,
                     "route": "memory",
                 }
-            retrieval = await self._retrieve(user_text)
+            retrieval = await self._retrieve(
+                contextualize_retrieval_query(user_text, memory_context)
+            )
             polished = (
                 await self._try_polish(user_text, retrieval)
                 if retrieval.has_evidence
@@ -104,8 +167,9 @@ class MemoryKnowledgeRoute:
                 "route": "memory" if answer is not None else "knowledge",
             }
 
-        async def knowledge_node(_: RouteState) -> RouteState:
-            return {"retrieval": await self._retrieve(user_text)}
+        async def knowledge_node(state: RouteState) -> RouteState:
+            query = contextualize_retrieval_query(user_text, state["memory_context"])
+            return {"retrieval": await self._retrieve(query)}
 
         async def polish_node(state: RouteState) -> RouteState:
             retrieval = state.get("retrieval")

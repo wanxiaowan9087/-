@@ -1,10 +1,9 @@
 from datetime import UTC, datetime
 
-from backend.app.adapters.llm.platform_executor import _chunks
-from backend.app.adapters.llm.platform_executor import _filter_recommendations
+from backend.app.adapters.llm.platform_executor import _chunks, _filter_recommendations
 from backend.app.adapters.mcp.robot_catalog import RecommendedRobot
-from backend.app.mcp.robot_catalog_server import PRODUCTS
 from backend.app.agent.runtime import answer_calendar_intent, format_user_visible_answer
+from backend.app.mcp.robot_catalog_server import PRODUCTS
 
 
 def _robot(product_id: str, name: str) -> RecommendedRobot:
@@ -41,6 +40,20 @@ def test_answer_formatting_preserves_newlines_and_adds_sentence_paragraphs() -> 
     assert format_user_visible_answer(content) == "第一句说明。\n\n第二句说明！\n\n第三句说明？"
 
 
+def test_answer_formatting_renumbers_repeated_ordered_items() -> None:
+    content = "1. 清洁边刷\n1. 清理滤网\n1、检查电池"
+
+    assert format_user_visible_answer(content) == "1. 清洁边刷\n2. 清理滤网\n3. 检查电池"
+
+
+def test_answer_formatting_resets_numbering_after_prose() -> None:
+    content = "维护建议：\n1. 清洁边刷\n1. 清理滤网\n注意定期断电。\n1. 检查电池"
+
+    assert format_user_visible_answer(content) == (
+        "维护建议：\n1. 清洁边刷\n2. 清理滤网\n注意定期断电。\n1. 检查电池"
+    )
+
+
 def test_stream_chunks_emit_one_character_at_a_time() -> None:
     assert _chunks("第一段。\n\n第二段。") == list("第一段。\n\n第二段。")
 
@@ -55,4 +68,7 @@ def test_catalog_assigns_one_image_key_per_sku() -> None:
     keys = [product.image_key for product in PRODUCTS]
 
     assert len(keys) == len(set(keys)) == 6
-    assert next(product for product in PRODUCTS if product.product_id == "m6-terra").name == "M6 霞陶"
+    assert (
+        next(product for product in PRODUCTS if product.product_id == "m6-terra").name
+        == "M6 霞陶"
+    )

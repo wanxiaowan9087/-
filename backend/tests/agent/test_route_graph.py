@@ -5,7 +5,10 @@ from datetime import UTC, datetime
 import pytest
 
 from backend.app.agent.contracts import ConversationMessage, MemoryContext
-from backend.app.agent.route_graph import route_memory_then_knowledge
+from backend.app.agent.route_graph import (
+    contextualize_retrieval_query,
+    route_memory_then_knowledge,
+)
 from backend.app.rag.models import Chunk, DocumentType, RetrievalResult, SearchHit
 
 
@@ -50,6 +53,57 @@ async def test_grounded_route_polishes_retrieved_evidence_before_generation() ->
     assert result["route"] == "knowledge"
     assert result["polished_context"] == "整理后的中文事实摘要"
     assert calls == ["滤网多久清理一次？"]
+
+
+def test_contextual_followup_carries_previous_subject_into_retrieval() -> None:
+    context = MemoryContext(
+        window=(
+            ConversationMessage(
+                "m1", "user", "夏季怎么保养扫地机器人？", datetime.now(UTC)
+            ),
+            ConversationMessage(
+                "m2", "assistant", "夏季应定期清洁滤网。", datetime.now(UTC)
+            ),
+            ConversationMessage("m3", "user", "秋季呢", datetime.now(UTC)),
+        )
+    )
+
+    assert contextualize_retrieval_query("秋季呢", context) == "怎么保养扫地机器人 秋季呢"
+
+
+def test_non_elliptical_query_is_not_changed() -> None:
+    context = MemoryContext(
+        window=(
+            ConversationMessage("m1", "user", "夏季怎么保养扫地机器人？", datetime.now(UTC)),
+        )
+    )
+
+    assert contextualize_retrieval_query(
+        "秋季怎么保养扫地机器人", context
+    ) == "秋季怎么保养扫地机器人"
+
+
+@pytest.mark.asyncio
+async def test_route_passes_contextualized_followup_to_retriever() -> None:
+    queries: list[str] = []
+
+    async def retrieve(query: str) -> RetrievalResult:
+        queries.append(query)
+        return _retrieval()
+
+    context = MemoryContext(
+        window=(
+            ConversationMessage("m1", "user", "夏季怎么保养扫地机器人？", datetime.now(UTC)),
+            ConversationMessage("m2", "assistant", "夏季应清洁滤网。", datetime.now(UTC)),
+            ConversationMessage("m3", "user", "秋季呢", datetime.now(UTC)),
+        )
+    )
+    result = await route_memory_then_knowledge(
+        "秋季呢", context, answer_memory=lambda _query, _context: None, retrieve=retrieve
+    )
+
+    assert result["route"] == "knowledge"
+    assert queries == ["怎么保养扫地机器人 秋季呢"]
 
 
 @pytest.mark.asyncio
