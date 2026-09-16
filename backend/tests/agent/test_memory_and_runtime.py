@@ -259,6 +259,43 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(retriever.calls, 0)
         self.assertEqual(engine.requests, [])
 
+    async def test_mcp_recommendations_are_grounded_before_policy_even_when_rag_is_empty(
+        self,
+    ) -> None:
+        engine = FakeReActEngine(
+            default_content="30 平方米的小户型可以优先考虑 S8 Air，机身轻巧且适合小空间。"
+        )
+        empty_retriever = CountingRetriever(
+            RetrievalResult(hits=(), confidence=0.0, strategy="empty")
+        )
+        runtime = AgentRuntime(react_engine=engine, retriever=empty_retriever)
+        product = CatalogProduct(
+            product_id="s8-air",
+            model="S8-AIR",
+            name="S8 Air",
+            price=1999,
+            highlights=("轻薄机身", "基础扫拖"),
+            recommended_for=("小户型",),
+            colors=("云白",),
+        )
+
+        result = await runtime.execute(
+            AgentRequest(
+                request_id="request-catalog-grounding",
+                session_id="session-1",
+                subject_id="subject-1",
+                user_message_id="message-catalog-grounding",
+                user_text="我换了一个小家，只有30平米，该买什么扫地机器人",
+                catalog_products=(product,),
+            )
+        )
+
+        self.assertEqual(result.status, RunStatus.COMPLETED)
+        self.assertNotIn("资料不足", result.public_content)
+        self.assertTrue(result.citations)
+        self.assertIn("S8 Air", engine.requests[0].rendered_context)
+        self.assertIn("小户型", engine.requests[0].rendered_context)
+
     async def test_profile_intent_uses_current_user_memory_without_retrieval(self) -> None:
         class Memory:
             async def build_context(self, session_id: str, subject_id: str) -> MemoryContext:

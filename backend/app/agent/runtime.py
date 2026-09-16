@@ -640,6 +640,8 @@ class AgentRuntime:
             retrieval = route.get("retrieval")
             if retrieval is None:
                 retrieval = RetrievalResult(hits=(), confidence=0.0, strategy="memory-route")
+            if request.catalog_products:
+                retrieval = _with_catalog_evidence(retrieval, request.catalog_products)
             if request.mode is ConversationMode.REPORT and request.report_context:
                 retrieval = _with_report_evidence(retrieval, request)
             rendered_evidence = render_untrusted_context(retrieval.hits)
@@ -1073,6 +1075,63 @@ def _with_report_evidence(retrieval: RetrievalResult, request: AgentRequest) -> 
         hits=(evidence, *retrieval.hits),
         confidence=max(retrieval.confidence, 0.95),
         strategy=f"{retrieval.strategy}+external-report-preflight",
+        degraded_dependencies=retrieval.degraded_dependencies,
+        conflicting_sources=retrieval.conflicting_sources,
+    )
+
+
+def _with_catalog_evidence(
+    retrieval: RetrievalResult,
+    products: Sequence[CatalogProduct],
+) -> RetrievalResult:
+    """Promote MCP catalog results to traceable, high-confidence evidence.
+
+    Recommendation cards and answer grounding must share one source of truth.
+    The MCP response is already curated and read-only, so representing each
+    returned product as a normal ``SearchHit`` lets the existing citation and
+    release policy handle it without a second retrieval implementation.
+    """
+    unique: dict[str, CatalogProduct] = {}
+    for product in products:
+        if product.product_id and product.product_id not in unique:
+            unique[product.product_id] = product
+    if not unique:
+        return retrieval
+
+    document_id = str(uuid5(NAMESPACE_URL, "zenmop://robot-catalog"))
+    hits: list[SearchHit] = []
+    for product in unique.values():
+        details = [
+            f"型号：{product.name}（{product.model}）",
+            f"参考价格：{product.price} 元" if product.price > 0 else "",
+            f"主要特点：{'、'.join(product.highlights)}" if product.highlights else "",
+            f"适用场景：{'、'.join(product.recommended_for)}" if product.recommended_for else "",
+            f"颜色：{'、'.join(product.colors)}" if product.colors else "",
+        ]
+        content = "\n".join(line for line in details if line)
+        chunk = Chunk(
+            document_id=document_id,
+            document_version="catalog-v1",
+            chunk_id=f"{document_id}:{product.product_id}",
+            title=product.name,
+            source="kb://zenmop/robot-catalog",
+            content=content,
+            document_type=DocumentType.MARKDOWN,
+            metadata={"product_id": product.product_id, "model": product.model},
+        )
+        hits.append(
+            SearchHit(
+                chunk=chunk,
+                vector_score=None,
+                keyword_score=1.0,
+                fused_score=0.98,
+                rerank_score=0.98,
+            )
+        )
+    return RetrievalResult(
+        hits=tuple(hits) + retrieval.hits,
+        confidence=max(retrieval.confidence, 0.98),
+        strategy=f"{retrieval.strategy}+catalog-mcp",
         degraded_dependencies=retrieval.degraded_dependencies,
         conflicting_sources=retrieval.conflicting_sources,
     )

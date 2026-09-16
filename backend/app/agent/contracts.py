@@ -24,6 +24,9 @@ class CatalogProduct:
     model: str
     name: str
     price: int
+    highlights: Sequence[str] = ()
+    recommended_for: Sequence[str] = ()
+    colors: Sequence[str] = ()
 
 
 class RunStatus(StrEnum):

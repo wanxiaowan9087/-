@@ -15,6 +15,20 @@ export function conversationScrollDelta({
   return Math.max(0, lastMessageBottom - composerTop + gap)
 }
 
+export function shouldFollowConversation({
+  scrollTop,
+  clientHeight,
+  scrollHeight,
+  threshold = 72,
+}: {
+  scrollTop: number
+  clientHeight: number
+  scrollHeight: number
+  threshold?: number
+}): boolean {
+  return scrollHeight - (scrollTop + clientHeight) <= threshold
+}
+
 export type TranscriptVisibility = {
   currentUserMessageId: string | null
   currentRunId: string | null

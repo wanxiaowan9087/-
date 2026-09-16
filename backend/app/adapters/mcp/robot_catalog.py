@@ -24,6 +24,7 @@ class RecommendedRobot:
     image_key: str
     score: float
     catalog_source: str
+    colors: tuple[str, ...] = ()
 
 
 class RobotCatalogMcpClient:
@@ -50,10 +51,13 @@ class RobotCatalogMcpClient:
                         name=str(item["name"]),
                         price=int(item["price"]),
                         highlights=tuple(str(value) for value in item.get("highlights", [])),
-                        recommended_for=tuple(str(value) for value in item.get("recommended_for", [])),
+                        recommended_for=tuple(
+                            str(value) for value in item.get("recommended_for", [])
+                        ),
                         image_key=str(item["image_key"]),
                         score=float(item.get("score", 0)),
                         catalog_source=str(item["catalog_source"]),
+                        colors=tuple(str(value) for value in item.get("colors", [])),
                     )
                 )
             except (KeyError, TypeError, ValueError) as error:
@@ -70,7 +74,12 @@ class RobotCatalogMcpClient:
             stderr=asyncio.subprocess.PIPE,
         )
         assert process.stdin is not None and process.stdout is not None
-        request = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": tool_name, "arguments": arguments}}
+        request = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": tool_name, "arguments": arguments},
+        }
         try:
             stdout, stderr = await asyncio.wait_for(
                 process.communicate((json.dumps(request, ensure_ascii=False) + "\n").encode()),

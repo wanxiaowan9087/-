@@ -73,3 +73,25 @@ async def test_deterministic_query_rewrite_expands_color_only_robot_followup() -
 
     assert plan.original == "我喜欢白色的"
     assert plan.queries == ("我喜欢白色的 扫地机器人 型号 推荐",)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("question", "expected_terms"),
+    [
+        ("我换了个小家，就三十来平，买哪个合适", ("小户型", "30", "推荐", "型号")),
+        ("房子不大大概30㎡，想省心点，你帮我挑一款", ("小户型", "30", "推荐", "型号")),
+        ("预算两千左右，小户型木地板，平时有猫毛，咋选", ("预算", "小户型", "木地板", "宠物家庭")),
+        ("我喜欢灰色但家人喜欢绿色，按适合户型的来买还是按颜色", ("灰色", "绿色", "扫地机器人")),
+        ("说得有点乱哈，面积30平、木地板、预算不高，给个建议", ("小户型", "30", "木地板")),
+    ],
+)
+async def test_deterministic_rewrite_extracts_constraints_from_natural_language(
+    question: str, expected_terms: tuple[str, ...]
+) -> None:
+    plan = await DeterministicQueryRewriter().rewrite(question)
+
+    assert plan.strategy == "deterministic-query-normalization"
+    canonical = plan.queries[0]
+    for term in expected_terms:
+        assert term in canonical

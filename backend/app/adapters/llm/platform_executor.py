@@ -75,16 +75,22 @@ class RuntimeRunExecutor:
                 # Fetch the complete small catalog first. The final answer is
                 # the source of truth for which cards are safe to display.
                 recommendations = await recommend_robots(execution.input_content, limit=6)
-                if is_catalog_inventory_intent(execution.input_content):
-                    catalog_products = tuple(
-                        CatalogProduct(
-                            product_id=item.product_id,
-                            model=item.model,
-                            name=item.name,
-                            price=item.price,
-                        )
-                        for item in recommendations
+                # MCP is the authoritative read-only catalog.  Always pass its
+                # structured records into the runtime, not only for inventory
+                # count questions, so recommendation answers are grounded by
+                # the same records used to render product cards.
+                catalog_products = tuple(
+                    CatalogProduct(
+                        product_id=item.product_id,
+                        model=item.model,
+                        name=item.name,
+                        price=item.price,
+                        highlights=item.highlights,
+                        recommended_for=item.recommended_for,
+                        colors=item.colors,
                     )
+                    for item in recommendations
+                )
         except RobotCatalogMcpError:
             recommendations = ()
         try:

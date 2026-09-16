@@ -11,6 +11,7 @@ import {
   commitSessionMessages,
   hasPersistedCompletedReply,
   loadCompleteTranscript,
+  shouldFollowConversation,
   visibleTranscriptMessages,
   type SessionMessageCache,
   type SessionRequestTokens,
@@ -127,7 +128,13 @@ const visibleHistoricalMessages = computed(() => visibleTranscriptMessages(histo
 let revealObserver: IntersectionObserver | undefined
 let conversationLoadVersion = 0
 const messageLoadVersions: SessionRequestTokens = {}
-let scrollTimer: ReturnType<typeof globalThis.setTimeout> | undefined
+let scrollFrame = 0
+let followConversation = true
+let conversationStageElement: HTMLElement | null = null
+
+function readConversationStage() {
+  return document.querySelector<HTMLElement>('#agent-desk')
+}
 
 function summarizeSessionTitle(content: string): string {
   const compact = content.replace(/\s+/g, ' ').trim().replace(/[。！？!?，,；;：:]+$/g, '')
@@ -147,19 +154,48 @@ function observeReveals() {
 
 async function scrollConversationToEnd() {
   await nextTick()
-  const stage = document.querySelector<HTMLElement>('#agent-desk')
+  const stage = readConversationStage()
   if (!stage) return
   // Scroll only the conversation viewport.  Updating scrollTop directly is
   // deliberate: repeatedly starting smooth animations for every SSE delta
   // causes the visible “page shake” reported by users.
   stage.scrollTop = stage.scrollHeight
+  followConversation = true
 }
 
-function scheduleConversationScroll() {
-  if (scrollTimer) globalThis.clearTimeout(scrollTimer)
-  scrollTimer = globalThis.setTimeout(() => {
-    void scrollConversationToEnd()
-  }, 80)
+function scheduleConversationScroll(force = false) {
+  if (force) followConversation = true
+  if (scrollFrame) return
+  scrollFrame = globalThis.requestAnimationFrame(() => {
+    scrollFrame = 0
+    const stage = readConversationStage()
+    if (!stage || !followConversation) return
+    stage.scrollTop = stage.scrollHeight
+  })
+}
+
+function updateConversationFollowState() {
+  const stage = conversationStageElement
+  if (!stage) return
+  followConversation = shouldFollowConversation({
+    scrollTop: stage.scrollTop,
+    clientHeight: stage.clientHeight,
+    scrollHeight: stage.scrollHeight,
+  })
+}
+
+function bindConversationScroll() {
+  const stage = readConversationStage()
+  if (conversationStageElement === stage) return
+  conversationStageElement?.removeEventListener('scroll', updateConversationFollowState)
+  conversationStageElement = stage
+  stage?.addEventListener('scroll', updateConversationFollowState, { passive: true })
+  followConversation = true
+}
+
+function unbindConversationScroll() {
+  conversationStageElement?.removeEventListener('scroll', updateConversationFollowState)
+  conversationStageElement = null
 }
 
 function isRetryableStreamError(error: unknown): boolean {
@@ -196,7 +232,14 @@ async function recoverPersistedChat(sessionId: string, question: string): Promis
 watch(
   () => currentView.value,
   view => {
-    if (view === 'agent') scheduleConversationScroll()
+    if (view === 'agent') {
+      void nextTick(() => {
+        bindConversationScroll()
+        scheduleConversationScroll(true)
+      })
+    } else {
+      unbindConversationScroll()
+    }
   },
   { flush: 'post' },
 )
@@ -223,7 +266,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   revealObserver?.disconnect()
-  if (scrollTimer) globalThis.clearTimeout(scrollTimer)
+  if (scrollFrame) globalThis.cancelAnimationFrame(scrollFrame)
+  unbindConversationScroll()
   if (smsTimer) globalThis.clearInterval(smsTimer)
   if (toastTimer) globalThis.clearTimeout(toastTimer)
 })
@@ -581,7 +625,11 @@ function openAgentDesk() {
   currentView.value = 'agent'
   chat.closeNav()
   void refreshConversationState()
-  void nextTick(() => observeReveals())
+  void nextTick(() => {
+    observeReveals()
+    bindConversationScroll()
+    scheduleConversationScroll(true)
+  })
 }
 
 function openAdminDesk() {
@@ -727,7 +775,7 @@ async function executeChat(request: ChatRequest, question: string) {
     // A submitted turn always becomes the user's current reading position.
     // Keep all subsequent stream updates pinned inside the conversation pane;
     // never move the document viewport itself.
-    scheduleConversationScroll()
+    scheduleConversationScroll(true)
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
         await api.streamChat(request, {
@@ -758,7 +806,7 @@ async function executeChat(request: ChatRequest, question: string) {
     sessions.value = sessionPage.items
     memories.value = memoryPage.items
     replaceStreamWithPersistedTranscript(request.session_id)
-    scheduleConversationScroll()
+    scheduleConversationScroll(true)
   } catch (error) {
     if (!controller.signal.aborted) {
       if (error instanceof ApiClientError && error.status === 401) {

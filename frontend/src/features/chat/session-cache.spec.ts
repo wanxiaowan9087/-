@@ -5,6 +5,7 @@ import {
   commitSessionMessages,
   hasPersistedCompletedReply,
   loadCompleteTranscript,
+  shouldFollowConversation,
   visibleTranscriptMessages,
 } from './session-cache'
 
@@ -14,6 +15,12 @@ describe('session message cache', () => {
   it('never scrolls the page upward while a streamed answer grows', () => {
     expect(conversationScrollDelta({ lastMessageBottom: 520, composerTop: 600, gap: 24 })).toBe(0)
     expect(conversationScrollDelta({ lastMessageBottom: 640, composerTop: 600, gap: 24 })).toBe(64)
+  })
+
+  it('follows the stream only while the user is near the conversation bottom', () => {
+    expect(shouldFollowConversation({ scrollTop: 400, clientHeight: 600, scrollHeight: 1000 })).toBe(true)
+    expect(shouldFollowConversation({ scrollTop: 280, clientHeight: 600, scrollHeight: 1000 })).toBe(false)
+    expect(shouldFollowConversation({ scrollTop: 0, clientHeight: 600, scrollHeight: 1000 })).toBe(false)
   })
 
   it('keeps the active session transcript when a stale request completes', () => {
