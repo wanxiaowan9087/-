@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from collections.abc import AsyncIterator
 from dataclasses import asdict, is_dataclass
 from datetime import UTC, date, datetime
 from enum import Enum
+from time import monotonic
 from typing import Any, Protocol, cast
 from uuid import UUID
 
@@ -23,6 +25,7 @@ from backend.app.agent.tooling import CancellationToken
 from backend.app.application.ports import RunExecution
 
 _ANSWER_REVEAL_DELAY_SECONDS = 1.0
+logger = logging.getLogger(__name__)
 
 
 def _jsonable(value: Any) -> Any:
@@ -64,6 +67,7 @@ class RuntimeRunExecutor:
         self._lock = asyncio.Lock()
 
     async def stream(self, execution: RunExecution) -> AsyncIterator[tuple[str, dict[str, Any]]]:
+        stream_started = monotonic()
         token = CancellationToken()
         async with self._lock:
             self._tokens[execution.run_id] = token
@@ -75,6 +79,15 @@ class RuntimeRunExecutor:
                 # Fetch the complete small catalog first. The final answer is
                 # the source of truth for which cards are safe to display.
                 recommendations = await recommend_robots(execution.input_content, limit=6)
+                logger.info(
+                    "robot catalog lookup completed",
+                    extra={
+                        "component": "robot-catalog-mcp",
+                        "run_id": str(execution.run_id),
+                        "duration_ms": round((monotonic() - stream_started) * 1000),
+                        "recommendation_count": len(recommendations),
+                    },
+                )
                 # MCP is the authoritative read-only catalog.  Always pass its
                 # structured records into the runtime, not only for inventory
                 # count questions, so recommendation answers are grounded by
@@ -182,6 +195,16 @@ class RuntimeRunExecutor:
                 result = await result_task
             else:
                 result = await self._runtime.execute(request, cancellation=token)
+            logger.info(
+                "agent generation completed; finalizing stream",
+                extra={
+                    "component": "agent-runtime",
+                    "run_id": str(execution.run_id),
+                    "duration_ms": round((monotonic() - stream_started) * 1000),
+                    "status": result.status.value,
+                    "content_chars": len(result.public_content),
+                },
+            )
             if (
                 not recommendations
                 and result.status is RunStatus.COMPLETED
@@ -219,6 +242,16 @@ class RuntimeRunExecutor:
                 self._outcomes[execution.run_id] = result
             for citation in result.citations:
                 yield "citation", _jsonable(citation)
+            logger.info(
+                "agent stream post-processing completed",
+                extra={
+                    "component": "stream-finalization",
+                    "run_id": str(execution.run_id),
+                    "duration_ms": round((monotonic() - stream_started) * 1000),
+                    "citation_count": len(result.citations),
+                    "recommendation_count": len(selected_recommendations),
+                },
+            )
             if result.status is RunStatus.NEEDS_REVIEW:
                 yield (
                     "review_required",
@@ -238,6 +271,15 @@ class RuntimeRunExecutor:
                         "usage": None,
                     },
                 )
+                logger.info(
+                    "agent stream terminal event emitted",
+                    extra={
+                        "component": "stream-finalization",
+                        "run_id": str(execution.run_id),
+                        "duration_ms": round((monotonic() - stream_started) * 1000),
+                        "outcome": "needs_review",
+                    },
+                )
             elif result.status is RunStatus.COMPLETED:
                 if not streamed_parts:
                     chunks = _chunks(result.public_content)
@@ -252,6 +294,15 @@ class RuntimeRunExecutor:
                         "assistant_message_id": str(execution.assistant_message_id),
                         "finish_reason": "stop",
                         "usage": None,
+                    },
+                )
+                logger.info(
+                    "agent stream terminal event emitted",
+                    extra={
+                        "component": "stream-finalization",
+                        "run_id": str(execution.run_id),
+                        "duration_ms": round((monotonic() - stream_started) * 1000),
+                        "outcome": "completed",
                     },
                 )
             elif result.status is RunStatus.CANCELLED:
@@ -379,6 +430,10 @@ def _is_robot_recommendation_intent(text: str) -> bool:
             "适合什么家庭",
         )
     )
+    product_catalog_request = "产品" in compact and any(
+        term in compact
+        for term in ("介绍", "现有", "有哪些", "目录", "清单", "型号")
+    )
     # A known model name makes an otherwise short suitability question
     # unambiguous (e.g. “S8 皓月适合什么家庭”).
     known_model = any(
@@ -400,6 +455,7 @@ def _is_robot_recommendation_intent(text: str) -> bool:
     return (
         (robot_subject and recommendation_request)
         or explicit_product_request
+        or product_catalog_request
         or (known_model and recommendation_request)
         or (not robot_subject and recommendation_request and any(
             marker in compact for marker in ("适合", "选择", "选一", "哪一", "哪款", "哪一个")

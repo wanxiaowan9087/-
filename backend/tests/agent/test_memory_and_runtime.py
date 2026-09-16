@@ -184,6 +184,10 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("小智", answer or "")
             self.assertNotIn("现有资料不足以支持", answer or "")
 
+    def test_product_introduction_is_not_treated_as_assistant_identity(self) -> None:
+        self.assertIsNone(answer_identity_intent("介绍一下你的产品"))
+        self.assertIsNotNone(answer_identity_intent("介绍一下你自己"))
+
     async def test_role_question_does_not_enter_retrieval_route(self) -> None:
         engine = FakeReActEngine()
         retriever = CountingRetriever(self._retrieval())
