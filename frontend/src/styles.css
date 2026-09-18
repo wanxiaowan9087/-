@@ -568,6 +568,10 @@ textarea:focus-visible {
   width: 100%;
   min-height: 0;
   overflow-y: auto;
+  /* The transcript is manually pinned during streaming. Browser scroll
+     anchoring can otherwise move the viewport upward when the temporary
+     question/answer nodes are replaced by their persisted versions. */
+  overflow-anchor: none;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
   scroll-behavior: auto;

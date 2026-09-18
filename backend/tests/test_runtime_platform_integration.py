@@ -162,6 +162,47 @@ async def test_runtime_result_is_streamed_and_persisted() -> None:
 
 
 @pytest.mark.asyncio
+async def test_done_is_committed_before_post_terminal_summary_work(monkeypatch) -> None:
+    repository, execution = await _prepared_run()
+    runtime = FixedRuntime(
+        AgentRunResult(
+            run_id=str(execution.run_id),
+            status=RunStatus.COMPLETED,
+            public_content="回答已经完成。",
+            candidate_content=None,
+            citations=(),
+            trace=_trace(),
+            confidence=0.91,
+            confidence_threshold=0.65,
+        )
+    )
+    entered_post_terminal = asyncio.Event()
+    release_post_terminal = asyncio.Event()
+    original = repository.record_product_recommendations
+
+    async def blocked_record_product_recommendations(**kwargs):
+        entered_post_terminal.set()
+        await release_post_terminal.wait()
+        return await original(**kwargs)
+
+    monkeypatch.setattr(
+        repository,
+        "record_product_recommendations",
+        blocked_record_product_recommendations,
+    )
+    task = asyncio.create_task(
+        RunCoordinator(repository, RuntimeRunExecutor(runtime))._execute(execution)
+    )
+
+    await asyncio.wait_for(entered_post_terminal.wait(), timeout=2)
+    assert repository.events[execution.run_id][-1].event["event_type"] == "done"
+    assert repository.runs[execution.run_id].status == "completed"
+
+    release_post_terminal.set()
+    await task
+
+
+@pytest.mark.asyncio
 async def test_runtime_executor_forwards_model_tokens_before_generation_finishes() -> None:
     _, execution = await _prepared_run()
     runtime = StreamingRuntime(

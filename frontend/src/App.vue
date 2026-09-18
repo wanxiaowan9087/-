@@ -166,8 +166,9 @@ async function scrollConversationToEnd() {
 function scheduleConversationScroll(force = false) {
   if (force) followConversation = true
   if (scrollFrame) return
-  scrollFrame = globalThis.requestAnimationFrame(() => {
+  scrollFrame = globalThis.requestAnimationFrame(async () => {
     scrollFrame = 0
+    await nextTick()
     const stage = readConversationStage()
     if (!stage || !followConversation) return
     stage.scrollTop = stage.scrollHeight
@@ -299,6 +300,14 @@ watch(
   async () => {
     await nextTick()
     observeReveals()
+    if (chat.previewState === 'loading' || chat.displayAssistantText) scheduleConversationScroll()
+  },
+)
+
+watch(
+  () => submittedQuestion.value,
+  value => {
+    if (value) scheduleConversationScroll(true)
   },
 )
 
@@ -1190,7 +1199,7 @@ async function confirmCancelActiveRun() {
           <section v-if="chat.citations.length" class="sources"><div class="sources-head"><span>依据资料</span><small>{{ chat.citations.length }} 条可定位引用</small></div><div class="source-grid"><button v-for="(citation, index) in chat.citations" :key="`${citation.documentVersion}:${citation.chunkId}`" class="source-card" type="button"><span class="source-index">{{ String(index + 1).padStart(2, '0') }}</span><div><b>{{ citation.title }}</b><p>{{ citation.locator }}</p></div><i>↗</i></button></div></section>
           <ProductRecommendations :recommendations="activeProductRecommendations" @select="openRecommendedProduct" />
         </article>
-        <div v-if="chat.previewState === 'loading'" class="streaming-indicator" role="status" aria-live="polite"><span class="runner" aria-hidden="true">🏃</span><span>小智正在整理资料并生成回答</span></div>
+        <div v-if="chat.previewState === 'loading' && !chat.assistantText" class="streaming-indicator" role="status" aria-live="polite"><span class="runner" aria-hidden="true">🏃</span><span>小智正在整理资料并生成回答</span></div>
 
         <section v-if="isOverlay" class="state-panel" :class="chat.previewState" aria-live="polite">
           <span class="state-glyph">{{ chat.previewState === 'loading' ? '◌' : chat.previewState === 'error' ? '!' : '—' }}</span>

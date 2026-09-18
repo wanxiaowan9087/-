@@ -113,6 +113,8 @@ class RunCoordinator:
         product_recommendations: list[dict[str, object]] = []
         stream_started = monotonic()
         persisted_events = 0
+        completed_outcome: str | None = None
+        terminal_event_received = False
         try:
             async with self._repository.transaction() as tx:
                 await tx.update_run(
@@ -212,20 +214,12 @@ class RunCoordinator:
                                     confidence=rich_outcome.confidence,
                                     now=now,
                                 )
+                        # Product analytics and summary scheduling are
+                        # deliberately committed after the terminal event's
+                        # transaction. They must not delay the SSE ``done``
+                        # event after the answer is already available.
                         if outcome == "completed":
-                            await tx.record_product_recommendations(
-                                owner_id=execution.subject_id,
-                                session_id=execution.session_id,
-                                message_id=execution.assistant_message_id,
-                                recommendations=product_recommendations,
-                                now=now,
-                            )
-                            await tx.enqueue_summary_update(
-                                owner_id=execution.subject_id,
-                                session_id=execution.session_id,
-                                trigger_message_id=execution.assistant_message_id,
-                                now=now,
-                            )
+                            completed_outcome = outcome
                     elif event_type == "error":
                         await tx.update_run(
                             execution.run_id,
@@ -234,8 +228,37 @@ class RunCoordinator:
                             now=now,
                         )
                     if event_type in {"done", "error"}:
-                        return
-            raise RuntimeError("run executor ended without a terminal event")
+                        terminal_event_received = True
+                        break
+                if event_type in {"done", "error"}:
+                    break
+            if not terminal_event_received:
+                raise RuntimeError("run executor ended without a terminal event")
+            if completed_outcome == "completed":
+                async with self._repository.transaction() as tx:
+                    now = datetime.now(UTC)
+                    await tx.record_product_recommendations(
+                        owner_id=execution.subject_id,
+                        session_id=execution.session_id,
+                        message_id=execution.assistant_message_id,
+                        recommendations=product_recommendations,
+                        now=now,
+                    )
+                    await tx.enqueue_summary_update(
+                        owner_id=execution.subject_id,
+                        session_id=execution.session_id,
+                        trigger_message_id=execution.assistant_message_id,
+                        now=now,
+                    )
+                logger.info(
+                    "post-terminal usage persistence completed",
+                    extra={
+                        "component": "streaming-post-terminal",
+                        "duration_ms": round((monotonic() - stream_started) * 1000),
+                        "recommendation_count": len(product_recommendations),
+                    },
+                )
+            return
         except (Exception, ValidationError):
             logger.exception(
                 "agent run execution failed",
