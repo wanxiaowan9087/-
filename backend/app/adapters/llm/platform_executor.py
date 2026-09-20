@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import asdict, is_dataclass
 from datetime import UTC, date, datetime
 from enum import Enum
@@ -53,11 +53,19 @@ class AgentRuntimePort(Protocol):
     ) -> AgentRunResult: ...
 
 
+class AsyncCloseable(Protocol):
+    async def aclose(self) -> None: ...
+
+
 class RuntimeRunExecutor:
     """Adapts the AI runtime result to the platform's durable event seam."""
 
     def __init__(
-        self, runtime: AgentRuntimePort, *, report_workflow: Any | None = None
+        self,
+        runtime: AgentRuntimePort,
+        *,
+        report_workflow: Any | None = None,
+        owned_async_resources: Sequence[AsyncCloseable] = (),
     ) -> None:
         self._runtime = runtime
         self._report_workflow = report_workflow
@@ -65,6 +73,7 @@ class RuntimeRunExecutor:
         self._tokens: dict[UUID, CancellationToken] = {}
         self._outcomes: dict[UUID, Any] = {}
         self._lock = asyncio.Lock()
+        self._owned_async_resources = tuple(owned_async_resources)
 
     async def stream(self, execution: RunExecution) -> AsyncIterator[tuple[str, dict[str, Any]]]:
         stream_started = monotonic()
@@ -348,6 +357,8 @@ class RuntimeRunExecutor:
                 token.cancel()
             self._tokens.clear()
             self._outcomes.clear()
+        for resource in self._owned_async_resources:
+            await resource.aclose()
 
 
 def _chunks(content: str, *, size: int = 12) -> list[str]:

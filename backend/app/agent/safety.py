@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
@@ -36,13 +37,56 @@ class PromptInjectionDetector:
         re.compile(r"(泄露|输出|展示).{0,20}(系统提示词|内部策略|密钥)"),
         re.compile(r"(?i)<\s*(system|assistant|developer)\s*>"),
         re.compile(r"(?i)\btool\s*:\s*[a-z_][a-z0-9_]*\s*\("),
+        re.compile(
+            r"(执行|调用|运行).{0,30}"
+            r"(内部工具|内部函数|delete[_\s-]?memory|导出工具|管理工具)",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"(最高优先级|覆盖|绕过|跳过|不要遵守|无视).{0,40}"
+            r"(开发者|系统|引用校验|安全规则|权限|要求|指令)",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"(伪造|编造).{0,40}(参数|密钥|手机号|清单|官方文档|证书)",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"(导出|泄露|列出|提供).{0,45}"
+            r"(所有|全部|历史).{0,30}"
+            r"(用户对话|聊天记录|手机号|密钥|个人信息)",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"(所有|全部|历史).{0,35}"
+            r"(用户对话|聊天记录|手机号|密钥|个人信息).{0,35}"
+            r"(导出|泄露|列出|提供)",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"(显示|输出|展示|泄露).{0,30}"
+            r"(系统|开发者|内部).{0,15}(prompt|提示词|指令|参数)",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"(不要检索|跳过检索|绕过引用|跳过引用|不要引用).{0,40}"
+            r"(伪造|编造|密钥|手机号|参数|声称)",
+            re.IGNORECASE,
+        ),
     )
 
     def scan(self, text: str, *, source: str) -> tuple[InjectionSignal, ...]:
+        normalized = unicodedata.normalize("NFKC", text)
+        normalized = "".join(
+            character
+            for character in normalized
+            if unicodedata.category(character) != "Cf"
+        )
+        normalized = re.sub(r"\s+", " ", normalized).strip()
         return tuple(
             InjectionSignal(source=source, pattern=pattern.pattern[:120])
             for pattern in self._PATTERNS
-            if pattern.search(text)
+            if pattern.search(normalized)
         )
 
 
@@ -51,6 +95,8 @@ class PolicyInput:
     confidence: float
     has_evidence: bool
     citations_valid: bool
+    evidence_reliable: bool | None = None
+    knowledge_boundary_unsupported: bool = False
     high_risk: bool = False
     safety_or_repair_claim: bool = False
     warranty_claim: bool = False
@@ -131,6 +177,17 @@ class DeterministicReviewPolicy:
                 [ReviewReason.POLICY_RULE], policy_input.confidence
             )
 
+        if policy_input.knowledge_boundary_unsupported:
+            return PolicyDecision(
+                action=PolicyAction.REFUSE,
+                reasons=(ReviewReason.LOW_CONFIDENCE,),
+                confidence=policy_input.confidence,
+                public_content=(
+                    "现有资料没有明确记录这个信息，我不能据此推断或编造。"
+                    "如果后续有经过确认的官方资料，可以再为你核对。"
+                ),
+            )
+
         # Frozen priority 4: an ordinary unsupported question gets one prompt.
         if not policy_input.has_evidence:
             return PolicyDecision(
@@ -142,8 +199,13 @@ class DeterministicReviewPolicy:
                 ),
             )
 
+        evidence_reliable = (
+            policy_input.evidence_reliable
+            if policy_input.evidence_reliable is not None
+            else policy_input.confidence >= self.confidence_threshold
+        )
         if (
-            policy_input.confidence < self.confidence_threshold
+            not evidence_reliable
             or not policy_input.citations_valid
             or policy_input.missing_required_fields
         ):
@@ -212,6 +274,7 @@ class DraftGate:
 
 _HIGH_RISK_PATTERNS = (
     re.compile(r"(拆机|短接|绕过.{0,8}保护|电池.{0,8}(刺穿|拆解)|明火)"),
+    re.compile(r"(拆开|拆解|打开).{0,8}电池"),
     re.compile(r"(?i)\b(disable|bypass)\b.{0,20}\b(safety|sensor|lock)\b"),
     re.compile(r"(删除全部|永久删除|重置账号|转账|付款)"),
     re.compile(r"(游泳池|水下|浸水|进水).{0,12}(清洁|运行|开启)?"),

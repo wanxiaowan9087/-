@@ -97,6 +97,15 @@ if (-not (Test-Path $composeFile)) {
 # Compose 会在创建服务时校验这些变量；只保存在本次 PowerShell 进程中，
 # 不会写入项目目录或 .env 文件。
 $null = Require-EnvironmentValue 'DASHSCOPE_API_KEY' '请输入 DASHSCOPE_API_KEY（不会写入文件）'
+# The paid Rerank key is optional. Import it from the User environment when
+# present, without prompting or replacing the primary model key.
+$rerankKey = [Environment]::GetEnvironmentVariable('DASHSCOPE_RERANK_API_KEY', 'Process')
+if ([string]::IsNullOrWhiteSpace($rerankKey)) {
+    $rerankKey = [Environment]::GetEnvironmentVariable('DASHSCOPE_RERANK_API_KEY', 'User')
+}
+if (-not [string]::IsNullOrWhiteSpace($rerankKey)) {
+    Set-Item -Path 'Env:DASHSCOPE_RERANK_API_KEY' -Value $rerankKey
+}
 $null = Require-EnvironmentValue 'APP_CURSOR_SIGNING_SECRET' '请输入 APP_CURSOR_SIGNING_SECRET（不会写入文件）'
 $null = Require-EnvironmentValue 'APP_PHONE_ENCRYPTION_KEY' '请输入 APP_PHONE_ENCRYPTION_KEY（不会写入文件）'
 $null = Require-EnvironmentValue 'APP_PHONE_LOOKUP_HMAC_KEY' '请输入 APP_PHONE_LOOKUP_HMAC_KEY（不会写入文件）'

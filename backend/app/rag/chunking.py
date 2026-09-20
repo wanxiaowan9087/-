@@ -89,31 +89,35 @@ class DocumentChunker:
         self, document: DocumentRecord
     ) -> list[ChunkPiece]:
         pieces: list[ChunkPiece] = []
-        heading = "document"
+        heading_path: list[tuple[int, str]] = []
         buffer: list[str] = []
+
+        def flush() -> None:
+            if not buffer:
+                return
+            section = " > ".join(value for _, value in heading_path) or "document"
+            raw = "\n".join(buffer)
+            metadata: ChunkMetadata = {"heading": section}
+            metadata.update(_markdown_identity(f"{section}\n{raw}"))
+            pieces.extend(
+                self._recursive_pieces(
+                    raw,
+                    SourceLocation(section=section),
+                    metadata,
+                )
+            )
+
         for line in document.content.splitlines():
             match = re.match(r"^\s{0,3}(#{1,6})\s+(.+?)\s*$", line)
             if match:
-                if buffer:
-                    pieces.extend(
-                        self._recursive_pieces(
-                            "\n".join(buffer),
-                            SourceLocation(section=heading),
-                            {"heading": heading},
-                        )
-                    )
-                heading = match.group(2).strip()
+                flush()
+                depth = len(match.group(1))
+                heading_path = [item for item in heading_path if item[0] < depth]
+                heading_path.append((depth, match.group(2).strip()))
                 buffer = [line]
             else:
                 buffer.append(line)
-        if buffer:
-            pieces.extend(
-                self._recursive_pieces(
-                    "\n".join(buffer),
-                    SourceLocation(section=heading),
-                    {"heading": heading},
-                )
-            )
+        flush()
         return pieces
 
     def _text(
@@ -229,3 +233,22 @@ def _nearest_break(text: str, start: int, target: int) -> int:
     ]
     split_at = max(candidates)
     return target if split_at <= start else split_at + 1
+
+
+_PRODUCT_IDENTITIES: tuple[tuple[tuple[str, ...], str, str], ...] = (
+    (("x9-edge", "x9 edge", "曜石 edge"), "X9-EDGE", "x9-edge"),
+    (("s8-luna", "s8 luna", "皓月"), "S8-LUNA", "s8-luna"),
+    (("s8-air", "s8 air", "轻羽"), "S8-AIR", "s8-air"),
+    (("x9-obsidian", "x9 obsidian", "曜石"), "X9-OBSIDIAN", "x9-obsidian"),
+    (("m6-terra", "m6 terra", "霞陶"), "M6-TERRA", "m6-terra"),
+    (("m6-mini", "m6 mini", "小径"), "M6-MINI", "m6-mini"),
+)
+
+
+def _markdown_identity(value: str) -> ChunkMetadata:
+    compact = re.sub(r"\s+", " ", value).casefold()
+    # The tuple keeps specific aliases before generic names such as 曜石.
+    for aliases, model, product_id in _PRODUCT_IDENTITIES:
+        if any(alias in compact for alias in aliases):
+            return {"model": model, "product_id": product_id}
+    return {}

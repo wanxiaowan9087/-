@@ -1,0 +1,2030 @@
+{
+  "cases": {
+    "compare-air-mini": [
+      {
+        "claim_id": "compare-air-mini-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e07c4e49-b83b-5bdf-8159-f0b965ab0a34",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "compare-budget-small": [
+      {
+        "claim_id": "compare-budget-small-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "8f415e09-11ba-59af-8cf9-7124c2342c91",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "compare-carpet": [
+      {
+        "claim_id": "compare-carpet-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "aae45799-0f87-5900-a6e6-7302b1a450d4",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "compare-compact": [
+      {
+        "claim_id": "compare-compact-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e07c4e49-b83b-5bdf-8159-f0b965ab0a34",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "compare-dock": [
+      {
+        "claim_id": "compare-dock-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "db8952d0-dba0-54a9-b199-1c08fee33a63",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "compare-edge-furniture": [
+      {
+        "claim_id": "compare-edge-furniture-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "4d31c328-0f99-580e-91b7-c9fd1c6140c0",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "compare-edge-obsidian": [
+      {
+        "claim_id": "compare-edge-obsidian-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "4d31c328-0f99-580e-91b7-c9fd1c6140c0",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "compare-feature-boundary": [
+      {
+        "claim_id": "compare-feature-boundary-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "8f415e09-11ba-59af-8cf9-7124c2342c91",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "compare-home-size": [
+      {
+        "claim_id": "compare-home-size-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "db8952d0-dba0-54a9-b199-1c08fee33a63",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "compare-luna-obsidian": [
+      {
+        "claim_id": "compare-luna-obsidian-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "aae45799-0f87-5900-a6e6-7302b1a450d4",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "compare-model-table": [
+      {
+        "claim_id": "compare-model-table-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "4d31c328-0f99-580e-91b7-c9fd1c6140c0",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "compare-night": [
+      {
+        "claim_id": "compare-night-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "db8952d0-dba0-54a9-b199-1c08fee33a63",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "compare-pet": [
+      {
+        "claim_id": "compare-pet-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "aae45799-0f87-5900-a6e6-7302b1a450d4",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "compare-terra-luna": [
+      {
+        "claim_id": "compare-terra-luna-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "ecf10ef2-8e37-5ec6-a769-888810bcb5cd",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "compare-water": [
+      {
+        "claim_id": "compare-water-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "ecf10ef2-8e37-5ec6-a769-888810bcb5cd",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "direct-common-boundary": [
+      {
+        "claim_id": "direct-common-boundary-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "c59feb6c-7f2a-5b81-84fd-2abe04970e57",
+            "section": "4. 参数边界"
+          }
+        ]
+      }
+    ],
+    "direct-common-consumable": [
+      {
+        "claim_id": "direct-common-consumable-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "4c754893-1a8c-509c-a4cc-f6587530179b",
+            "section": "1. 耗材作用与判断"
+          }
+        ]
+      }
+    ],
+    "direct-common-consumable-ban": [
+      {
+        "claim_id": "direct-common-consumable-ban-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "4c754893-1a8c-509c-a4cc-f6587530179b",
+            "section": "4. 禁止做法"
+          }
+        ]
+      }
+    ],
+    "direct-common-consumable-diff": [
+      {
+        "claim_id": "direct-common-consumable-diff-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "4c754893-1a8c-509c-a4cc-f6587530179b",
+            "section": "2. 型号差异"
+          }
+        ]
+      }
+    ],
+    "direct-common-install": [
+      {
+        "claim_id": "direct-common-install-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "d34fe5f5-5c9f-5910-8c8a-82494204c784",
+            "section": "1. 安装前检查"
+          }
+        ]
+      }
+    ],
+    "direct-common-maintain": [
+      {
+        "claim_id": "direct-common-maintain-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "c59feb6c-7f2a-5b81-84fd-2abe04970e57",
+            "section": "3. 通用维护节奏"
+          }
+        ]
+      }
+    ],
+    "direct-common-map": [
+      {
+        "claim_id": "direct-common-map-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "d34fe5f5-5c9f-5910-8c8a-82494204c784",
+            "section": "2. 建图流程"
+          }
+        ]
+      }
+    ],
+    "direct-common-map-error": [
+      {
+        "claim_id": "direct-common-map-error-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "d34fe5f5-5c9f-5910-8c8a-82494204c784",
+            "section": "4. 建图异常处理"
+          }
+        ]
+      }
+    ],
+    "direct-common-scenario": [
+      {
+        "claim_id": "direct-common-scenario-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "c8755b5d-c9b2-5a4a-8ab4-9452569cae79",
+            "section": "配置原则"
+          }
+        ]
+      }
+    ],
+    "direct-common-stop": [
+      {
+        "claim_id": "direct-common-stop-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "c59feb6c-7f2a-5b81-84fd-2abe04970e57",
+            "section": "2. 必须立即停用的情况"
+          }
+        ]
+      }
+    ],
+    "direct-m6mini-battery": [
+      {
+        "claim_id": "direct-m6mini-battery-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e07c4e49-b83b-5bdf-8159-f0b965ab0a34",
+            "section": "4. 电池与充电"
+          }
+        ]
+      }
+    ],
+    "direct-m6mini-feature": [
+      {
+        "claim_id": "direct-m6mini-feature-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e07c4e49-b83b-5bdf-8159-f0b965ab0a34",
+            "section": "2. 组件与功能"
+          }
+        ]
+      }
+    ],
+    "direct-m6mini-position": [
+      {
+        "claim_id": "direct-m6mini-position-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e07c4e49-b83b-5bdf-8159-f0b965ab0a34",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "direct-m6mini-safety": [
+      {
+        "claim_id": "direct-m6mini-safety-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e07c4e49-b83b-5bdf-8159-f0b965ab0a34",
+            "section": "7. 型号专属安全使用"
+          }
+        ]
+      }
+    ],
+    "direct-m6mini-setup": [
+      {
+        "claim_id": "direct-m6mini-setup-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e07c4e49-b83b-5bdf-8159-f0b965ab0a34",
+            "section": "3. 推荐使用方式"
+          }
+        ]
+      }
+    ],
+    "direct-m6terra-battery": [
+      {
+        "claim_id": "direct-m6terra-battery-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "ecf10ef2-8e37-5ec6-a769-888810bcb5cd",
+            "section": "4. 电池与充电"
+          }
+        ]
+      }
+    ],
+    "direct-m6terra-feature": [
+      {
+        "claim_id": "direct-m6terra-feature-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "ecf10ef2-8e37-5ec6-a769-888810bcb5cd",
+            "section": "2. 组件与功能"
+          }
+        ]
+      }
+    ],
+    "direct-m6terra-position": [
+      {
+        "claim_id": "direct-m6terra-position-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "ecf10ef2-8e37-5ec6-a769-888810bcb5cd",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "direct-m6terra-safety": [
+      {
+        "claim_id": "direct-m6terra-safety-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "ecf10ef2-8e37-5ec6-a769-888810bcb5cd",
+            "section": "7. 型号专属安全使用"
+          }
+        ]
+      }
+    ],
+    "direct-m6terra-setup": [
+      {
+        "claim_id": "direct-m6terra-setup-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "ecf10ef2-8e37-5ec6-a769-888810bcb5cd",
+            "section": "3. 推荐使用方式"
+          }
+        ]
+      }
+    ],
+    "direct-s8air-battery": [
+      {
+        "claim_id": "direct-s8air-battery-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "8f415e09-11ba-59af-8cf9-7124c2342c91",
+            "section": "4. 电池与充电"
+          }
+        ]
+      }
+    ],
+    "direct-s8air-feature": [
+      {
+        "claim_id": "direct-s8air-feature-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "8f415e09-11ba-59af-8cf9-7124c2342c91",
+            "section": "2. 组件与功能"
+          }
+        ]
+      }
+    ],
+    "direct-s8air-position": [
+      {
+        "claim_id": "direct-s8air-position-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "8f415e09-11ba-59af-8cf9-7124c2342c91",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "direct-s8air-safety": [
+      {
+        "claim_id": "direct-s8air-safety-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "8f415e09-11ba-59af-8cf9-7124c2342c91",
+            "section": "7. 型号专属安全使用"
+          }
+        ]
+      }
+    ],
+    "direct-s8air-setup": [
+      {
+        "claim_id": "direct-s8air-setup-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "8f415e09-11ba-59af-8cf9-7124c2342c91",
+            "section": "3. 推荐使用方式"
+          }
+        ]
+      }
+    ],
+    "direct-s8luna-battery": [
+      {
+        "claim_id": "direct-s8luna-battery-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "db8952d0-dba0-54a9-b199-1c08fee33a63",
+            "section": "4. 电池与充电"
+          }
+        ]
+      }
+    ],
+    "direct-s8luna-feature": [
+      {
+        "claim_id": "direct-s8luna-feature-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "db8952d0-dba0-54a9-b199-1c08fee33a63",
+            "section": "2. 组件与功能"
+          }
+        ]
+      }
+    ],
+    "direct-s8luna-position": [
+      {
+        "claim_id": "direct-s8luna-position-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "db8952d0-dba0-54a9-b199-1c08fee33a63",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "direct-s8luna-safety": [
+      {
+        "claim_id": "direct-s8luna-safety-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "db8952d0-dba0-54a9-b199-1c08fee33a63",
+            "section": "7. 型号专属安全使用"
+          }
+        ]
+      }
+    ],
+    "direct-s8luna-setup": [
+      {
+        "claim_id": "direct-s8luna-setup-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "db8952d0-dba0-54a9-b199-1c08fee33a63",
+            "section": "3. 首次使用与日常运行"
+          }
+        ]
+      }
+    ],
+    "direct-x9edge-battery": [
+      {
+        "claim_id": "direct-x9edge-battery-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "4d31c328-0f99-580e-91b7-c9fd1c6140c0",
+            "section": "4. 电池与充电"
+          }
+        ]
+      }
+    ],
+    "direct-x9edge-feature": [
+      {
+        "claim_id": "direct-x9edge-feature-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "4d31c328-0f99-580e-91b7-c9fd1c6140c0",
+            "section": "2. 组件与功能"
+          }
+        ]
+      }
+    ],
+    "direct-x9edge-position": [
+      {
+        "claim_id": "direct-x9edge-position-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "4d31c328-0f99-580e-91b7-c9fd1c6140c0",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "direct-x9edge-safety": [
+      {
+        "claim_id": "direct-x9edge-safety-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "4d31c328-0f99-580e-91b7-c9fd1c6140c0",
+            "section": "7. 型号专属安全使用"
+          }
+        ]
+      }
+    ],
+    "direct-x9edge-setup": [
+      {
+        "claim_id": "direct-x9edge-setup-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "4d31c328-0f99-580e-91b7-c9fd1c6140c0",
+            "section": "3. 推荐使用方式"
+          }
+        ]
+      }
+    ],
+    "direct-x9obsidian-battery": [
+      {
+        "claim_id": "direct-x9obsidian-battery-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "aae45799-0f87-5900-a6e6-7302b1a450d4",
+            "section": "4. 电池、基站与水路"
+          }
+        ]
+      }
+    ],
+    "direct-x9obsidian-feature": [
+      {
+        "claim_id": "direct-x9obsidian-feature-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "aae45799-0f87-5900-a6e6-7302b1a450d4",
+            "section": "2. 组件与功能"
+          }
+        ]
+      }
+    ],
+    "direct-x9obsidian-position": [
+      {
+        "claim_id": "direct-x9obsidian-position-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "aae45799-0f87-5900-a6e6-7302b1a450d4",
+            "section": "1. 型号定位"
+          }
+        ]
+      }
+    ],
+    "direct-x9obsidian-safety": [
+      {
+        "claim_id": "direct-x9obsidian-safety-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "aae45799-0f87-5900-a6e6-7302b1a450d4",
+            "section": "7. 型号专属安全使用"
+          }
+        ]
+      }
+    ],
+    "direct-x9obsidian-setup": [
+      {
+        "claim_id": "direct-x9obsidian-setup-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "aae45799-0f87-5900-a6e6-7302b1a450d4",
+            "section": "3. 首次设置"
+          }
+        ]
+      }
+    ],
+    "fault-air-map": [
+      {
+        "claim_id": "fault-air-map-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "8f415e09-11ba-59af-8cf9-7124c2342c91",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      }
+    ],
+    "fault-air-noise": [
+      {
+        "claim_id": "fault-air-noise-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "8f415e09-11ba-59af-8cf9-7124c2342c91",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      }
+    ],
+    "fault-edge-brush": [
+      {
+        "claim_id": "fault-edge-brush-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "4d31c328-0f99-580e-91b7-c9fd1c6140c0",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      }
+    ],
+    "fault-edge-obstacle": [
+      {
+        "claim_id": "fault-edge-obstacle-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "4d31c328-0f99-580e-91b7-c9fd1c6140c0",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      }
+    ],
+    "fault-generic-close": [
+      {
+        "claim_id": "fault-generic-close-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "0d2c8904-adff-5be4-947d-e49a36ae3761",
+            "section": "3. 关闭工单条件"
+          }
+        ]
+      }
+    ],
+    "fault-generic-path": [
+      {
+        "claim_id": "fault-generic-path-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "0d2c8904-adff-5be4-947d-e49a36ae3761",
+            "section": "1. 通用决策路径"
+          }
+        ]
+      }
+    ],
+    "fault-generic-stop": [
+      {
+        "claim_id": "fault-generic-stop-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "c59feb6c-7f2a-5b81-84fd-2abe04970e57",
+            "section": "2. 必须立即停用的情况"
+          }
+        ]
+      }
+    ],
+    "fault-luna-dock": [
+      {
+        "claim_id": "fault-luna-dock-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "db8952d0-dba0-54a9-b199-1c08fee33a63",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      }
+    ],
+    "fault-luna-dust": [
+      {
+        "claim_id": "fault-luna-dust-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "db8952d0-dba0-54a9-b199-1c08fee33a63",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      }
+    ],
+    "fault-mini-return": [
+      {
+        "claim_id": "fault-mini-return-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e07c4e49-b83b-5bdf-8159-f0b965ab0a34",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      }
+    ],
+    "fault-mini-timer": [
+      {
+        "claim_id": "fault-mini-timer-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e07c4e49-b83b-5bdf-8159-f0b965ab0a34",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      }
+    ],
+    "fault-obsidian-carpet": [
+      {
+        "claim_id": "fault-obsidian-carpet-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "aae45799-0f87-5900-a6e6-7302b1a450d4",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      }
+    ],
+    "fault-obsidian-water": [
+      {
+        "claim_id": "fault-obsidian-water-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "aae45799-0f87-5900-a6e6-7302b1a450d4",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      }
+    ],
+    "fault-terra-brush": [
+      {
+        "claim_id": "fault-terra-brush-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "ecf10ef2-8e37-5ec6-a769-888810bcb5cd",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      }
+    ],
+    "fault-terra-water": [
+      {
+        "claim_id": "fault-terra-water-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "ecf10ef2-8e37-5ec6-a769-888810bcb5cd",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      }
+    ],
+    "multi-air-small-home": [
+      {
+        "claim_id": "multi-air-small-home-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "8f415e09-11ba-59af-8cf9-7124c2342c91",
+            "section": "1. 型号定位"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-air-small-home-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "8f415e09-11ba-59af-8cf9-7124c2342c91",
+            "section": "3. 推荐使用方式"
+          }
+        ]
+      }
+    ],
+    "multi-air-timer": [
+      {
+        "claim_id": "multi-air-timer-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "8f415e09-11ba-59af-8cf9-7124c2342c91",
+            "section": "7. 型号专属安全使用"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-air-timer-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "c59feb6c-7f2a-5b81-84fd-2abe04970e57",
+            "section": "1. 必须遵守的安全要求"
+          }
+        ]
+      }
+    ],
+    "multi-consumable-safe": [
+      {
+        "claim_id": "multi-consumable-safe-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "4c754893-1a8c-509c-a4cc-f6587530179b",
+            "section": "3. 更换流程"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-consumable-safe-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "c59feb6c-7f2a-5b81-84fd-2abe04970e57",
+            "section": "1. 必须遵守的安全要求"
+          }
+        ]
+      }
+    ],
+    "multi-edge-carpet": [
+      {
+        "claim_id": "multi-edge-carpet-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "4d31c328-0f99-580e-91b7-c9fd1c6140c0",
+            "section": "2. 组件与功能"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-edge-carpet-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "c59feb6c-7f2a-5b81-84fd-2abe04970e57",
+            "section": "1. 必须遵守的安全要求"
+          }
+        ]
+      }
+    ],
+    "multi-edge-pet": [
+      {
+        "claim_id": "multi-edge-pet-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "4d31c328-0f99-580e-91b7-c9fd1c6140c0",
+            "section": "2. 组件与功能"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-edge-pet-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "4d31c328-0f99-580e-91b7-c9fd1c6140c0",
+            "section": "7. 型号专属安全使用"
+          }
+        ]
+      }
+    ],
+    "multi-fault-close": [
+      {
+        "claim_id": "multi-fault-close-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "0d2c8904-adff-5be4-947d-e49a36ae3761",
+            "section": "3. 关闭工单条件"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-fault-close-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "c59feb6c-7f2a-5b81-84fd-2abe04970e57",
+            "section": "2. 必须立即停用的情况"
+          }
+        ]
+      }
+    ],
+    "multi-luna-maintain": [
+      {
+        "claim_id": "multi-luna-maintain-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "db8952d0-dba0-54a9-b199-1c08fee33a63",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-luna-maintain-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "c59feb6c-7f2a-5b81-84fd-2abe04970e57",
+            "section": "1. 必须遵守的安全要求"
+          }
+        ]
+      }
+    ],
+    "multi-luna-night": [
+      {
+        "claim_id": "multi-luna-night-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "db8952d0-dba0-54a9-b199-1c08fee33a63",
+            "section": "1. 型号定位"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-luna-night-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "db8952d0-dba0-54a9-b199-1c08fee33a63",
+            "section": "7. 型号专属安全使用"
+          }
+        ]
+      }
+    ],
+    "multi-maintenance-plan": [
+      {
+        "claim_id": "multi-maintenance-plan-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "c59feb6c-7f2a-5b81-84fd-2abe04970e57",
+            "section": "3. 通用维护节奏"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-maintenance-plan-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "4c754893-1a8c-509c-a4cc-f6587530179b",
+            "section": "1. 耗材作用与判断"
+          }
+        ]
+      }
+    ],
+    "multi-map-model": [
+      {
+        "claim_id": "multi-map-model-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "d34fe5f5-5c9f-5910-8c8a-82494204c784",
+            "section": "2. 建图流程"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-map-model-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "d34fe5f5-5c9f-5910-8c8a-82494204c784",
+            "section": "3. 型号设置重点"
+          }
+        ]
+      }
+    ],
+    "multi-mini-routine": [
+      {
+        "claim_id": "multi-mini-routine-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e07c4e49-b83b-5bdf-8159-f0b965ab0a34",
+            "section": "3. 推荐使用方式"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-mini-routine-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "e07c4e49-b83b-5bdf-8159-f0b965ab0a34",
+            "section": "5. 维护建议"
+          }
+        ]
+      }
+    ],
+    "multi-mini-safety": [
+      {
+        "claim_id": "multi-mini-safety-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e07c4e49-b83b-5bdf-8159-f0b965ab0a34",
+            "section": "7. 型号专属安全使用"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-mini-safety-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "c59feb6c-7f2a-5b81-84fd-2abe04970e57",
+            "section": "1. 必须遵守的安全要求"
+          }
+        ]
+      }
+    ],
+    "multi-obsidian-carpet": [
+      {
+        "claim_id": "multi-obsidian-carpet-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "aae45799-0f87-5900-a6e6-7302b1a450d4",
+            "section": "2. 组件与功能"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-obsidian-carpet-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "aae45799-0f87-5900-a6e6-7302b1a450d4",
+            "section": "3. 首次设置"
+          }
+        ]
+      }
+    ],
+    "multi-obsidian-water": [
+      {
+        "claim_id": "multi-obsidian-water-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "aae45799-0f87-5900-a6e6-7302b1a450d4",
+            "section": "3. 首次设置"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-obsidian-water-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "aae45799-0f87-5900-a6e6-7302b1a450d4",
+            "section": "7. 型号专属安全使用"
+          }
+        ]
+      }
+    ],
+    "multi-price-boundary": [
+      {
+        "claim_id": "multi-price-boundary-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "82548e81-c7fd-5ea3-ad43-92c07c4ec294",
+            "section": "S8-LUNA 皓月"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-price-boundary-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "44f22f29-e7c4-572a-add6-3f6dccd9bef9",
+            "section": "不能从表中推断的参数"
+          }
+        ]
+      }
+    ],
+    "multi-scene-choice": [
+      {
+        "claim_id": "multi-scene-choice-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "44f22f29-e7c4-572a-add6-3f6dccd9bef9",
+            "section": "推荐决策"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-scene-choice-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "c8755b5d-c9b2-5a4a-8ab4-9452569cae79",
+            "section": "配置原则"
+          }
+        ]
+      }
+    ],
+    "multi-stop-fault": [
+      {
+        "claim_id": "multi-stop-fault-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "c59feb6c-7f2a-5b81-84fd-2abe04970e57",
+            "section": "2. 必须立即停用的情况"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-stop-fault-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "0d2c8904-adff-5be4-947d-e49a36ae3761",
+            "section": "1. 通用决策路径"
+          }
+        ]
+      }
+    ],
+    "multi-terra-floor": [
+      {
+        "claim_id": "multi-terra-floor-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "ecf10ef2-8e37-5ec6-a769-888810bcb5cd",
+            "section": "3. 推荐使用方式"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-terra-floor-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "ecf10ef2-8e37-5ec6-a769-888810bcb5cd",
+            "section": "7. 型号专属安全使用"
+          }
+        ]
+      }
+    ],
+    "multi-terra-maintain": [
+      {
+        "claim_id": "multi-terra-maintain-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "ecf10ef2-8e37-5ec6-a769-888810bcb5cd",
+            "section": "5. 维护建议"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-terra-maintain-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "4c754893-1a8c-509c-a4cc-f6587530179b",
+            "section": "3. 更换流程"
+          }
+        ]
+      }
+    ],
+    "multi-water-fault": [
+      {
+        "claim_id": "multi-water-fault-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "0d2c8904-adff-5be4-947d-e49a36ae3761",
+            "section": "2. 标准排查表"
+          }
+        ]
+      },
+      {
+        "claim_id": "multi-water-fault-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "c59feb6c-7f2a-5b81-84fd-2abe04970e57",
+            "section": "2. 必须立即停用的情况"
+          }
+        ]
+      }
+    ],
+    "rewrite-air-small": [
+      {
+        "claim_id": "rewrite-air-small-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "8f415e09-11ba-59af-8cf9-7124c2342c91",
+            "section": "3. 推荐使用方式"
+          }
+        ]
+      }
+    ],
+    "rewrite-edge-corner": [
+      {
+        "claim_id": "rewrite-edge-corner-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "4d31c328-0f99-580e-91b7-c9fd1c6140c0",
+            "section": "2. 组件与功能"
+          }
+        ]
+      }
+    ],
+    "rewrite-filter": [
+      {
+        "claim_id": "rewrite-filter-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "4c754893-1a8c-509c-a4cc-f6587530179b",
+            "section": "1. 耗材作用与判断"
+          }
+        ]
+      }
+    ],
+    "rewrite-luna-dry": [
+      {
+        "claim_id": "rewrite-luna-dry-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "db8952d0-dba0-54a9-b199-1c08fee33a63",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      }
+    ],
+    "rewrite-map": [
+      {
+        "claim_id": "rewrite-map-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "d34fe5f5-5c9f-5910-8c8a-82494204c784",
+            "section": "4. 建图异常处理"
+          }
+        ]
+      }
+    ],
+    "rewrite-mini-schedule": [
+      {
+        "claim_id": "rewrite-mini-schedule-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e07c4e49-b83b-5bdf-8159-f0b965ab0a34",
+            "section": "7. 型号专属安全使用"
+          }
+        ]
+      }
+    ],
+    "rewrite-obsidian-leak": [
+      {
+        "claim_id": "rewrite-obsidian-leak-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "aae45799-0f87-5900-a6e6-7302b1a450d4",
+            "section": "6. 常见问题与处理"
+          }
+        ]
+      }
+    ],
+    "rewrite-pet": [
+      {
+        "claim_id": "rewrite-pet-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "44f22f29-e7c4-572a-add6-3f6dccd9bef9",
+            "section": "推荐决策"
+          }
+        ]
+      }
+    ],
+    "rewrite-stop": [
+      {
+        "claim_id": "rewrite-stop-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "c59feb6c-7f2a-5b81-84fd-2abe04970e57",
+            "section": "2. 必须立即停用的情况"
+          }
+        ]
+      }
+    ],
+    "rewrite-terra-wood": [
+      {
+        "claim_id": "rewrite-terra-wood-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "ecf10ef2-8e37-5ec6-a769-888810bcb5cd",
+            "section": "7. 型号专属安全使用"
+          }
+        ]
+      }
+    ],
+    "v3-colloquial-001": [
+      {
+        "claim_id": "v3-colloquial-001-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "f0c49e5b-f7db-5790-bdc8-21b0d60b6af0"
+          }
+        ]
+      }
+    ],
+    "v3-colloquial-002": [
+      {
+        "claim_id": "v3-colloquial-002-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "f0c49e5b-f7db-5790-bdc8-21b0d60b6af0"
+          }
+        ]
+      }
+    ],
+    "v3-colloquial-003": [
+      {
+        "claim_id": "v3-colloquial-003-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "993d8590-feb6-5d6a-a15f-d666d85f77e0"
+          }
+        ]
+      }
+    ],
+    "v3-colloquial-004": [
+      {
+        "claim_id": "v3-colloquial-004-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "993d8590-feb6-5d6a-a15f-d666d85f77e0"
+          }
+        ]
+      }
+    ],
+    "v3-colloquial-005": [
+      {
+        "claim_id": "v3-colloquial-005-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "713faa1e-1435-53ee-8f14-74b4eeed5101"
+          }
+        ]
+      }
+    ],
+    "v3-colloquial-006": [
+      {
+        "claim_id": "v3-colloquial-006-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "713faa1e-1435-53ee-8f14-74b4eeed5101"
+          }
+        ]
+      }
+    ],
+    "v3-colloquial-007": [
+      {
+        "claim_id": "v3-colloquial-007-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "7d4fb97a-5e22-54ce-b05f-9f6d0e8abe25"
+          }
+        ]
+      }
+    ],
+    "v3-colloquial-008": [
+      {
+        "claim_id": "v3-colloquial-008-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "7d4fb97a-5e22-54ce-b05f-9f6d0e8abe25"
+          }
+        ]
+      }
+    ],
+    "v3-colloquial-009": [
+      {
+        "claim_id": "v3-colloquial-009-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "57e20968-21a5-5e92-a30d-d1b5947c5066"
+          }
+        ]
+      }
+    ],
+    "v3-colloquial-010": [
+      {
+        "claim_id": "v3-colloquial-010-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "57e20968-21a5-5e92-a30d-d1b5947c5066"
+          }
+        ]
+      }
+    ],
+    "v3-colloquial-011": [
+      {
+        "claim_id": "v3-colloquial-011-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "94010829-7e0d-551b-8342-1952d83e8687"
+          }
+        ]
+      }
+    ],
+    "v3-colloquial-012": [
+      {
+        "claim_id": "v3-colloquial-012-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "b02b1c0d-8894-5aeb-b068-c66ecc186a50"
+          }
+        ]
+      }
+    ],
+    "v3-colloquial-013": [
+      {
+        "claim_id": "v3-colloquial-013-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "20ed0b7d-f80e-5447-b26d-edf84045cb39"
+          }
+        ]
+      }
+    ],
+    "v3-colloquial-014": [
+      {
+        "claim_id": "v3-colloquial-014-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "82fafad8-c335-54c9-b92e-ddaaa6da7c49"
+          }
+        ]
+      }
+    ],
+    "v3-colloquial-015": [
+      {
+        "claim_id": "v3-colloquial-015-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e2942aaa-dd8f-57b7-ae43-48d7b3c7dd40"
+          }
+        ]
+      }
+    ],
+    "v3-colloquial-016": [
+      {
+        "claim_id": "v3-colloquial-016-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "bdbf3df2-a5e8-5b5c-a6d4-bc5d3b7d19ba"
+          }
+        ]
+      }
+    ],
+    "v3-direct-001": [
+      {
+        "claim_id": "v3-direct-001-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e2942aaa-dd8f-57b7-ae43-48d7b3c7dd40"
+          }
+        ]
+      }
+    ],
+    "v3-direct-002": [
+      {
+        "claim_id": "v3-direct-002-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e2942aaa-dd8f-57b7-ae43-48d7b3c7dd40"
+          }
+        ]
+      }
+    ],
+    "v3-direct-003": [
+      {
+        "claim_id": "v3-direct-003-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e2942aaa-dd8f-57b7-ae43-48d7b3c7dd40"
+          }
+        ]
+      }
+    ],
+    "v3-direct-004": [
+      {
+        "claim_id": "v3-direct-004-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e2942aaa-dd8f-57b7-ae43-48d7b3c7dd40"
+          }
+        ]
+      }
+    ],
+    "v3-direct-005": [
+      {
+        "claim_id": "v3-direct-005-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "82fafad8-c335-54c9-b92e-ddaaa6da7c49"
+          }
+        ]
+      }
+    ],
+    "v3-direct-006": [
+      {
+        "claim_id": "v3-direct-006-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "82fafad8-c335-54c9-b92e-ddaaa6da7c49"
+          }
+        ]
+      }
+    ],
+    "v3-direct-007": [
+      {
+        "claim_id": "v3-direct-007-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "82fafad8-c335-54c9-b92e-ddaaa6da7c49"
+          }
+        ]
+      }
+    ],
+    "v3-direct-008": [
+      {
+        "claim_id": "v3-direct-008-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "82fafad8-c335-54c9-b92e-ddaaa6da7c49"
+          }
+        ]
+      }
+    ],
+    "v3-direct-009": [
+      {
+        "claim_id": "v3-direct-009-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "20ed0b7d-f80e-5447-b26d-edf84045cb39"
+          }
+        ]
+      }
+    ],
+    "v3-direct-010": [
+      {
+        "claim_id": "v3-direct-010-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "20ed0b7d-f80e-5447-b26d-edf84045cb39"
+          }
+        ]
+      }
+    ],
+    "v3-direct-011": [
+      {
+        "claim_id": "v3-direct-011-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "20ed0b7d-f80e-5447-b26d-edf84045cb39"
+          }
+        ]
+      }
+    ],
+    "v3-direct-012": [
+      {
+        "claim_id": "v3-direct-012-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "20ed0b7d-f80e-5447-b26d-edf84045cb39"
+          }
+        ]
+      }
+    ],
+    "v3-direct-013": [
+      {
+        "claim_id": "v3-direct-013-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "b02b1c0d-8894-5aeb-b068-c66ecc186a50"
+          }
+        ]
+      }
+    ],
+    "v3-direct-014": [
+      {
+        "claim_id": "v3-direct-014-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "b02b1c0d-8894-5aeb-b068-c66ecc186a50"
+          }
+        ]
+      }
+    ],
+    "v3-direct-015": [
+      {
+        "claim_id": "v3-direct-015-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "b02b1c0d-8894-5aeb-b068-c66ecc186a50"
+          }
+        ]
+      }
+    ],
+    "v3-direct-016": [
+      {
+        "claim_id": "v3-direct-016-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "b02b1c0d-8894-5aeb-b068-c66ecc186a50"
+          }
+        ]
+      }
+    ],
+    "v3-direct-017": [
+      {
+        "claim_id": "v3-direct-017-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "7d4fb97a-5e22-54ce-b05f-9f6d0e8abe25"
+          }
+        ]
+      }
+    ],
+    "v3-direct-018": [
+      {
+        "claim_id": "v3-direct-018-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "7d4fb97a-5e22-54ce-b05f-9f6d0e8abe25"
+          }
+        ]
+      }
+    ],
+    "v3-direct-019": [
+      {
+        "claim_id": "v3-direct-019-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "7d4fb97a-5e22-54ce-b05f-9f6d0e8abe25"
+          }
+        ]
+      }
+    ],
+    "v3-direct-020": [
+      {
+        "claim_id": "v3-direct-020-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "7d4fb97a-5e22-54ce-b05f-9f6d0e8abe25"
+          }
+        ]
+      }
+    ],
+    "v3-direct-021": [
+      {
+        "claim_id": "v3-direct-021-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "f0c49e5b-f7db-5790-bdc8-21b0d60b6af0"
+          }
+        ]
+      }
+    ],
+    "v3-direct-022": [
+      {
+        "claim_id": "v3-direct-022-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "f0c49e5b-f7db-5790-bdc8-21b0d60b6af0"
+          }
+        ]
+      }
+    ],
+    "v3-direct-023": [
+      {
+        "claim_id": "v3-direct-023-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "f0c49e5b-f7db-5790-bdc8-21b0d60b6af0"
+          }
+        ]
+      }
+    ],
+    "v3-direct-024": [
+      {
+        "claim_id": "v3-direct-024-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "f0c49e5b-f7db-5790-bdc8-21b0d60b6af0"
+          }
+        ]
+      }
+    ],
+    "v3-direct-025": [
+      {
+        "claim_id": "v3-direct-025-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "94010829-7e0d-551b-8342-1952d83e8687"
+          }
+        ]
+      }
+    ],
+    "v3-direct-026": [
+      {
+        "claim_id": "v3-direct-026-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "94010829-7e0d-551b-8342-1952d83e8687"
+          }
+        ]
+      }
+    ],
+    "v3-direct-027": [
+      {
+        "claim_id": "v3-direct-027-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "94010829-7e0d-551b-8342-1952d83e8687"
+          }
+        ]
+      }
+    ],
+    "v3-direct-028": [
+      {
+        "claim_id": "v3-direct-028-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "94010829-7e0d-551b-8342-1952d83e8687"
+          }
+        ]
+      }
+    ],
+    "v3-direct-029": [
+      {
+        "claim_id": "v3-direct-029-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "57e20968-21a5-5e92-a30d-d1b5947c5066"
+          }
+        ]
+      }
+    ],
+    "v3-direct-030": [
+      {
+        "claim_id": "v3-direct-030-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "57e20968-21a5-5e92-a30d-d1b5947c5066"
+          }
+        ]
+      }
+    ],
+    "v3-direct-031": [
+      {
+        "claim_id": "v3-direct-031-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "57e20968-21a5-5e92-a30d-d1b5947c5066"
+          }
+        ]
+      }
+    ],
+    "v3-direct-032": [
+      {
+        "claim_id": "v3-direct-032-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "57e20968-21a5-5e92-a30d-d1b5947c5066"
+          }
+        ]
+      }
+    ],
+    "v3-direct-033": [
+      {
+        "claim_id": "v3-direct-033-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "993d8590-feb6-5d6a-a15f-d666d85f77e0"
+          }
+        ]
+      }
+    ],
+    "v3-direct-034": [
+      {
+        "claim_id": "v3-direct-034-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "993d8590-feb6-5d6a-a15f-d666d85f77e0"
+          }
+        ]
+      }
+    ],
+    "v3-direct-035": [
+      {
+        "claim_id": "v3-direct-035-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "993d8590-feb6-5d6a-a15f-d666d85f77e0"
+          }
+        ]
+      }
+    ],
+    "v3-direct-036": [
+      {
+        "claim_id": "v3-direct-036-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "993d8590-feb6-5d6a-a15f-d666d85f77e0"
+          }
+        ]
+      }
+    ],
+    "v3-direct-037": [
+      {
+        "claim_id": "v3-direct-037-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "713faa1e-1435-53ee-8f14-74b4eeed5101"
+          }
+        ]
+      }
+    ],
+    "v3-direct-038": [
+      {
+        "claim_id": "v3-direct-038-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "713faa1e-1435-53ee-8f14-74b4eeed5101"
+          }
+        ]
+      }
+    ],
+    "v3-direct-039": [
+      {
+        "claim_id": "v3-direct-039-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "713faa1e-1435-53ee-8f14-74b4eeed5101"
+          }
+        ]
+      }
+    ],
+    "v3-direct-040": [
+      {
+        "claim_id": "v3-direct-040-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "713faa1e-1435-53ee-8f14-74b4eeed5101"
+          }
+        ]
+      }
+    ],
+    "v3-direct-041": [
+      {
+        "claim_id": "v3-direct-041-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "bdbf3df2-a5e8-5b5c-a6d4-bc5d3b7d19ba"
+          }
+        ]
+      }
+    ],
+    "v3-direct-042": [
+      {
+        "claim_id": "v3-direct-042-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "bdbf3df2-a5e8-5b5c-a6d4-bc5d3b7d19ba"
+          }
+        ]
+      }
+    ],
+    "v3-direct-043": [
+      {
+        "claim_id": "v3-direct-043-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "bdbf3df2-a5e8-5b5c-a6d4-bc5d3b7d19ba"
+          }
+        ]
+      }
+    ],
+    "v3-direct-044": [
+      {
+        "claim_id": "v3-direct-044-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "bdbf3df2-a5e8-5b5c-a6d4-bc5d3b7d19ba"
+          }
+        ]
+      }
+    ],
+    "v3-multi-001": [
+      {
+        "claim_id": "v3-multi-001-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "713faa1e-1435-53ee-8f14-74b4eeed5101"
+          }
+        ]
+      },
+      {
+        "claim_id": "v3-multi-001-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "7d4fb97a-5e22-54ce-b05f-9f6d0e8abe25"
+          }
+        ]
+      }
+    ],
+    "v3-multi-002": [
+      {
+        "claim_id": "v3-multi-002-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "f0c49e5b-f7db-5790-bdc8-21b0d60b6af0"
+          }
+        ]
+      },
+      {
+        "claim_id": "v3-multi-002-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "82fafad8-c335-54c9-b92e-ddaaa6da7c49"
+          }
+        ]
+      }
+    ],
+    "v3-multi-003": [
+      {
+        "claim_id": "v3-multi-003-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "b02b1c0d-8894-5aeb-b068-c66ecc186a50"
+          }
+        ]
+      },
+      {
+        "claim_id": "v3-multi-003-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "20ed0b7d-f80e-5447-b26d-edf84045cb39"
+          }
+        ]
+      }
+    ],
+    "v3-multi-004": [
+      {
+        "claim_id": "v3-multi-004-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "57e20968-21a5-5e92-a30d-d1b5947c5066"
+          }
+        ]
+      },
+      {
+        "claim_id": "v3-multi-004-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "993d8590-feb6-5d6a-a15f-d666d85f77e0"
+          }
+        ]
+      }
+    ],
+    "v3-multi-005": [
+      {
+        "claim_id": "v3-multi-005-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "e2942aaa-dd8f-57b7-ae43-48d7b3c7dd40"
+          }
+        ]
+      },
+      {
+        "claim_id": "v3-multi-005-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "713faa1e-1435-53ee-8f14-74b4eeed5101"
+          }
+        ]
+      }
+    ],
+    "v3-multi-006": [
+      {
+        "claim_id": "v3-multi-006-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "94010829-7e0d-551b-8342-1952d83e8687"
+          }
+        ]
+      },
+      {
+        "claim_id": "v3-multi-006-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "82fafad8-c335-54c9-b92e-ddaaa6da7c49"
+          }
+        ]
+      }
+    ],
+    "v3-multi-007": [
+      {
+        "claim_id": "v3-multi-007-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "20ed0b7d-f80e-5447-b26d-edf84045cb39"
+          }
+        ]
+      },
+      {
+        "claim_id": "v3-multi-007-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "993d8590-feb6-5d6a-a15f-d666d85f77e0"
+          }
+        ]
+      }
+    ],
+    "v3-multi-008": [
+      {
+        "claim_id": "v3-multi-008-claim-1",
+        "supporting_sources": [
+          {
+            "document_id": "bdbf3df2-a5e8-5b5c-a6d4-bc5d3b7d19ba"
+          }
+        ]
+      },
+      {
+        "claim_id": "v3-multi-008-claim-2",
+        "supporting_sources": [
+          {
+            "document_id": "b02b1c0d-8894-5aeb-b068-c66ecc186a50"
+          }
+        ]
+      }
+    ]
+  },
+  "description": "Document and section selectors resolved at evaluation time for each chunking configuration.",
+  "schema_version": 1
+}

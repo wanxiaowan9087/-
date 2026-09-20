@@ -514,6 +514,102 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result.citations)
         self.assertEqual(len(result.trace), 4)
 
+    async def test_final_citation_is_selected_against_generated_answer(self) -> None:
+        mapping = SearchHit(
+            chunk=Chunk(
+                document_id="00000000-0000-0000-0000-000000000201",
+                document_version="v1",
+                chunk_id="mapping",
+                title="曜石建图说明",
+                source="kb://mapping",
+                content="X9-OBSIDIAN 支持多房间建图。",
+                document_type=DocumentType.MARKDOWN,
+                metadata={"model": "X9-OBSIDIAN"},
+            ),
+            vector_score=0.95,
+            keyword_score=0.92,
+            fused_score=0.95,
+            rerank_score=0.95,
+        )
+        battery = SearchHit(
+            chunk=Chunk(
+                document_id="00000000-0000-0000-0000-000000000202",
+                document_version="v1",
+                chunk_id="battery",
+                title="曜石电池说明",
+                source="kb://battery",
+                content="长期不用时应关机并放在阴凉干燥处；电池异常发热时立即停用。",
+                document_type=DocumentType.MARKDOWN,
+                metadata={"model": "X9-OBSIDIAN"},
+            ),
+            vector_score=0.87,
+            keyword_score=0.84,
+            fused_score=0.88,
+            rerank_score=0.88,
+        )
+        engine = FakeReActEngine(
+            default_content="长期不用时请关机并置于阴凉干燥处；电池异常发热应立即停用。"
+        )
+        runtime = AgentRuntime(
+            react_engine=engine,
+            retriever=StubRetriever(
+                RetrievalResult(hits=(mapping, battery), confidence=0.92)
+            ),
+        )
+
+        result = await runtime.execute(self._request("曜石使用时要注意什么？"))
+
+        self.assertEqual(result.status, RunStatus.COMPLETED)
+        self.assertEqual(result.citations[0].chunk_id, "battery")
+
+    async def test_normal_generation_sends_only_four_diverse_chunks_to_model(self) -> None:
+        hits = tuple(
+            SearchHit(
+                chunk=Chunk(
+                    document_id=f"00000000-0000-0000-0000-{index:012d}",
+                    document_version="v1",
+                    chunk_id=f"chunk-{index}",
+                    title=f"维护资料 {index}",
+                    source=f"kb://maintenance/{index}",
+                    content=f"维护证据 {index}",
+                    document_type=DocumentType.TEXT,
+                ),
+                vector_score=0.9 - index * 0.01,
+                keyword_score=0.8 - index * 0.01,
+                fused_score=0.9 - index * 0.01,
+            )
+            for index in range(6)
+        )
+        engine = FakeReActEngine(default_content="请按资料维护设备。")
+        runtime = AgentRuntime(
+            react_engine=engine,
+            retriever=StubRetriever(RetrievalResult(hits=hits, confidence=0.9)),
+        )
+
+        result = await runtime.execute(self._request("扫地机器人平时怎么维护"))
+
+        self.assertEqual(result.status, RunStatus.COMPLETED)
+        rendered = engine.requests[0].rendered_context
+        for index in range(4):
+            self.assertIn(f"chunk-{index}", rendered)
+        self.assertNotIn("chunk-4", rendered)
+        self.assertNotIn("chunk-5", rendered)
+
+    async def test_missing_exact_parameter_refuses_before_model_generation(self) -> None:
+        engine = FakeReActEngine(default_content="不应生成这段内容")
+        runtime = AgentRuntime(
+            react_engine=engine,
+            retriever=StubRetriever(self._retrieval()),
+        )
+
+        result = await runtime.execute(
+            self._request("S8-LUNA 的电池容量精确是多少毫安时？")
+        )
+
+        self.assertEqual(result.status, RunStatus.COMPLETED)
+        self.assertIn("没有明确记录", result.public_content)
+        self.assertEqual(engine.requests, [])
+
     async def test_polished_evidence_is_passed_to_react_as_internal_context(self) -> None:
         engine = FakeReActEngine(
             {

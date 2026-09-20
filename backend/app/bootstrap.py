@@ -2,13 +2,16 @@ from __future__ import annotations
 
 from uuid import NAMESPACE_URL, uuid5
 
+import httpx
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from backend.app.adapters.llm.deterministic_executor import DeterministicRunExecutor
 from backend.app.adapters.llm.langchain_react import LangChainReActEngine
 from backend.app.adapters.llm.platform_executor import RuntimeRunExecutor
+from backend.app.adapters.llm.query_rewriter import LangChainQueryRewriter
 from backend.app.adapters.mcp.robot_catalog import recommend_robots
 from backend.app.adapters.memory.platform_runtime import PlatformMemoryRuntime
+from backend.app.adapters.rerank.dashscope import DashScopeReranker
 from backend.app.adapters.sms.aliyun import AliyunDypnsapiProvider
 from backend.app.adapters.sms.fake import FakeSmsProvider
 from backend.app.adapters.vector.dashscope import DashScopeEmbeddingAdapter
@@ -26,10 +29,13 @@ from backend.app.rag.ingestion import KnowledgeIndexer
 from backend.app.rag.lexical import BM25KeywordIndex
 from backend.app.rag.local_corpus import LocalTextCorpusRetriever
 from backend.app.rag.models import DocumentRecord, DocumentType
+from backend.app.rag.ports import RerankerPort, RetrieverPort
 from backend.app.rag.query_rewrite import DeterministicQueryRewriter
 from backend.app.rag.retrieval import (
+    FallbackReranker,
     HybridRetriever,
     LexicalReranker,
+    LowConfidenceRetryRetriever,
     MergedRetriever,
     MultiQueryRetriever,
 )
@@ -97,21 +103,71 @@ def build_run_executor(
         )
         model = ChatTongyi(model=settings.agent_model_name, streaming=True)
         keyword_index = BM25KeywordIndex()
+        local_reranker = LexicalReranker()
+        rerank_http_client: httpx.AsyncClient | None = None
+        cloud_reranker: RerankerPort | None = None
+        # Use a dedicated paid key when configured.  Falling back to the
+        # primary key preserves existing deployments that have not split
+        # credentials yet; ChatTongyi and embeddings continue to use the
+        # standard DASHSCOPE_API_KEY independently.
+        rerank_api_key = settings.dashscope_rerank_api_key or settings.dashscope_api_key
+        if settings.agent_rerank_enabled and rerank_api_key is not None:
+            rerank_http_client = httpx.AsyncClient(
+                timeout=httpx.Timeout(settings.agent_rerank_timeout_seconds),
+                limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+            )
+            cloud_reranker = DashScopeReranker(
+                rerank_http_client,
+                api_key=rerank_api_key.get_secret_value(),
+                model=settings.agent_rerank_model_name,
+                endpoint=settings.agent_rerank_endpoint,
+            )
+        final_reranker = FallbackReranker(cloud_reranker, local_reranker)
         hybrid = HybridRetriever(
             embeddings,
             vector_store,
             keyword_index,
-            LexicalReranker(),
+            local_reranker,
+            candidate_limit=settings.agent_rerank_candidate_limit,
+            result_limit=settings.agent_rerank_candidate_limit,
         )
         # Keep the hybrid stack live even when the process starts with an empty
         # vector store. Admin uploads mutate these shared indexes at runtime;
         # using only the local fallback here would silently bypass rewrite/RRF.
-        retriever = MergedRetriever(
+        deterministic_retriever = MergedRetriever(
             # Keep query rewriting deterministic: one normalized query avoids
             # an extra model call and keeps retrieval latency/token cost bounded.
-            MultiQueryRetriever(hybrid, DeterministicQueryRewriter()),
+            MultiQueryRetriever(
+                hybrid,
+                DeterministicQueryRewriter(),
+                candidate_limit=settings.agent_rerank_candidate_limit,
+                result_limit=settings.agent_rerank_result_limit,
+                final_reranker=final_reranker,
+            ),
             local_corpus,
+            result_limit=settings.agent_rerank_result_limit,
         )
+        retriever: RetrieverPort = deterministic_retriever
+        if settings.agent_query_rewrite_enabled:
+            llm_rewrite_retriever = MergedRetriever(
+                MultiQueryRetriever(
+                    hybrid,
+                    LangChainQueryRewriter(
+                        model,
+                        timeout_seconds=settings.agent_query_rewrite_timeout_seconds,
+                    ),
+                    candidate_limit=settings.agent_rerank_candidate_limit,
+                    result_limit=settings.agent_rerank_result_limit,
+                    final_reranker=final_reranker,
+                ),
+                local_corpus,
+                result_limit=settings.agent_rerank_result_limit,
+            )
+            retriever = LowConfidenceRetryRetriever(
+                deterministic_retriever,
+                llm_rewrite_retriever,
+                confidence_threshold=settings.agent_query_rewrite_confidence_threshold,
+            )
         memory = PlatformMemoryRuntime(repository) if repository is not None else None
         react_engine = LangChainReActEngine(
             model=model,
@@ -147,6 +203,7 @@ def build_run_executor(
                 repository_adapter_resolver(repository) if repository is not None else None
             ),
         ),
+        owned_async_resources=(rerank_http_client,) if rerank_http_client is not None else (),
     )
     executor.knowledge_indexer = KnowledgeIndexer(
         DocumentChunker(), embeddings, vector_store, keyword_index

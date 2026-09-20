@@ -40,9 +40,12 @@
 $env:PIP_CACHE_DIR='D:\codex_store\pip-cache'
 pip install --require-hashes -r requirements.lock
 $env:DASHSCOPE_API_KEY='your-key'
+# Optional: the separate按量付费 key whose description is agent-robot-rerank.
+$env:DASHSCOPE_RERANK_API_KEY='your-agent-robot-rerank-key'
 ```
 
 真实运行时使用 `qwen3-max` 与 `text-embedding-v4`，生产环境通过 PostgreSQL + pgvector 持久化向量数据，并以 HNSW 索引支持余弦相似度检索；服务启动时从 pgvector 分片重建内存 BM25 索引，因此重启后仍保持向量 + 词法的混合检索。开发环境可使用配置的本地 JSON 向量适配器，不能将其描述为生产数据源。
+`DASHSCOPE_API_KEY` 仍只负责主模型和 Embedding；如果配置了 `DASHSCOPE_RERANK_API_KEY`，它只负责 `qwen3.7-text-rerank`。不配置时会兼容性回退到主 Key。
 
 知识导入不新增面向普通用户的 HTTP 接口，而是使用显式的运维命令和版本化 JSONL 清单（示例见 [`docs/knowledge-manifest.example.jsonl`](docs/knowledge-manifest.example.jsonl)）：
 

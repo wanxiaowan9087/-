@@ -72,6 +72,46 @@ class RagTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertTrue(chunk.content.endswith("边刷用于聚拢墙边灰尘。"))
 
+    async def test_markdown_chunks_preserve_heading_path_and_product_identity(self) -> None:
+        document = DocumentRecord(
+            document_id=str(uuid4()),
+            title="产品手册",
+            source="kb://catalog",
+            document_type=DocumentType.MARKDOWN,
+            content=(
+                "# ZENMOP 产品目录\n"
+                "## S8-LUNA 皓月\n"
+                "- 产品 ID：s8-luna\n"
+                "### 日常维护\n"
+                "每次清扫后检查尘盒。"
+            ),
+        )
+
+        chunks = DocumentChunker().split(document)
+        maintenance = next(chunk for chunk in chunks if "每次清扫后" in chunk.content)
+
+        self.assertEqual(
+            maintenance.location.section,
+            "ZENMOP 产品目录 > S8-LUNA 皓月 > 日常维护",
+        )
+        self.assertEqual(maintenance.metadata["model"], "S8-LUNA")
+        self.assertEqual(maintenance.metadata["product_id"], "s8-luna")
+        self.assertIn("章节：ZENMOP 产品目录 > S8-LUNA 皓月 > 日常维护", maintenance.content)
+
+    async def test_specific_edge_model_is_not_collapsed_into_obsidian_model(self) -> None:
+        document = DocumentRecord(
+            document_id=str(uuid4()),
+            title="产品目录",
+            source="kb://catalog",
+            document_type=DocumentType.MARKDOWN,
+            content="# 产品目录\n## X9-EDGE 曜石 Edge\n- 特点：贴边清洁。",
+        )
+
+        edge = DocumentChunker().split(document)[-1]
+
+        self.assertEqual(edge.metadata["model"], "X9-EDGE")
+        self.assertEqual(edge.metadata["product_id"], "x9-edge")
+
     async def test_hybrid_retrieval_and_rrf_are_deterministic(self) -> None:
         document = DocumentRecord(
             document_id=str(uuid4()),

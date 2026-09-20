@@ -11,9 +11,11 @@ from uuid import NAMESPACE_URL, uuid4, uuid5
 from zoneinfo import ZoneInfo
 
 from ..rag.citations import CitationService
+from ..rag.evidence import assess_evidence, select_citation_hits, select_query_evidence_hits
 from ..rag.models import Chunk, Citation, DocumentType, RetrievalResult, SearchHit
 from ..rag.ports import RetrieverPort
 from ..rag.retrieval import RetrievalUnavailable
+from ..rag.retrieval_planning import is_collection_query, select_context_hits
 from ..rag.security import (
     render_untrusted_context,
     scan_retrieved_content,
@@ -31,6 +33,7 @@ from .contracts import (
     RunStatus,
     StepStatus,
     StepType,
+    ToolExecution,
     ToolOutcome,
     utc_now,
 )
@@ -117,7 +120,8 @@ def _renumber_ordered_lists(content: str) -> str:
     next_number = 1
     for line, match in zip(lines, markers, strict=True):
         if match:
-            prefix = re.match(r"^(\s*)", line).group(1)
+            prefix_match = re.match(r"^(\s*)", line)
+            prefix = prefix_match.group(1) if prefix_match else ""
             body = re.sub(r"^\s*\d+[.、)]\s*", "", line).strip()
             output.append(f"{prefix}{next_number}. {body}")
             next_number += 1
@@ -646,7 +650,13 @@ class AgentRuntime:
                 retrieval = _with_catalog_evidence(retrieval, request.catalog_products)
             if request.mode is ConversationMode.REPORT and request.report_context:
                 retrieval = _with_report_evidence(retrieval, request)
-            rendered_evidence = render_untrusted_context(retrieval.hits)
+            context_hits = select_context_hits(request.user_text, retrieval.hits)
+            evidence_assessment = assess_evidence(
+                request.user_text,
+                context_hits,
+                confidence=retrieval.confidence,
+            )
+            rendered_evidence = render_untrusted_context(context_hits)
             polished_context = route.get("polished_context")
             if polished_context:
                 rendered_evidence = (
@@ -656,21 +666,36 @@ class AgentRuntime:
             token.checkpoint()
 
             user_injection = self._detector.scan(request.user_text, source="user")
-            retrieved_injection = scan_retrieved_content(retrieval.hits, self._detector)
+            retrieved_injection = scan_retrieved_content(context_hits, self._detector)
             high_risk, sensitive_claim, warranty_claim = classify_user_risk(request.user_text)
             missing_required_fields = required_fields_missing(request.user_text)
+            citation_limit = (
+                len(context_hits)
+                if is_collection_query(request.user_text)
+                else self._config.citation_limit
+            )
+            preliminary_hits = select_query_evidence_hits(
+                request.user_text,
+                context_hits,
+                limit=citation_limit,
+            )
             preliminary_citations = self._citations.build(
-                retrieval.hits, limit=self._config.citation_limit
+                preliminary_hits,
+                limit=citation_limit,
             )
             preliminary_validation = self._citations.validate(
                 preliminary_citations,
-                [hit.chunk for hit in retrieval.hits],
+                [hit.chunk for hit in context_hits],
             )
             preliminary_decision = self._policy.decide(
                 PolicyInput(
                     confidence=retrieval.confidence,
-                    has_evidence=retrieval.has_evidence,
+                    has_evidence=bool(context_hits),
                     citations_valid=(bool(preliminary_citations) and preliminary_validation.valid),
+                    evidence_reliable=evidence_assessment.supported,
+                    knowledge_boundary_unsupported=(
+                        evidence_assessment.knowledge_boundary_unsupported
+                    ),
                     high_risk=high_risk,
                     safety_or_repair_claim=sensitive_claim,
                     warranty_claim=warranty_claim,
@@ -765,18 +790,32 @@ class AgentRuntime:
                 ),
             )
             self._record_tool_steps(trace, draft)
-            citations = self._citations.build(
-                retrieval.hits,
-                selected_chunk_ids=draft.cited_chunk_ids,
-                limit=self._config.citation_limit,
+            citation_hits = (
+                context_hits
+                if draft.cited_chunk_ids
+                else select_citation_hits(
+                    request.user_text,
+                    draft.content,
+                    context_hits,
+                    limit=citation_limit,
+                )
             )
-            validation = self._citations.validate(citations, [hit.chunk for hit in retrieval.hits])
+            citations = self._citations.build(
+                citation_hits,
+                selected_chunk_ids=draft.cited_chunk_ids,
+                limit=citation_limit,
+            )
+            validation = self._citations.validate(citations, [hit.chunk for hit in context_hits])
             policy_step = trace.start(StepType.POLICY, "checking deterministic release policy")
             final_decision = self._policy.decide(
                 PolicyInput(
                     confidence=retrieval.confidence,
-                    has_evidence=retrieval.has_evidence,
+                    has_evidence=bool(context_hits),
                     citations_valid=bool(citations) and validation.valid,
+                    evidence_reliable=evidence_assessment.supported,
+                    knowledge_boundary_unsupported=(
+                        evidence_assessment.knowledge_boundary_unsupported
+                    ),
                     high_risk=high_risk,
                     safety_or_repair_claim=sensitive_claim,
                     warranty_claim=warranty_claim,
@@ -1003,7 +1042,9 @@ class AgentRuntime:
     def _record_tool_steps(self, trace: TraceRecorder, draft: ModelDraft) -> None:
         self._record_tool_executions(trace, draft.tool_executions)
 
-    def _record_tool_executions(self, trace: TraceRecorder, executions: Sequence[object]) -> None:
+    def _record_tool_executions(
+        self, trace: TraceRecorder, executions: Sequence[ToolExecution]
+    ) -> None:
         for execution in executions:
             step = trace.start(
                 StepType.TOOL,

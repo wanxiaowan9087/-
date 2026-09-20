@@ -24,7 +24,14 @@ class DeterministicQueryRewriter:
         canonical = _canonicalize(normalized)
         if canonical == normalized:
             return QueryPlan(normalized, (normalized,), "original-query-fallback")
-        return QueryPlan(normalized, (canonical,), "deterministic-query-normalization")
+        # Keep both the user's wording and the deterministic normalization.
+        # The two retrieval branches run concurrently, so colloquial recall
+        # improves without adding an LLM intent call or serial model latency.
+        return QueryPlan(
+            normalized,
+            (normalized, canonical),
+            "deterministic-dual-query-normalization",
+        )
 
 
 def normalize_queries(original: str, candidates: list[str], *, limit: int = 4) -> QueryPlan:

@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Sequence
-from dataclasses import replace
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, replace
 from time import monotonic
 from typing import Any
 
+from .evidence import assess_evidence
 from .lexical import tokenize
 from .models import RetrievalResult, ScoredChunk, SearchHit
 from .ports import (
@@ -17,6 +18,11 @@ from .ports import (
     VectorStorePort,
 )
 from .query_rewrite import QueryRewriterPort
+from .retrieval_planning import (
+    cohere_reranked_hits,
+    is_collection_query,
+    route_candidates,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -60,15 +66,97 @@ class LexicalReranker:
             identity_overlap = (
                 len(query_terms & identity_terms) / len(query_terms) if query_terms else 0.0
             )
-            # Preserve the calibrated base score so identity-aware ordering
-            # cannot turn otherwise answerable evidence into a false refusal.
+            # V3 ablation over the complete 24-document corpus showed that
+            # generic body overlap was drowning out exact model/section
+            # identity. This zero-token mix improved Recall@5, MRR and nDCG
+            # together while retaining the fused signal.
             score = min(
                 1.0,
-                0.62 * overlap + 0.38 * hit.fused_score + 0.08 * identity_overlap,
+                0.50 * overlap + 0.20 * hit.fused_score + 0.30 * identity_overlap,
             )
             reranked.append(replace(hit, rerank_score=score))
         reranked.sort(key=lambda item: (-item.score, item.chunk.chunk_id))
         return tuple(reranked[:limit])
+
+
+@dataclass(frozen=True)
+class RerankObservation:
+    success: bool
+    duration_ms: float
+    error_type: str | None = None
+
+
+class FallbackReranker:
+    """Use a local reranker when the optional cloud boundary is unavailable."""
+
+    def __init__(
+        self,
+        primary: RerankerPort | None,
+        fallback: RerankerPort,
+        *,
+        observe: Callable[[RerankObservation], None] | None = None,
+    ) -> None:
+        self._primary = primary
+        self._fallback = fallback
+        self._observe = observe
+
+    async def rerank(
+        self,
+        query: str,
+        hits: Sequence[SearchHit],
+        limit: int,
+    ) -> Sequence[SearchHit]:
+        if self._primary is None:
+            return await self._fallback.rerank(query, hits, limit)
+        started = monotonic()
+        try:
+            ranked = await self._primary.rerank(query, hits, limit)
+        except Exception as error:
+            duration_ms = round((monotonic() - started) * 1000, 3)
+            self._record(
+                RerankObservation(
+                    success=False,
+                    duration_ms=duration_ms,
+                    error_type=type(error).__name__,
+                )
+            )
+            logger.warning(
+                "cloud reranker degraded; using local fallback",
+                extra={
+                    "component": "reranker",
+                    "provider": "dashscope",
+                    "error_type": type(error).__name__,
+                    "duration_ms": round(duration_ms),
+                },
+            )
+            return await self._fallback.rerank(query, hits, limit)
+        duration_ms = round((monotonic() - started) * 1000, 3)
+        self._record(RerankObservation(success=True, duration_ms=duration_ms))
+        logger.info(
+            "cloud reranker completed",
+            extra={
+                "component": "reranker",
+                "provider": "dashscope",
+                "duration_ms": round(duration_ms),
+                "candidate_count": len(hits),
+                "result_count": len(ranked),
+            },
+        )
+        return ranked
+
+    def _record(self, observation: RerankObservation) -> None:
+        if self._observe is None:
+            return
+        try:
+            self._observe(observation)
+        except Exception as error:
+            logger.warning(
+                "reranker observation callback failed",
+                extra={
+                    "component": "reranker",
+                    "error_type": type(error).__name__,
+                },
+            )
 
 
 class HybridRetriever:
@@ -118,8 +206,10 @@ class HybridRetriever:
             raise RetrievalUnavailable("all retrieval dependencies failed")
 
         fused = reciprocal_rank_fusion(vectors, keywords, rrf_k=self._rrf_k)
+        routed = route_candidates(query, fused)
+        final_limit = max(self._result_limit, 8 if is_collection_query(query) else 4)
         try:
-            reranked = tuple(await self._reranker.rerank(query, fused, self._result_limit))
+            reranked = tuple(await self._reranker.rerank(query, routed, final_limit))
         except Exception:
             logger.warning(
                 "reranker degraded; using fused order",
@@ -127,7 +217,7 @@ class HybridRetriever:
                 extra={"component": "reranker"},
             )
             degraded.append("reranker")
-            reranked = tuple(fused[: self._result_limit])
+            reranked = tuple(routed[:final_limit])
         confidence = _evidence_confidence(reranked)
         return RetrievalResult(
             hits=reranked,
@@ -215,12 +305,18 @@ class MultiQueryRetriever:
         query_rewriter: QueryRewriterPort,
         *,
         result_limit: int = 5,
+        candidate_limit: int = 20,
         rrf_k: int = 60,
+        final_reranker: RerankerPort | None = None,
     ) -> None:
+        if candidate_limit < result_limit or result_limit < 1:
+            raise ValueError("candidate_limit must cover result_limit")
         self._retriever = retriever
         self._query_rewriter = query_rewriter
         self._result_limit = result_limit
+        self._candidate_limit = candidate_limit
         self._rrf_k = rrf_k
+        self._final_reranker = final_reranker
 
     async def retrieve(self, query: str) -> RetrievalResult:
         started = monotonic()
@@ -235,15 +331,34 @@ class MultiQueryRetriever:
             raise RetrievalUnavailable("all multi-query retrieval branches failed")
         retrieval_finished = monotonic()
         hits = reciprocal_rank_fusion_hits([item.hits for item in successes], rrf_k=self._rrf_k)
+        routed = route_candidates(plan.original, hits)
+        candidates = routed[: self._candidate_limit]
+        final_limit = min(
+            self._candidate_limit,
+            max(
+                self._result_limit,
+                8 if is_collection_query(plan.original) else self._result_limit,
+            ),
+        )
         try:
-            reranked = tuple(
-                await self._retriever.rerank_candidates(plan.original, hits, self._result_limit)
-            )
+            if self._final_reranker is None:
+                reranked = tuple(
+                    await self._retriever.rerank_candidates(
+                        plan.original, candidates, final_limit
+                    )
+                )
+            else:
+                reranked = tuple(
+                    await self._final_reranker.rerank(
+                        plan.original, candidates, final_limit
+                    )
+                )
             reranker_degraded: tuple[str, ...] = ()
         except Exception:
             logger.warning("multi-query reranker degraded", exc_info=True)
-            reranked = hits[: self._result_limit]
+            reranked = candidates[:final_limit]
             reranker_degraded = ("reranker",)
+        reranked = cohere_reranked_hits(plan.original, reranked)
         logger.info(
             "multi-query retrieval timings",
             extra={
@@ -269,6 +384,100 @@ class MultiQueryRetriever:
             conflicting_sources=any(item.conflicting_sources for item in successes)
             or _has_conflicts(reranked),
         )
+
+
+class LowConfidenceRetryRetriever:
+    """Retry weak retrieval once with an LLM-expanded query plan."""
+
+    def __init__(
+        self,
+        primary: RetrieverPort,
+        retry: RetrieverPort,
+        *,
+        confidence_threshold: float = 0.5,
+    ) -> None:
+        if not 0.0 <= confidence_threshold <= 1.0:
+            raise ValueError("confidence threshold must be normalized")
+        self._primary = primary
+        self._retry = retry
+        self._confidence_threshold = confidence_threshold
+
+    async def retrieve(self, query: str) -> RetrievalResult:
+        primary = await self._primary.retrieve(query)
+        primary_assessment = assess_evidence(
+            query,
+            primary.hits[:4],
+            confidence=primary.confidence,
+        )
+        if primary_assessment.knowledge_boundary_unsupported:
+            return primary
+        if (
+            primary.confidence >= self._confidence_threshold
+            and primary_assessment.supported
+            and _query_evidence_coverage(query, primary.hits[:4]) >= 0.08
+        ):
+            return primary
+        started = monotonic()
+        try:
+            retried = await self._retry.retrieve(query)
+        except Exception as error:
+            logger.warning(
+                "low-confidence query rewrite degraded; retaining original retrieval",
+                extra={
+                    "component": "query-rewrite",
+                    "error_type": type(error).__name__,
+                    "duration_ms": round((monotonic() - started) * 1000),
+                },
+            )
+            return replace(
+                primary,
+                degraded_dependencies=tuple(
+                    dict.fromkeys((*primary.degraded_dependencies, "query_rewrite"))
+                ),
+            )
+        logger.info(
+            "low-confidence query rewrite retry completed",
+            extra={
+                "component": "query-rewrite",
+                "duration_ms": round((monotonic() - started) * 1000),
+                "original_confidence": primary.confidence,
+                "retry_confidence": retried.confidence,
+            },
+        )
+        retry_assessment = assess_evidence(
+            query,
+            retried.hits[:4],
+            confidence=retried.confidence,
+        )
+        if (
+            retry_assessment.supported
+            and _query_evidence_coverage(query, retried.hits[:4])
+            > _query_evidence_coverage(query, primary.hits[:4])
+        ):
+            return retried
+        return retried if retried.confidence >= primary.confidence else primary
+
+
+def _query_evidence_coverage(query: str, hits: Sequence[SearchHit]) -> float:
+    query_terms = {term for term in tokenize(query) if len(term) > 1}
+    if not query_terms or not hits:
+        return 0.0
+    evidence_terms = {
+        term
+        for hit in hits
+        for term in tokenize(
+            " ".join(
+                (
+                    hit.chunk.title,
+                    str(hit.chunk.metadata.get("model", "")),
+                    str(hit.chunk.metadata.get("heading", "")),
+                    hit.chunk.content,
+                )
+            )
+        )
+        if len(term) > 1
+    }
+    return len(query_terms & evidence_terms) / len(query_terms)
 
 
 def _merge_hits(hits: Sequence[SearchHit]) -> tuple[SearchHit, ...]:

@@ -4,7 +4,7 @@ import json
 from functools import lru_cache
 from typing import Annotated
 
-from pydantic import AliasChoices, Field, field_validator, model_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -80,6 +80,33 @@ class Settings(BaseSettings):
     agent_runtime_enabled: bool = False
     agent_model_name: str = "qwen3-max"
     agent_embedding_model_name: str = "text-embedding-v4"
+    dashscope_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices("DASHSCOPE_API_KEY", "APP_DASHSCOPE_API_KEY"),
+    )
+    # Keep the primary LLM/embedding credential separate from the optional
+    # paid reranker credential.  The reranker falls back to the primary key
+    # for backwards compatibility when this value is not configured.
+    dashscope_rerank_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "DASHSCOPE_RERANK_API_KEY", "APP_DASHSCOPE_RERANK_API_KEY"
+        ),
+    )
+    agent_rerank_enabled: bool = True
+    agent_rerank_model_name: str = "qwen3.7-text-rerank"
+    agent_rerank_endpoint: str = (
+        "https://dashscope.aliyuncs.com/api/v1/services/"
+        "rerank/text-rerank/text-rerank"
+    )
+    agent_rerank_timeout_seconds: float = Field(default=1.2, gt=0.0, le=10.0)
+    agent_rerank_candidate_limit: int = Field(default=20, ge=8, le=50)
+    agent_rerank_result_limit: int = Field(default=8, ge=1, le=20)
+    agent_query_rewrite_enabled: bool = True
+    agent_query_rewrite_confidence_threshold: float = Field(
+        default=0.5, ge=0.0, le=1.0
+    )
+    agent_query_rewrite_timeout_seconds: float = Field(default=1.5, gt=0.0, le=10.0)
     agent_vector_dimensions: int = Field(default=1024, ge=1, le=65535)
     agent_vector_store_path: str = "data/vector-store.json"
     agent_local_corpus_dir: str = "data"
@@ -148,6 +175,8 @@ class Settings(BaseSettings):
         if not self.database_url.startswith("postgresql+asyncpg://"):
             if self.environment not in {"test", "development"}:
                 raise ValueError("non-development database must use PostgreSQL asyncpg")
+        if self.agent_rerank_result_limit > self.agent_rerank_candidate_limit:
+            raise ValueError("rerank result limit cannot exceed candidate limit")
         return self
 
 

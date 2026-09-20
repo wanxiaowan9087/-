@@ -3,10 +3,14 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 from dataclasses import asdict
 from pathlib import Path
+from time import monotonic
 from typing import Any
 
+import httpx
+from backend.app.adapters.rerank.dashscope import DashScopeReranker
 from backend.app.adapters.vector.dashscope import DashScopeEmbeddingAdapter
 from backend.app.adapters.vector.pgvector_store import PgVectorStore
 from backend.app.agent.safety import (
@@ -16,11 +20,19 @@ from backend.app.agent.safety import (
 )
 from backend.app.rag.chunking import DocumentChunker
 from backend.app.rag.citations import CitationService
+from backend.app.rag.evidence import assess_evidence, select_query_evidence_hits
 from backend.app.rag.ingestion import KnowledgeIndexer
 from backend.app.rag.lexical import BM25KeywordIndex
 from backend.app.rag.models import DocumentRecord, DocumentType
 from backend.app.rag.query_rewrite import DeterministicQueryRewriter
-from backend.app.rag.retrieval import HybridRetriever, LexicalReranker, MultiQueryRetriever
+from backend.app.rag.retrieval import (
+    FallbackReranker,
+    HybridRetriever,
+    LexicalReranker,
+    MultiQueryRetriever,
+    RerankObservation,
+)
+from backend.app.rag.retrieval_planning import select_context_hits
 from backend.app.rag.security import scan_retrieved_content
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -49,13 +61,33 @@ async def evaluate(
     vector_dimensions: int = 1024,
     chunk_size: int = 600,
     chunk_overlap: int = 80,
+    rerank_model: str = "qwen3.7-text-rerank",
+    rerank_timeout_seconds: float = 1.2,
 ) -> dict[str, Any]:
     try:
         from langchain_community.embeddings import DashScopeEmbeddings
     except ImportError as error:
         raise RuntimeError("DashScope evaluation dependencies are not installed") from error
 
+    # Embeddings still use DASHSCOPE_API_KEY through DashScopeEmbeddings;
+    # reranking can use the separately billed key without replacing it.
+    api_key = (
+        os.environ.get("DASHSCOPE_RERANK_API_KEY", "").strip()
+        or os.environ.get("DASHSCOPE_API_KEY", "").strip()
+    )
+    if not api_key:
+        raise RuntimeError(
+            "DASHSCOPE_RERANK_API_KEY (or legacy DASHSCOPE_API_KEY) is required "
+            "for the real rerank evaluation"
+        )
+
     engine = create_async_engine(database_url, pool_pre_ping=True)
+    rerank_client = httpx.AsyncClient(
+        timeout=httpx.Timeout(rerank_timeout_seconds),
+        limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+    )
+    rerank_observations: list[RerankObservation] = []
+    retrieval_latencies_ms: list[float] = []
     embeddings = DashScopeEmbeddingAdapter(DashScopeEmbeddings(model=embedding_model))
     vector_store = PgVectorStore(engine, vector_dimensions)
     keyword_index = BM25KeywordIndex()
@@ -81,25 +113,39 @@ async def evaluate(
         indexed_chunks = await vector_store.load_all_chunks()
         cases = _read_jsonl(dataset_path)
         annotations = _load_support_annotations(support_annotations_path, cases, indexed_chunks)
+        local_reranker = LexicalReranker()
+        cloud_reranker = FallbackReranker(
+            DashScopeReranker(
+                rerank_client,
+                api_key=api_key,
+                model=rerank_model,
+            ),
+            local_reranker,
+            observe=rerank_observations.append,
+        )
         hybrid = HybridRetriever(
             embeddings,
             vector_store,
             keyword_index,
-            LexicalReranker(),
-            candidate_limit=18,
-            result_limit=10,
+            local_reranker,
+            candidate_limit=20,
+            result_limit=20,
         )
         retriever = MultiQueryRetriever(
             hybrid,
             DeterministicQueryRewriter(),
+            candidate_limit=20,
             result_limit=10,
+            final_reranker=cloud_reranker,
         )
         detector = PromptInjectionDetector()
         citations = CitationService()
         results: list[CaseResult] = []
 
         for case in cases:
+            retrieval_started = monotonic()
             retrieval = await retriever.retrieve(case["question"])
+            retrieval_latencies_ms.append((monotonic() - retrieval_started) * 1000)
             ranked = tuple(hit.chunk.chunk_id for hit in retrieval.hits)
             expected = _resolve_expected_chunks(case["expected_sources"], indexed_chunks)
             supporting_sources = annotations.get(case["case_id"], ())
@@ -108,8 +154,12 @@ async def evaluate(
                 None,
             )
             user_signals = detector.scan(case["question"], source="user")
-            retrieved_signals = scan_retrieved_content(retrieval.hits, detector)
+            context_hits = select_context_hits(case["question"], retrieval.hits)
+            retrieved_signals = scan_retrieved_content(context_hits, detector)
             high_risk, sensitive, _ = classify_user_risk(case["question"])
+            evidence = assess_evidence(
+                case["question"], context_hits, confidence=retrieval.confidence
+            )
             must_withhold = bool(
                 user_signals
                 or retrieved_signals
@@ -117,20 +167,23 @@ async def evaluate(
                 or high_risk
                 or (sensitive and required_fields_missing(case["question"]))
             )
-            answered = bool(
-                retrieval.has_evidence and retrieval.confidence >= 0.65 and not must_withhold
+            answered = bool(evidence.supported and not must_withhold)
+            citation_hits = select_query_evidence_hits(
+                case["question"],
+                context_hits,
+                limit=max(1, len(supporting_sources)),
             )
             built_citations = (
-                citations.build(retrieval.hits, limit=max(1, len(supporting_sources)))
+                citations.build(citation_hits, limit=max(1, len(supporting_sources)))
                 if answered
                 else ()
             )
-            validation = citations.validate(built_citations, [hit.chunk for hit in retrieval.hits])
+            validation = citations.validate(built_citations, [hit.chunk for hit in context_hits])
             supported, claim_ids, support_failures = _score_citation_support(
                 built_citations,
                 supporting_sources,
                 citations,
-                [hit.chunk for hit in retrieval.hits],
+                [hit.chunk for hit in context_hits],
             )
             injection_defended = None
             if "prompt_injection" in case["tags"]:
@@ -215,16 +268,50 @@ async def evaluate(
             "dataset_cases": len(cases),
             "embedding": f"dashscope/{embedding_model}/{vector_dimensions}",
             "vector_store": "postgresql+pgvector",
-            "retrieval": "deterministic-query-normalization+vector+bm25+rrf+lexical-rerank",
+            "retrieval": (
+                "deterministic-dual-query-normalization+vector+bm25+rrf+"
+                f"dashscope-{rerank_model}+lexical-fallback"
+            ),
             "confidence_threshold": 0.65,
+            "evidence_gate": "adaptive-dual-channel+knowledge-boundary-v1",
             "chunking": {"chunk_size": chunk_size, "chunk_overlap": chunk_overlap},
             "query_normalization": True,
             "support_annotations": support_annotations_path.name,
+            "latency": {
+                "retrieval_p50_ms": round(_percentile(retrieval_latencies_ms, 0.50), 3),
+                "retrieval_p95_ms": round(_percentile(retrieval_latencies_ms, 0.95), 3),
+                "rerank_p50_ms": round(
+                    _percentile([item.duration_ms for item in rerank_observations], 0.50),
+                    3,
+                ),
+                "rerank_p95_ms": round(
+                    _percentile([item.duration_ms for item in rerank_observations], 0.95),
+                    3,
+                ),
+                "rerank_calls": len(rerank_observations),
+                "rerank_fallback_rate": round(
+                    sum(not item.success for item in rerank_observations)
+                    / max(1, len(rerank_observations)),
+                    6,
+                ),
+            },
             "metrics": {name: asdict(metric) for name, metric in metrics.items()},
             "cases": [asdict(item) for item in results],
         }
     finally:
+        await rerank_client.aclose()
         await engine.dispose()
+
+
+def _percentile(values: list[float], percentile: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    position = (len(ordered) - 1) * percentile
+    lower = int(position)
+    upper = min(len(ordered) - 1, lower + 1)
+    fraction = position - lower
+    return ordered[lower] + (ordered[upper] - ordered[lower]) * fraction
 
 
 def main() -> int:
@@ -237,6 +324,8 @@ def main() -> int:
     parser.add_argument("--vector-dimensions", type=int, default=1024)
     parser.add_argument("--chunk-size", type=int, default=600)
     parser.add_argument("--chunk-overlap", type=int, default=80)
+    parser.add_argument("--rerank-model", default="qwen3.7-text-rerank")
+    parser.add_argument("--rerank-timeout-seconds", type=float, default=1.2)
     parser.add_argument("--output", type=Path, required=True)
     arguments = parser.parse_args()
     report = asyncio.run(
@@ -249,6 +338,8 @@ def main() -> int:
             vector_dimensions=arguments.vector_dimensions,
             chunk_size=arguments.chunk_size,
             chunk_overlap=arguments.chunk_overlap,
+            rerank_model=arguments.rerank_model,
+            rerank_timeout_seconds=arguments.rerank_timeout_seconds,
         )
     )
     arguments.output.parent.mkdir(parents=True, exist_ok=True)

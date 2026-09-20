@@ -86,6 +86,7 @@ services:
       APP_DEMO_AUTH_ENABLED: "false"
       APP_AGENT_RUNTIME_ENABLED: "true"
       DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:?Set DASHSCOPE_API_KEY in the shell before starting Docker Compose}
+      DASHSCOPE_RERANK_API_KEY: ${DASHSCOPE_RERANK_API_KEY:-}
       APP_SMS_PROVIDER: ${APP_SMS_PROVIDER:-aliyun}
       APP_ALIYUN_ACCESS_KEY_ID: ${APP_ALIYUN_ACCESS_KEY_ID:?Set APP_ALIYUN_ACCESS_KEY_ID in the shell before starting Docker Compose}
       APP_ALIYUN_ACCESS_KEY_SECRET: ${APP_ALIYUN_ACCESS_KEY_SECRET:?Set APP_ALIYUN_ACCESS_KEY_SECRET in the shell before starting Docker Compose}

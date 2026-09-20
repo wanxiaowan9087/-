@@ -18,11 +18,13 @@ from backend.app.agent.safety import (
 )
 from backend.app.rag.chunking import DocumentChunker
 from backend.app.rag.citations import CitationService
+from backend.app.rag.evidence import assess_evidence, select_query_evidence_hits
 from backend.app.rag.ingestion import KnowledgeIndexer
 from backend.app.rag.lexical import BM25KeywordIndex
 from backend.app.rag.models import DocumentRecord, DocumentType
 from backend.app.rag.query_rewrite import DeterministicQueryRewriter
 from backend.app.rag.retrieval import HybridRetriever, LexicalReranker, MultiQueryRetriever
+from backend.app.rag.retrieval_planning import select_context_hits
 from backend.app.rag.security import scan_retrieved_content
 
 ROOT = Path(__file__).resolve().parent
@@ -146,9 +148,13 @@ async def evaluate(
             None,
         )
         user_signals = detector.scan(case["question"], source="user")
-        retrieved_signals = scan_retrieved_content(result.hits, detector)
+        context_hits = select_context_hits(case["question"], result.hits)
+        retrieved_signals = scan_retrieved_content(context_hits, detector)
         high_risk, sensitive, _ = classify_user_risk(case["question"])
         missing = required_fields_missing(case["question"])
+        evidence = assess_evidence(
+            case["question"], context_hits, confidence=result.confidence
+        )
         must_withhold = bool(
             user_signals
             or retrieved_signals
@@ -156,21 +162,23 @@ async def evaluate(
             or high_risk
             or (sensitive and missing)
         )
-        answered = bool(result.has_evidence and result.confidence >= 0.65 and not must_withhold)
+        answered = bool(evidence.supported and not must_withhold)
+        citation_hits = select_query_evidence_hits(
+            case["question"],
+            context_hits,
+            limit=max(1, len(supporting_sources)),
+        )
         built_citations = (
-            citations.build(
-                result.hits,
-                limit=max(1, len(supporting_sources)),
-            )
+            citations.build(citation_hits, limit=max(1, len(supporting_sources)))
             if answered
             else ()
         )
-        validation = citations.validate(built_citations, [hit.chunk for hit in result.hits])
+        validation = citations.validate(built_citations, [hit.chunk for hit in context_hits])
         supported, supported_claim_ids, support_failures = _score_citation_support(
             built_citations,
             supporting_sources,
             citations,
-            [hit.chunk for hit in result.hits],
+            [hit.chunk for hit in context_hits],
         )
         forbidden = set(case["forbidden_sources"])
         injection_defended: bool | None = None
@@ -277,6 +285,7 @@ async def evaluate(
         "embedding": "fixed-hash-v1/256",
         "retrieval": "vector+bm25+rrf+lexical-rerank",
         "confidence_threshold": 0.65,
+        "evidence_gate": "adaptive-dual-channel+knowledge-boundary-v1",
         "chunking": {"chunk_size": chunk_size, "chunk_overlap": chunk_overlap},
         "query_normalization": query_normalization,
         "support_annotations": support_annotations_path.name,
@@ -378,7 +387,8 @@ def _resolve_expected_chunks(sources: Sequence[dict[str, Any]], chunks: Sequence
             candidates = [
                 chunk
                 for chunk in candidates
-                if chunk.location.section == section or chunk.metadata.get("heading") == section
+                if _section_matches(chunk.location.section, section)
+                or _section_matches(chunk.metadata.get("heading"), section)
             ]
         if not candidates:
             raise ValueError(
@@ -386,6 +396,11 @@ def _resolve_expected_chunks(sources: Sequence[dict[str, Any]], chunks: Sequence
             )
         resolved.update(chunk.chunk_id for chunk in candidates)
     return resolved
+
+
+def _section_matches(candidate: object, expected: str) -> bool:
+    value = str(candidate or "").strip()
+    return value == expected or value.endswith(f" > {expected}")
 
 
 def _score_citation_support(

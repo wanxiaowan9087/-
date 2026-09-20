@@ -16,11 +16,12 @@ volumes, or service ports.
 
 Windows 用户可以直接双击项目根目录的 `start-agent-robot.cmd` 一键启动；它会在 Docker 未运行时自动尝试打开 Docker Desktop，启动 Docker 服务、等待后端健康检查，再打开 Vue 前端终端窗口。首次启动会构建后端镜像，后续可使用 `start-agent-robot.cmd -SkipBuild` 跳过构建。
 
-Open PowerShell in this directory. Provide the three values only in the current
+Open PowerShell in this directory. Provide the four values only in the current
 terminal session, then start the services:
 
 ```powershell
 $env:DASHSCOPE_API_KEY = 'your-local-key'
+$env:DASHSCOPE_RERANK_API_KEY = 'agent-robot-rerank-key'
 $env:APP_ADMIN_USERNAME = 'xiaow'
 $env:APP_ADMIN_PASSWORD = 'Valid123!'
 docker compose -p agent_robot up -d --build
@@ -41,6 +42,12 @@ npm install --cache D:\codex_store\npm-cache
 $env:VITE_API_BASE_URL = 'http://localhost:8001/api/v1'
 npm run dev -- --port 5174
 ```
+
+`DASHSCOPE_API_KEY` remains the credential for the primary Qwen model and
+embeddings. `DASHSCOPE_RERANK_API_KEY` is optional and is used only for the
+`qwen3.7-text-rerank` call (the `agent-robot-rerank` key in the DashScope
+console). If it is empty, Rerank falls back to `DASHSCOPE_API_KEY` so existing
+deployments continue to work.
 
 ## External Report Authorization
 
