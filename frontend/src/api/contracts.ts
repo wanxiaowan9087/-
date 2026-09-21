@@ -63,6 +63,7 @@ export interface ProductRecommendation {
   recommended_for?: string[]
   image_key?: string
   catalog_source?: string
+  colors?: string[]
   reason?: string | null
   score?: number | null
 }

@@ -9,7 +9,12 @@ import pytest
 
 from backend.app.adapters.rerank.dashscope import DashScopeReranker
 from backend.app.rag.models import Chunk, DocumentType, SearchHit
-from backend.app.rag.retrieval import FallbackReranker, LexicalReranker, RerankObservation
+from backend.app.rag.retrieval import (
+    FallbackReranker,
+    LexicalReranker,
+    RerankObservation,
+    should_use_cloud_rerank,
+)
 
 
 def _hit(name: str, fused_score: float) -> SearchHit:
@@ -27,6 +32,49 @@ def _hit(name: str, fused_score: float) -> SearchHit:
         vector_score=0.7,
         keyword_score=0.6,
         fused_score=fused_score,
+    )
+
+
+def _model_hit(name: str, model: str, fused_score: float) -> SearchHit:
+    hit = _hit(name, fused_score)
+    return SearchHit(
+        chunk=Chunk(
+            document_id=hit.chunk.document_id,
+            document_version=hit.chunk.document_version,
+            chunk_id=hit.chunk.chunk_id,
+            title=hit.chunk.title,
+            source=hit.chunk.source,
+            content=hit.chunk.content,
+            document_type=hit.chunk.document_type,
+            metadata={"model": model},
+        ),
+        vector_score=hit.vector_score,
+        keyword_score=hit.keyword_score,
+        fused_score=hit.fused_score,
+    )
+
+
+def test_adaptive_rerank_route_keeps_high_confidence_single_model_local() -> None:
+    assert not should_use_cloud_rerank(
+        "S8 皓月平时怎么保养？",
+        (_model_hit("luna", "S8-LUNA", 0.91), _model_hit("luna-2", "S8-LUNA", 0.72)),
+    )
+
+
+def test_adaptive_rerank_route_uses_cloud_for_comparison_and_collection() -> None:
+    hits = (_model_hit("luna", "S8-LUNA", 0.91), _model_hit("obsidian", "X9-OBSIDIAN", 0.72))
+    assert should_use_cloud_rerank("皓月和曜石分别适合什么场景？", hits)
+    assert should_use_cloud_rerank("一共有多少款机器人？", hits)
+
+
+def test_adaptive_rerank_route_uses_cloud_for_low_confidence_candidates() -> None:
+    assert should_use_cloud_rerank(
+        "S8 皓月怎么处理异常？",
+        (_model_hit("luna", "S8-LUNA", 0.42), _model_hit("luna-2", "S8-LUNA", 0.40)),
+    )
+    assert not should_use_cloud_rerank(
+        "S8 皓月怎么保养？",
+        (_model_hit("luna", "S8-LUNA", 0.78), _model_hit("other", "X9-EDGE", 0.77)),
     )
 
 

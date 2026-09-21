@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "annotation_notes": [
+    "2026-09-21：功能结论允许绑定同一型号的“型号定位”或“组件与功能”，两者均逐字包含被测事实。",
+    "2026-09-21：M6 Mini 场景结论允许绑定型号说明或产品目录，两者均明确写出 40 平方米以内与公寓/卧室定位。"
+  ],
+  "cases": [
+    {
+      "case_id": "s8-luna-position",
+      "question": "皓月适合什么场景？",
+      "claims": [{"text": "S8 皓月适合 80-140 平方米家庭、夜间清洁和婴幼儿家庭。", "supporting_sources": [{"document_id": "db8952d0-dba0-54a9-b199-1c08fee33a63", "section": "1. 型号定位"}]}]
+    },
+    {
+      "case_id": "s8-luna-feature",
+      "question": "皓月有哪些核心功能？",
+      "claims": [{"text": "S8 皓月支持静音运行、激光导航、自动集尘和拖布热风烘干。", "supporting_sources": [{"document_id": "db8952d0-dba0-54a9-b199-1c08fee33a63", "section": "1. 型号定位"}]}]
+    },
+    {
+      "case_id": "s8-air-position",
+      "question": "轻羽适合什么场景？",
+      "claims": [{"text": "S8 Air 适合 60 平方米以内的小户型和预算有限的日常维护。", "supporting_sources": [{"document_id": "8f415e09-11ba-59af-8cf9-7124c2342c91", "section": "1. 型号定位"}]}]
+    },
+    {
+      "case_id": "s8-air-feature",
+      "question": "轻羽有哪些核心功能？",
+      "claims": [{"text": "S8 Air 具备轻薄机身、基础扫拖和边角清洁优化。", "supporting_sources": [{"document_id": "8f415e09-11ba-59af-8cf9-7124c2342c91", "section": "1. 型号定位"}]}]
+    },
+    {
+      "case_id": "x9-obsidian-position",
+      "question": "曜石适合什么场景？",
+      "claims": [{"text": "X9 曜石适合 120-220 平方米、多房间和宠物家庭。", "supporting_sources": [{"document_id": "aae45799-0f87-5900-a6e6-7302b1a450d4", "section": "1. 型号定位"}]}]
+    },
+    {
+      "case_id": "x9-obsidian-feature",
+      "question": "曜石有哪些核心功能？",
+      "claims": [{"text": "X9 曜石支持全屋激光建图、双旋拖布、地毯识别和自动上下水接口。", "supporting_sources": [{"document_id": "aae45799-0f87-5900-a6e6-7302b1a450d4", "section": "1. 型号定位"}, {"document_id": "aae45799-0f87-5900-a6e6-7302b1a450d4", "section": "2. 组件与功能"}]}]
+    },
+    {
+      "case_id": "x9-edge-position",
+      "question": "曜石 Edge 适合什么场景？",
+      "claims": [{"text": "X9 Edge 适合家具较多、墙角灰尘明显和养宠家庭。", "supporting_sources": [{"document_id": "4d31c328-0f99-580e-91b7-c9fd1c6140c0", "section": "1. 型号定位"}]}]
+    },
+    {
+      "case_id": "x9-edge-feature",
+      "question": "曜石 Edge 有哪些核心功能？",
+      "claims": [{"text": "X9 Edge 支持贴边清洁、毫米级障碍物识别、强吸力和地毯增压。", "supporting_sources": [{"document_id": "4d31c328-0f99-580e-91b7-c9fd1c6140c0", "section": "1. 型号定位"}]}]
+    },
+    {
+      "case_id": "m6-terra-position",
+      "question": "霞陶适合什么场景？",
+      "claims": [{"text": "M6 霞陶适合木地板与瓷砖混合地面，以及重视地面护理的家庭。", "supporting_sources": [{"document_id": "ecf10ef2-8e37-5ec6-a769-888810bcb5cd", "section": "1. 型号定位"}]}]
+    },
+    {
+      "case_id": "m6-terra-feature",
+      "question": "霞陶有哪些核心功能？",
+      "claims": [{"text": "M6 霞陶具备高扭矩滚刷、可调水量、木地板保护和分区清洁。", "supporting_sources": [{"document_id": "ecf10ef2-8e37-5ec6-a769-888810bcb5cd", "section": "1. 型号定位"}]}]
+    },
+    {
+      "case_id": "m6-mini-position",
+      "question": "小径适合什么场景？",
+      "claims": [{"text": "M6 Mini 适合 40 平方米以内的单身公寓和卧室。", "supporting_sources": [{"document_id": "e07c4e49-b83b-5bdf-8159-f0b965ab0a34", "section": "1. 型号定位"}, {"document_id": "82548e81-c7fd-5ea3-ad43-92c07c4ec294", "section": "M6-MINI 小径"}]}]
+    },
+    {
+      "case_id": "m6-mini-feature",
+      "question": "小径有哪些核心功能？",
+      "claims": [{"text": "M6 Mini 具备紧凑机身、低噪扫拖、简单分区和定时任务。", "supporting_sources": [{"document_id": "e07c4e49-b83b-5bdf-8159-f0b965ab0a34", "section": "1. 型号定位"}, {"document_id": "e07c4e49-b83b-5bdf-8159-f0b965ab0a34", "section": "2. 组件与功能"}]}]
+    },
+    {
+      "case_id": "compare-s8-x9",
+      "question": "皓月和曜石分别适合什么家庭？",
+      "claims": [
+        {"text": "S8 皓月适合夜间清洁和婴幼儿家庭。", "supporting_sources": [{"document_id": "db8952d0-dba0-54a9-b199-1c08fee33a63", "section": "1. 型号定位"}]},
+        {"text": "X9 曜石适合大户型、多房间和宠物家庭。", "supporting_sources": [{"document_id": "aae45799-0f87-5900-a6e6-7302b1a450d4", "section": "1. 型号定位"}]}
+      ]
+    },
+    {
+      "case_id": "compare-air-mini",
+      "question": "轻羽和小径的面积定位有什么区别？",
+      "claims": [
+        {"text": "S8 Air 面向 60 平方米以内的小户型。", "supporting_sources": [{"document_id": "8f415e09-11ba-59af-8cf9-7124c2342c91", "section": "1. 型号定位"}]},
+        {"text": "M6 Mini 面向 40 平方米以内的单身公寓和卧室。", "supporting_sources": [{"document_id": "e07c4e49-b83b-5bdf-8159-f0b965ab0a34", "section": "1. 型号定位"}]}
+      ]
+    },
+    {
+      "case_id": "compare-edge-terra",
+      "question": "曜石 Edge 和霞陶分别擅长什么？",
+      "claims": [
+        {"text": "X9 Edge 重点提升贴边清洁和地毯清扫。", "supporting_sources": [{"document_id": "4d31c328-0f99-580e-91b7-c9fd1c6140c0", "section": "1. 型号定位"}]},
+        {"text": "M6 霞陶重点面向混合地面护理和木地板保护。", "supporting_sources": [{"document_id": "ecf10ef2-8e37-5ec6-a769-888810bcb5cd", "section": "1. 型号定位"}]}
+      ]
+    },
+    {
+      "case_id": "unsupported-s8-battery",
+      "question": "皓月的电池容量是多少？",
+      "claims": [{"text": "S8 皓月的电池容量为 5200mAh。", "supporting_sources": []}]
+    },
+    {
+      "case_id": "unsupported-edge-height",
+      "question": "曜石 Edge 的精确越障高度是多少？",
+      "claims": [{"text": "X9 Edge 的越障高度为 20 毫米。", "supporting_sources": []}]
+    },
+    {
+      "case_id": "unsupported-air-warranty",
+      "question": "轻羽的保修期限是多久？",
+      "claims": [{"text": "S8 Air 的保修期限为 3 年。", "supporting_sources": []}]
+    }
+  ]
+}

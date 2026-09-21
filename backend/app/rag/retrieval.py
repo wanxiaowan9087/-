@@ -19,12 +19,35 @@ from .ports import (
 )
 from .query_rewrite import QueryRewriterPort
 from .retrieval_planning import (
+    _requested_models,
     cohere_reranked_hits,
+    ensure_explicit_model_coverage,
     is_collection_query,
     route_candidates,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def should_use_cloud_rerank(query: str, hits: Sequence[SearchHit]) -> bool:
+    """Select expensive reranking only when local ranking is less reliable.
+
+    The policy is deliberately deterministic and inspectable.  A normal,
+    high-confidence single-model request stays local; comparisons, catalog
+    lists, and genuinely weak candidates receive the stronger cloud ordering
+    signal.  Mixed candidates alone are not enough to pay the network cost:
+    the local model-aware selector already removes that noise downstream.
+    The final model-coverage repair still runs afterwards.
+    """
+
+    if is_collection_query(query) or len(_requested_models(query)) > 1:
+        return True
+    if not hits:
+        return False
+    top_score = max(hit.score for hit in hits)
+    if top_score < 0.45:
+        return True
+    return False
 
 
 class RetrievalUnavailable(RuntimeError):
@@ -159,6 +182,39 @@ class FallbackReranker:
             )
 
 
+class AdaptiveReranker:
+    """Use local ranking by default and cloud ranking for hard queries."""
+
+    def __init__(
+        self,
+        primary: RerankerPort | None,
+        fallback: RerankerPort,
+        *,
+        observe: Callable[[RerankObservation], None] | None = None,
+    ) -> None:
+        self._cloud_enabled = primary is not None
+        self._cloud = FallbackReranker(primary, fallback, observe=observe)
+        self._local = fallback
+
+    async def rerank(
+        self,
+        query: str,
+        hits: Sequence[SearchHit],
+        limit: int,
+    ) -> Sequence[SearchHit]:
+        if self._cloud_enabled and should_use_cloud_rerank(query, hits):
+            logger.info(
+                "adaptive reranker selected cloud provider",
+                extra={"component": "reranker", "route": "cloud"},
+            )
+            return await self._cloud.rerank(query, hits, limit)
+        logger.info(
+            "adaptive reranker selected local provider",
+            extra={"component": "reranker", "route": "local"},
+        )
+        return await self._local.rerank(query, hits, limit)
+
+
 class HybridRetriever:
     def __init__(
         self,
@@ -184,9 +240,10 @@ class HybridRetriever:
         self._rrf_k = rrf_k
 
     async def retrieve(self, query: str) -> RetrievalResult:
+        search_limit = self._candidate_limit + (4 if len(_requested_models(query)) > 1 else 0)
         vector_task = asyncio.create_task(self._vector_search(query))
         keyword_task = asyncio.create_task(
-            self._keyword_search.search(query, self._candidate_limit)
+            self._keyword_search.search(query, search_limit)
         )
         vector_result, keyword_result = await asyncio.gather(
             vector_task, keyword_task, return_exceptions=True
@@ -218,6 +275,7 @@ class HybridRetriever:
             )
             degraded.append("reranker")
             reranked = tuple(routed[:final_limit])
+        reranked = ensure_explicit_model_coverage(query, reranked, routed)
         confidence = _evidence_confidence(reranked)
         return RetrievalResult(
             hits=reranked,
@@ -228,7 +286,8 @@ class HybridRetriever:
 
     async def _vector_search(self, query: str) -> Sequence[ScoredChunk]:
         query_vector = await self._embeddings.embed_query(query)
-        return await self._vector_store.search(query_vector, self._candidate_limit)
+        search_limit = self._candidate_limit + (4 if len(_requested_models(query)) > 1 else 0)
+        return await self._vector_store.search(query_vector, search_limit)
 
     async def rerank_candidates(
         self, query: str, hits: Sequence[SearchHit], limit: int
@@ -283,16 +342,22 @@ class MergedRetriever:
                 "result_count": len(merged[: self._result_limit]),
             },
         )
+        bounded_hits = ensure_explicit_model_coverage(
+            query,
+            merged,
+            merged,
+            limit=self._result_limit,
+        )
         return RetrievalResult(
-            hits=merged[: self._result_limit],
+            hits=bounded_hits,
             confidence=max(
                 max(result.confidence for result in results),
-                _evidence_confidence(merged[: self._result_limit]),
+                _evidence_confidence(bounded_hits),
             ),
             strategy="+".join(dict.fromkeys(result.strategy for result in results)),
             degraded_dependencies=tuple(dict.fromkeys(degraded)),
             conflicting_sources=any(result.conflicting_sources for result in results)
-            or _has_conflicts(merged),
+            or _has_conflicts(bounded_hits),
         )
 
 
@@ -359,6 +424,7 @@ class MultiQueryRetriever:
             reranked = candidates[:final_limit]
             reranker_degraded = ("reranker",)
         reranked = cohere_reranked_hits(plan.original, reranked)
+        reranked = ensure_explicit_model_coverage(plan.original, reranked, routed)
         logger.info(
             "multi-query retrieval timings",
             extra={

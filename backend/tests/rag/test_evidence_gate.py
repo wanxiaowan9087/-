@@ -5,6 +5,7 @@ from uuid import NAMESPACE_URL, uuid5
 from backend.app.rag.evidence import (
     assess_evidence,
     select_citation_hits,
+    select_claim_evidence,
     select_query_evidence_hits,
 )
 from backend.app.rag.models import Chunk, DocumentType, SearchHit
@@ -141,3 +142,122 @@ def test_query_evidence_selector_is_available_before_generation() -> None:
     )
 
     assert selected[0] is battery
+
+
+def test_claim_citation_selector_keeps_similar_model_claims_separate() -> None:
+    s8 = _hit(
+        "S8-LUNA 皓月支持自动集尘，适合夜间清洁。",
+        vector_score=0.88,
+        keyword_score=0.86,
+        fused_score=0.87,
+    )
+    s8 = s8.__class__(
+        chunk=s8.chunk.__class__(
+            **{**s8.chunk.__dict__, "metadata": {"model": "S8-LUNA"}}
+        ),
+        vector_score=s8.vector_score,
+        keyword_score=s8.keyword_score,
+        fused_score=s8.fused_score,
+    )
+    x9 = _hit(
+        "X9-OBSIDIAN 曜石支持自动上下水，适合大户型。",
+        vector_score=0.87,
+        keyword_score=0.85,
+        fused_score=0.86,
+    )
+    x9 = x9.__class__(
+        chunk=x9.chunk.__class__(
+            **{**x9.chunk.__dict__, "metadata": {"model": "X9-OBSIDIAN"}}
+        ),
+        vector_score=x9.vector_score,
+        keyword_score=x9.keyword_score,
+        fused_score=x9.fused_score,
+    )
+
+    claims = select_claim_evidence(
+        "S8 皓月和 X9 曜石分别适合什么场景？",
+        "S8 皓月支持自动集尘，适合夜间清洁。\nX9 曜石支持自动上下水，适合大户型。",
+        (s8, x9),
+        limit=2,
+    )
+
+    assert [claim.hits[0].chunk.chunk_id for claim in claims] == [
+        s8.chunk.chunk_id,
+        x9.chunk.chunk_id,
+    ]
+
+
+def test_claim_citation_selector_rejects_wrong_model_parameter_chunk() -> None:
+    requested = _hit("S8-LUNA 皓月的电池容量为 5200mAh。", fused_score=0.72)
+    requested = requested.__class__(
+        chunk=requested.chunk.__class__(
+            **{**requested.chunk.__dict__, "metadata": {"model": "S8-LUNA"}}
+        ),
+        vector_score=requested.vector_score,
+        keyword_score=requested.keyword_score,
+        fused_score=requested.fused_score,
+    )
+    wrong_model = _hit("X9-OBSIDIAN 曜石的电池容量为 6000mAh。", fused_score=0.95)
+    wrong_model = wrong_model.__class__(
+        chunk=wrong_model.chunk.__class__(
+            **{**wrong_model.chunk.__dict__, "metadata": {"model": "X9-OBSIDIAN"}}
+        ),
+        vector_score=wrong_model.vector_score,
+        keyword_score=wrong_model.keyword_score,
+        fused_score=wrong_model.fused_score,
+    )
+
+    claims = select_claim_evidence(
+        "S8 皓月的电池容量是多少？",
+        "S8 皓月的电池容量为 5200mAh。",
+        (wrong_model, requested),
+        limit=1,
+    )
+
+    assert claims[0].hits[0].chunk.chunk_id == requested.chunk.chunk_id
+
+
+def test_claim_citation_selector_trusts_declared_model_over_incidental_mentions() -> None:
+    wrong_model = _hit(
+        "X9-EDGE 设置指南同时提到了 M6-TERRA 霞陶的木地板模式。",
+        fused_score=0.95,
+    )
+    wrong_model = wrong_model.__class__(
+        chunk=wrong_model.chunk.__class__(
+            **{**wrong_model.chunk.__dict__, "metadata": {"model": "X9-EDGE"}}
+        ),
+        vector_score=wrong_model.vector_score,
+        keyword_score=wrong_model.keyword_score,
+        fused_score=wrong_model.fused_score,
+    )
+
+    claims = select_claim_evidence(
+        "M6 霞陶擅长什么？",
+        "M6 霞陶重点面向混合地面护理和木地板保护。",
+        (wrong_model,),
+        limit=1,
+    )
+
+    assert claims[0].hits == ()
+
+
+def test_claim_citation_selector_leaves_unsupported_claim_unbound() -> None:
+    hit = _hit(
+        "S8-LUNA 皓月支持自动集尘。",
+        fused_score=0.95,
+    )
+    hit = hit.__class__(
+        chunk=hit.chunk.__class__(**{**hit.chunk.__dict__, "metadata": {"model": "S8-LUNA"}}),
+        vector_score=hit.vector_score,
+        keyword_score=hit.keyword_score,
+        fused_score=hit.fused_score,
+    )
+
+    claims = select_claim_evidence(
+        "S8 皓月的电池容量是多少？",
+        "S8 皓月的电池容量为 5200mAh。",
+        (hit,),
+        limit=1,
+    )
+
+    assert claims[0].hits == ()

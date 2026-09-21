@@ -17,6 +17,20 @@ class EvidenceAssessment:
     reason: str
 
 
+@dataclass(frozen=True)
+class ClaimEvidence:
+    """Evidence selected for one atomic answer claim.
+
+    Citations used to be selected against the whole answer, which allowed a
+    chunk about one model to be attached to a different model's sentence.
+    Keeping the claim boundary here lets the runtime build a conservative
+    union of citations without treating the complete answer as one claim.
+    """
+
+    claim: str
+    hits: tuple[SearchHit, ...]
+
+
 _MODEL_ALIASES: tuple[tuple[str, ...], ...] = (
     ("s8-luna", "s8 luna", "皓月"),
     ("s8-air", "s8 air", "轻羽"),
@@ -229,6 +243,159 @@ def select_query_evidence_hits(
     """Select citations before generation when no answer text exists yet."""
 
     return select_citation_hits(query, "", hits, limit=limit)
+
+
+def select_claim_evidence(
+    query: str,
+    answer: str,
+    hits: Sequence[SearchHit],
+    *,
+    limit: int = 3,
+) -> tuple[ClaimEvidence, ...]:
+    """Bind citations to individual answer claims conservatively.
+
+    This is intentionally deterministic and local.  It is not an entailment
+    model: it prevents the most damaging class of errors first by enforcing
+    model identity and exact numeric/value presence, then uses lexical overlap
+    plus the retrieval score to choose the supporting chunk for each claim.
+    Claims without a sufficiently supporting chunk are returned with no hits;
+    the caller's existing release policy can then refuse the answer instead
+    of attaching an unrelated citation.
+    """
+
+    if limit < 1 or not hits:
+        return ()
+    claims = _split_claims(answer)
+    if not claims:
+        return ()
+    output: list[ClaimEvidence] = []
+    for claim in claims:
+        claim_models = _models_in_text(claim)
+        scored: list[tuple[float, int, SearchHit]] = []
+        for index, hit in enumerate(hits):
+            score = _claim_support_score(query, claim, hit, claim_models)
+            if score is not None:
+                scored.append((score, index, hit))
+        scored.sort(key=lambda item: (-item[0], item[1]))
+        if not scored:
+            output.append(ClaimEvidence(claim=claim, hits=()))
+            continue
+        # A comparison sentence can name multiple products.  Keep one best
+        # chunk per named model; ordinary claims keep only their best chunk.
+        selected: list[SearchHit] = []
+        if len(claim_models) > 1:
+            for model in claim_models:
+                matching = [item for item in scored if model in _models_in_text(_hit_text(item[2]))]
+                if matching:
+                    selected.append(matching[0][2])
+        if not selected:
+            selected = [scored[0][2]]
+        output.append(ClaimEvidence(claim=claim, hits=tuple(selected[:limit])))
+    return tuple(output)
+
+
+def claim_requires_binding(claim: str) -> bool:
+    """Return whether a claim contains a model or parameter boundary."""
+
+    return bool(_models_in_text(claim) or _number_tokens(claim))
+
+
+def _split_claims(answer: str) -> tuple[str, ...]:
+    claims: list[str] = []
+    for line in answer.splitlines():
+        cleaned = re.sub(r"^\s*(?:[-*•]|\d+[.、)])\s*", "", line).strip()
+        if not cleaned:
+            continue
+        for sentence in re.split(r"(?<=[。！？!?；;])\s*", cleaned):
+            sentence = sentence.strip()
+            if sentence:
+                claims.append(sentence)
+    return tuple(claims)
+
+
+def _claim_support_score(
+    query: str,
+    claim: str,
+    hit: SearchHit,
+    claim_models: tuple[str, ...],
+) -> float | None:
+    evidence_text = _hit_text(hit)
+    evidence_models = _models_in_text(evidence_text)
+    declared_models = _models_in_text(str(hit.chunk.metadata.get("model", "")))
+    if claim_models and declared_models and not set(claim_models) & set(declared_models):
+        return None
+    if claim_models and any(model not in evidence_models for model in claim_models):
+        return None
+    claim_numbers = _number_tokens(claim)
+    evidence_compact = re.sub(r"\s+", "", _normalize(evidence_text))
+    if claim_numbers and not all(number in evidence_compact for number in claim_numbers):
+        return None
+    claim_terms = {term for term in tokenize(_normalize(claim)) if len(term) > 1}
+    evidence_terms = {term for term in tokenize(_normalize(evidence_text)) if len(term) > 1}
+    if not claim_terms:
+        return None
+    overlap = len(claim_terms & evidence_terms) / len(claim_terms)
+    query_terms = {term for term in tokenize(_normalize(query)) if len(term) > 1}
+    query_overlap = (
+        len(query_terms & evidence_terms) / len(query_terms) if query_terms else 0.0
+    )
+    model_bonus = 0.16 if claim_models else 0.0
+    score = 0.58 * overlap + 0.22 * query_overlap + 0.20 * hit.score + model_bonus
+    return score if overlap >= 0.20 else None
+
+
+def _hit_text(hit: SearchHit) -> str:
+    return " ".join(
+        (
+            hit.chunk.title,
+            str(hit.chunk.metadata.get("model", "")),
+            str(hit.chunk.metadata.get("product_id", "")),
+            str(hit.chunk.metadata.get("heading", "")),
+            hit.chunk.content,
+        )
+    )
+
+
+def _models_in_text(value: str) -> tuple[str, ...]:
+    normalized = _normalize(value).replace("-", "").replace("_", "")
+    found: list[str] = []
+    for aliases in _MODEL_ALIASES:
+        if any(alias.replace("-", "").replace("_", "") in normalized for alias in aliases):
+            found.append(aliases[0])
+    return tuple(found)
+
+
+def _number_tokens(value: str) -> tuple[str, ...]:
+    normalized = _normalize(value)
+    # Only enforce exact numeric support for parameter-like claims.  Ordinary
+    # scene descriptions may mention an area or count that is not a product
+    # specification and should not make an otherwise grounded answer fail.
+    if not any(
+        marker in normalized
+        for marker in (
+            "电池",
+            "容量",
+            "高度",
+            "越障",
+            "价格",
+            "售价",
+            "参考价",
+            "保修",
+            "质保",
+            "防水",
+            "mah",
+            "毫米",
+        )
+    ):
+        return ()
+    return tuple(
+        token.casefold().replace(" ", "")
+        for token in re.findall(
+            r"\d+(?:\.\d+)?\s*(?:mah|毫安时|毫米|mm|厘米|cm|元|年|个月|分钟|小时|%)?",
+            normalized,
+            flags=re.IGNORECASE,
+        )
+    )
 
 
 def _normalize(value: str) -> str:

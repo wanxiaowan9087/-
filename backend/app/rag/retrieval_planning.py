@@ -104,6 +104,7 @@ _QUERY_ROUTES: tuple[tuple[tuple[str, ...], frozenset[RetrievalCategory]], ...] 
 )
 
 _QUERY_SECTION_MARKERS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
+    (("适合", "场景", "家庭", "定位", "擅长"), ("型号定位",)),
     (("功能", "特点", "配置", "具备"), ("型号定位", "组件与功能", "功能")),
     (("保养", "维护", "清理", "清洗", "耗材"), ("维护建议", "常见问题", "保养")),
     (("安全", "风险", "注意", "发热", "漏水"), ("安全使用", "安全", "常见问题")),
@@ -186,19 +187,42 @@ def route_candidates(query: str, hits: Sequence[SearchHit]) -> tuple[SearchHit, 
     """Soft-route domain evidence without deleting recall candidates."""
 
     categories = _query_categories(query)
-    if not categories:
+    compact = re.sub(r"\s+", "", query).casefold()
+    requested_models = _requested_models(query)
+    preferred_sections = tuple(
+        section
+        for markers, sections in _QUERY_SECTION_MARKERS
+        if any(marker in compact for marker in markers)
+        for section in sections
+    )
+    if not categories and not requested_models:
         return tuple(hits)
     routed: list[SearchHit] = []
-    fallback: list[SearchHit] = []
     for hit in hits:
         category = _document_category(hit)
-        if category in categories:
-            routed.append(
-                replace(hit, fused_score=min(1.0, hit.fused_score + 0.08))
+        identity = " ".join(
+            (
+                str(hit.chunk.metadata.get("heading", "")),
+                hit.chunk.location.section or "",
             )
-        else:
-            fallback.append(hit)
-    return tuple((*routed, *fallback)) if routed else tuple(hits)
+        ).casefold()
+        model = _hit_model(hit)
+        section_match = bool(
+            preferred_sections
+            and any(section.casefold() in identity for section in preferred_sections)
+        )
+        model_match = bool(requested_models and model in requested_models)
+        boost = 0.08 if category in categories else 0.0
+        adjusted_score = min(1.0, hit.fused_score + boost)
+        if model_match and section_match:
+            # This is a coverage guarantee, not a relevance claim: a clearly
+            # named model's intent section must survive the bounded cutoff.
+            adjusted_score = max(adjusted_score, 0.90)
+        routed.append(
+            replace(hit, fused_score=adjusted_score)
+        )
+    routed.sort(key=lambda item: (-item.fused_score, item.chunk.chunk_id))
+    return tuple(routed)
 
 
 def cohere_reranked_hits(query: str, hits: Sequence[SearchHit]) -> tuple[SearchHit, ...]:
@@ -278,14 +302,18 @@ def select_context_hits(
 
     collection = is_collection_query(query)
     limit = collection_limit if collection else ordinary_limit
-    requested_model = None if collection else _requested_model(query)
+    requested_models = () if collection else _requested_models(query)
+    requested_model = requested_models[0] if len(requested_models) == 1 else None
     candidates = tuple(hits)
-    if requested_model is not None:
-        matching = tuple(hit for hit in candidates if _hit_model(hit) == requested_model)
+    if requested_models:
+        matching = tuple(hit for hit in candidates if _hit_model(hit) in requested_models)
         if matching:
             generic = tuple(
                 hit for hit in candidates if _hit_model(hit) is None
             )
+            # A comparison question may explicitly name several models. Keep
+            # every named model in the candidate set; the previous singular
+            # filter silently discarded all but the first one.
             candidates = (*matching, *generic)
     if not collection:
         candidates = tuple(
@@ -297,7 +325,25 @@ def select_context_hits(
     per_group_limit = limit if collection else (3 if requested_model else 2)
     selected: list[SearchHit] = []
     counts: Counter[str] = Counter()
+
+    # A comparison must carry at least one evidence slot for every explicitly
+    # named model. Otherwise several strong chunks for the first model can
+    # consume the bounded context before the second model is represented.
+    if len(requested_models) > 1:
+        for model in requested_models:
+            representative = next(
+                (hit for hit in candidates if _hit_model(hit) == model),
+                None,
+            )
+            if representative is None:
+                continue
+            selected.append(representative)
+            product_id = str(representative.chunk.metadata.get("product_id", "")).strip()
+            counts[product_id or representative.chunk.document_id] += 1
+
     for hit in candidates:
+        if hit in selected:
+            continue
         product_id = str(hit.chunk.metadata.get("product_id", "")).strip()
         group = product_id or hit.chunk.document_id
         if counts[group] >= per_group_limit:
@@ -309,12 +355,91 @@ def select_context_hits(
     return tuple(selected)
 
 
+def ensure_explicit_model_coverage(
+    query: str,
+    reranked_hits: Sequence[SearchHit],
+    candidate_hits: Sequence[SearchHit],
+    *,
+    limit: int | None = None,
+) -> tuple[SearchHit, ...]:
+    """Restore one candidate for each explicitly named model after truncation.
+
+    When a downstream merge has its own result budget, ``limit`` keeps the
+    coverage repair bounded by evicting the lowest-relevance duplicate model
+    before evicting the only representative of an explicitly named model.
+    """
+
+    requested_models = _requested_models(query)
+    if not requested_models:
+        return tuple(reranked_hits[:limit] if limit is not None else reranked_hits)
+    output = list(reranked_hits[:limit] if limit is not None else reranked_hits)
+    present = {_hit_model(hit) for hit in output}
+    for model in requested_models:
+        if model in present:
+            continue
+        representative = next(
+            (
+                hit
+                for hit in sorted(
+                    candidate_hits,
+                    key=lambda item: -_context_relevance(query, item),
+                )
+                if _hit_model(hit) == model
+            ),
+            None,
+        )
+        if representative is not None:
+            if limit is not None and len(output) >= limit:
+                requested_counts = Counter(_hit_model(hit) for hit in output)
+                removable = [
+                    (index, hit)
+                    for index, hit in enumerate(output)
+                    if _hit_model(hit) not in requested_models
+                    or requested_counts[_hit_model(hit)] > 1
+                ]
+                if removable:
+                    remove_index, _ = min(
+                        removable,
+                        key=lambda item: _context_relevance(query, item[1]),
+                    )
+                    output.pop(remove_index)
+            output.append(representative)
+            present.add(model)
+    return tuple(output)
+
+
 def _requested_model(query: str) -> str | None:
-    compact = re.sub(r"\s+", " ", query).casefold()
+    models = _requested_models(query)
+    return models[0] if models else None
+
+
+def _requested_models(query: str) -> tuple[str, ...]:
+    compact = re.sub(r"\s+", "", query).casefold()
+    matches: list[tuple[int, str, str]] = []
     for model, aliases in _MODEL_ALIASES:
-        if any(alias in compact for alias in aliases):
-            return model
-    return None
+        for alias in aliases:
+            normalized_alias = re.sub(r"\s+", "", alias).casefold()
+            if normalized_alias in compact:
+                matches.append((len(normalized_alias), model, normalized_alias))
+    found: list[str] = []
+    accepted_aliases: list[tuple[str, str]] = []
+    for _, model, alias in sorted(matches, key=lambda item: -item[0]):
+        # Prefer a more specific alias.  For example, “曜石 Edge” must not
+        # also activate the shorter plain “曜石” alias for X9-OBSIDIAN.
+        if model == "X9-OBSIDIAN" and any(
+            marker in compact for marker in ("x9edge", "曜石edge", "边角")
+        ):
+            continue
+        if any(
+            model != selected_model
+            and alias in accepted_alias
+            for selected_model, accepted_alias in accepted_aliases
+        ):
+            continue
+        if model not in found:
+            found.append(model)
+            accepted_aliases.append((model, alias))
+    return tuple(found)
 
 
 def _hit_model(hit: SearchHit) -> str | None:
@@ -349,4 +474,20 @@ def _context_relevance(query: str, hit: SearchHit) -> float:
     evidence_terms = heading_terms | set(tokenize(hit.chunk.content))
     evidence_coverage = len(query_terms & evidence_terms) / len(query_terms)
     heading_coverage = len(query_terms & heading_terms) / len(query_terms)
-    return 0.70 * hit.score + 0.20 * evidence_coverage + 0.10 * heading_coverage
+    compact = re.sub(r"\s+", "", query).casefold()
+    preferred_sections = tuple(
+        section
+        for markers, sections in _QUERY_SECTION_MARKERS
+        if any(marker in compact for marker in markers)
+        for section in sections
+    )
+    section_match = bool(
+        preferred_sections
+        and any(marker.casefold() in heading.casefold() for marker in preferred_sections)
+    )
+    return (
+        0.62 * hit.score
+        + 0.18 * evidence_coverage
+        + 0.08 * heading_coverage
+        + (0.18 if section_match else 0.0)
+    )

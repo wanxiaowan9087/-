@@ -32,7 +32,7 @@ from backend.app.rag.models import DocumentRecord, DocumentType
 from backend.app.rag.ports import RerankerPort, RetrieverPort
 from backend.app.rag.query_rewrite import DeterministicQueryRewriter
 from backend.app.rag.retrieval import (
-    FallbackReranker,
+    AdaptiveReranker,
     HybridRetriever,
     LexicalReranker,
     LowConfidenceRetryRetriever,
@@ -122,7 +122,7 @@ def build_run_executor(
                 model=settings.agent_rerank_model_name,
                 endpoint=settings.agent_rerank_endpoint,
             )
-        final_reranker = FallbackReranker(cloud_reranker, local_reranker)
+        final_reranker = AdaptiveReranker(cloud_reranker, local_reranker)
         hybrid = HybridRetriever(
             embeddings,
             vector_store,

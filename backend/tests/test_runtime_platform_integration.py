@@ -350,6 +350,66 @@ async def test_followup_answer_models_always_emit_matching_product_cards(
 
 
 @pytest.mark.asyncio
+async def test_recommendation_colors_do_not_block_terminal_done_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A structured catalog field must not prevent stream finalization."""
+    repository, execution = await _prepared_run()
+    answer = "S8 皓月适合夜间清洁和婴幼儿家庭。"
+    runtime = FixedRuntime(
+        AgentRunResult(
+            run_id=str(execution.run_id),
+            status=RunStatus.COMPLETED,
+            public_content=answer,
+            candidate_content=None,
+            citations=(),
+            trace=_trace(),
+            confidence=0.91,
+            confidence_threshold=0.65,
+        )
+    )
+    catalog = (
+        RecommendedRobot(
+            product_id="s8-luna",
+            model="S8-LUNA",
+            name="S8 皓月",
+            price=2999,
+            highlights=("静音运行",),
+            recommended_for=("婴幼儿家庭",),
+            image_key="robot-s8-luna",
+            score=1.0,
+            catalog_source="catalog",
+            colors=("月白", "白色"),
+        ),
+    )
+
+    async def fake_recommend(query: str, *, limit: int = 3):
+        return catalog
+
+    monkeypatch.setattr(
+        "backend.app.adapters.llm.platform_executor.recommend_robots",
+        fake_recommend,
+    )
+    monkeypatch.setattr(
+        "backend.app.adapters.llm.platform_executor._ANSWER_REVEAL_DELAY_SECONDS",
+        0,
+    )
+
+    await RunCoordinator(repository, RuntimeRunExecutor(runtime))._execute(execution)
+
+    run = repository.runs[execution.run_id]
+    events = repository.events[execution.run_id]
+    assert run.status == "completed"
+    assert events[-1].event["event_type"] == "done"
+    recommendation = next(
+        event.event
+        for event in events
+        if event.event["event_type"] == "product_recommendation"
+    )
+    assert recommendation["payload"]["colors"] == ["月白", "白色"]
+
+
+@pytest.mark.asyncio
 async def test_withheld_candidate_creates_review_without_publication() -> None:
     repository, execution = await _prepared_run()
     review_id = uuid4()

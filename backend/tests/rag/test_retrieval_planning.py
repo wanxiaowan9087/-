@@ -8,6 +8,7 @@ from backend.app.rag.models import Chunk, DocumentType, ScoredChunk, SearchHit
 from backend.app.rag.retrieval import HybridRetriever, IdentityReranker
 from backend.app.rag.retrieval_planning import (
     cohere_reranked_hits,
+    ensure_explicit_model_coverage,
     route_candidates,
     select_context_hits,
 )
@@ -30,6 +31,34 @@ def _hit(index: int, *, product_id: str | None = None) -> SearchHit:
         vector_score=0.9 - index * 0.01,
         keyword_score=0.8 - index * 0.01,
         fused_score=0.9 - index * 0.01,
+    )
+
+
+def _product_hit(
+    index: int,
+    *,
+    model: str,
+    heading: str,
+    content: str,
+    score: float,
+    source_key: str | None = None,
+) -> SearchHit:
+    document_id = str(uuid5(NAMESPACE_URL, source_key or f"{model}-{index}"))
+    return SearchHit(
+        chunk=Chunk(
+            document_id=document_id,
+            document_version="v1",
+            chunk_id=f"{document_id}:{index}",
+            title=f"{model} 使用说明",
+            source="kb://manual",
+            content=content,
+            document_type=DocumentType.MARKDOWN,
+            metadata={"model": model, "heading": heading},
+        ),
+        vector_score=score,
+        keyword_score=score,
+        fused_score=score,
+        rerank_score=score,
     )
 
 
@@ -104,6 +133,206 @@ def test_context_selector_prefers_requested_model_and_matching_section() -> None
 
     assert selected[0].chunk.metadata["heading"] == "组件与核心功能"
     assert all(hit.chunk.metadata["model"] == "S8-LUNA" for hit in selected)
+
+
+def test_context_selector_reserves_one_slot_for_each_explicit_model() -> None:
+    candidates = (
+        _product_hit(
+            0,
+            model="S8-LUNA",
+            heading="型号定位",
+            content="皓月适合夜间清洁家庭。",
+            score=0.99,
+            source_key="luna-position",
+        ),
+        _product_hit(
+            1,
+            model="S8-LUNA",
+            heading="推荐使用方式",
+            content="皓月推荐在夜间清洁。",
+            score=0.98,
+            source_key="luna-usage",
+        ),
+        _product_hit(
+            2,
+            model="S8-LUNA",
+            heading="组件与功能",
+            content="皓月支持静音运行。",
+            score=0.97,
+            source_key="luna-features",
+        ),
+        _product_hit(
+            3,
+            model="S8-LUNA",
+            heading="维护建议",
+            content="皓月需要定期维护。",
+            score=0.96,
+            source_key="luna-maintenance",
+        ),
+        _product_hit(
+            4,
+            model="X9-OBSIDIAN",
+            heading="型号定位",
+            content="曜石适合大户型和宠物家庭。",
+            score=0.70,
+            source_key="obsidian-position",
+        ),
+    )
+
+    selected = select_context_hits("皓月和曜石分别适合什么家庭？", candidates)
+
+    assert len(selected) == 4
+    assert {hit.chunk.metadata["model"] for hit in selected} == {
+        "S8-LUNA",
+        "X9-OBSIDIAN",
+    }
+
+
+def test_context_selector_does_not_treat_edge_alias_as_plain_obsidian() -> None:
+    candidates = (
+        _product_hit(
+            0,
+            model="X9-EDGE",
+            heading="型号定位",
+            content="曜石 Edge 适合家具较多的家庭。",
+            score=0.80,
+            source_key="edge-position",
+        ),
+        _product_hit(
+            1,
+            model="X9-OBSIDIAN",
+            heading="型号定位",
+            content="曜石适合大户型和宠物家庭。",
+            score=0.99,
+            source_key="obsidian-position-plain",
+        ),
+        _product_hit(
+            2,
+            model="M6-TERRA",
+            heading="型号定位",
+            content="霞陶适合混合地面护理。",
+            score=0.70,
+            source_key="terra-position",
+        ),
+    )
+
+    selected = select_context_hits("曜石 Edge 和霞陶分别擅长什么？", candidates)
+
+    assert {hit.chunk.metadata["model"] for hit in selected} == {
+        "X9-EDGE",
+        "M6-TERRA",
+    }
+
+
+def test_rerank_truncation_restores_missing_explicit_model_from_candidates() -> None:
+    edge = _product_hit(
+        0,
+        model="X9-EDGE",
+        heading="型号定位",
+        content="曜石 Edge 适合家具较多的家庭。",
+        score=0.80,
+        source_key="edge-rerank",
+    )
+    terra = _product_hit(
+        1,
+        model="M6-TERRA",
+        heading="型号定位",
+        content="霞陶适合混合地面护理和木地板保护。",
+        score=0.70,
+        source_key="terra-rerank",
+    )
+
+    restored = ensure_explicit_model_coverage(
+        "曜石 Edge 和霞陶分别擅长什么？",
+        (edge,),
+        (edge, terra),
+    )
+
+    assert [hit.chunk.metadata["model"] for hit in restored] == [
+        "X9-EDGE",
+        "M6-TERRA",
+    ]
+
+
+def test_model_coverage_prefers_intent_section_over_document_title_chunk() -> None:
+    title_chunk = _product_hit(
+        0,
+        model="M6-TERRA",
+        heading="M6-TERRA 霞陶使用说明",
+        content="霞陶使用说明。",
+        score=0.95,
+        source_key="terra-title",
+    )
+    positioning_chunk = _product_hit(
+        1,
+        model="M6-TERRA",
+        heading="M6-TERRA 霞陶使用说明 > 1. 型号定位",
+        content="霞陶重点面向混合地面护理和木地板保护。",
+        score=0.70,
+        source_key="terra-positioning",
+    )
+
+    restored = ensure_explicit_model_coverage(
+        "曜石 Edge 和霞陶分别擅长什么？",
+        (),
+        (title_chunk, positioning_chunk),
+    )
+
+    assert restored[0].chunk.metadata["heading"].endswith("1. 型号定位")
+
+
+def test_route_candidates_promotes_requested_model_intent_section_before_cutoff() -> None:
+    distractors = tuple(
+        _product_hit(
+            index,
+            model="X9-EDGE",
+            heading="维护建议",
+            content="边角清洁维护资料。",
+            score=0.80 - index * 0.005,
+            source_key=f"edge-distractor-{index}",
+        )
+        for index in range(20)
+    )
+    target = _product_hit(
+        21,
+        model="M6-TERRA",
+        heading="1. 型号定位",
+        content="霞陶重点面向混合地面护理和木地板保护。",
+        score=0.40,
+        source_key="terra-route-target",
+    )
+
+    routed = route_candidates(
+        "曜石 Edge 和霞陶分别擅长什么？",
+        (*distractors, target),
+    )
+
+    assert target.chunk.chunk_id in {hit.chunk.chunk_id for hit in routed[:20]}
+
+
+def test_context_selector_prioritizes_positioning_section_for_scenario_query() -> None:
+    candidates = (
+        _product_hit(
+            0,
+            model="X9-OBSIDIAN",
+            heading="产品目录",
+            content="曜石适合宠物家庭。",
+            score=0.98,
+            source_key="catalog",
+        ),
+        _product_hit(
+            1,
+            model="X9-OBSIDIAN",
+            heading="1. 型号定位",
+            content="曜石适合大户型、多房间和宠物家庭。",
+            score=0.75,
+            source_key="obsidian-position",
+        ),
+    )
+
+    selected = select_context_hits("曜石适合什么场景？", candidates)
+
+    assert selected[0].chunk.metadata["heading"] == "1. 型号定位"
 
 
 def test_post_rerank_cohesion_keeps_requested_model_section_together() -> None:
@@ -200,6 +429,77 @@ async def test_hybrid_retriever_applies_domain_route_before_final_top_k() -> Non
 
     assert [hit.chunk.title for hit in result.hits[:2]] == ["故障排除", "安全使用规范"]
     assert len(result.hits) == 4
+
+
+@pytest.mark.asyncio
+async def test_hybrid_retriever_restores_missing_model_from_fused_candidates() -> None:
+    edge = _product_hit(
+        0,
+        model="X9-EDGE",
+        heading="型号定位",
+        content="曜石 Edge 重点提升贴边清洁。",
+        score=0.90,
+        source_key="edge-hybrid",
+    )
+    terra = _product_hit(
+        1,
+        model="M6-TERRA",
+        heading="型号定位",
+        content="霞陶重点面向混合地面护理和木地板保护。",
+        score=0.60,
+        source_key="terra-hybrid",
+    )
+
+    class Embeddings:
+        async def embed_query(self, _query: str) -> tuple[float, ...]:
+            return (1.0,)
+
+    class Search:
+        async def search(self, _value: object, _limit: int) -> tuple[ScoredChunk, ...]:
+            return tuple(ScoredChunk(hit.chunk, hit.score) for hit in (edge, terra))
+
+    result = await HybridRetriever(
+        Embeddings(),
+        Search(),
+        Search(),
+        IdentityReranker(),
+        candidate_limit=1,
+        result_limit=1,
+    ).retrieve("曜石 Edge 和霞陶分别擅长什么？")
+
+    assert {hit.chunk.metadata["model"] for hit in result.hits} == {
+        "X9-EDGE",
+        "M6-TERRA",
+    }
+
+
+@pytest.mark.asyncio
+async def test_hybrid_retriever_expands_only_multi_model_search_depth() -> None:
+    observed: list[int] = []
+
+    class Embeddings:
+        async def embed_query(self, _query: str) -> tuple[float, ...]:
+            return (1.0,)
+
+    class Search:
+        async def search(self, _value: object, limit: int) -> tuple[ScoredChunk, ...]:
+            observed.append(limit)
+            return ()
+
+    retriever = HybridRetriever(
+        Embeddings(),
+        Search(),
+        Search(),
+        IdentityReranker(),
+        candidate_limit=20,
+        result_limit=4,
+    )
+    await retriever.retrieve("曜石 Edge 和霞陶分别擅长什么？")
+    assert observed == [24, 24]
+
+    observed.clear()
+    await retriever.retrieve("霞陶适合什么场景？")
+    assert observed == [20, 20]
 
 
 @pytest.mark.asyncio

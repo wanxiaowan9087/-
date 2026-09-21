@@ -141,6 +141,10 @@ class ProductRecommendationPayload(ContractModel):
     image_key: str = Field(min_length=1, max_length=64)
     score: float = Field(ge=0)
     catalog_source: str = Field(min_length=1, max_length=500)
+    # Presentation metadata returned by the catalog MCP.  This field is part
+    # of the durable event contract because the frontend uses it to render the
+    # model's available finishes without rejecting the whole stream.
+    colors: list[str] = Field(default_factory=list, max_length=10)
 
 
 class ProductRecommendationEvent(EventBase):

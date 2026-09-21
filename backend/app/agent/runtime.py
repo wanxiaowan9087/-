@@ -11,7 +11,13 @@ from uuid import NAMESPACE_URL, uuid4, uuid5
 from zoneinfo import ZoneInfo
 
 from ..rag.citations import CitationService
-from ..rag.evidence import assess_evidence, select_citation_hits, select_query_evidence_hits
+from ..rag.evidence import (
+    assess_evidence,
+    claim_requires_binding,
+    select_citation_hits,
+    select_claim_evidence,
+    select_query_evidence_hits,
+)
 from ..rag.models import Chunk, Citation, DocumentType, RetrievalResult, SearchHit
 from ..rag.ports import RetrieverPort
 from ..rag.retrieval import RetrievalUnavailable
@@ -790,16 +796,43 @@ class AgentRuntime:
                 ),
             )
             self._record_tool_steps(trace, draft)
-            citation_hits = (
-                context_hits
-                if draft.cited_chunk_ids
-                else select_citation_hits(
+            if draft.cited_chunk_ids:
+                citation_hits = context_hits
+            else:
+                claim_evidence = select_claim_evidence(
                     request.user_text,
                     draft.content,
                     context_hits,
                     limit=citation_limit,
                 )
-            )
+                claim_binding_supported = all(
+                    bool(claim.hits)
+                    for claim in claim_evidence
+                    if claim_requires_binding(claim.claim)
+                )
+                has_model_scoped_evidence = any(
+                    _known_model_in_hit(hit) for hit in context_hits
+                )
+                citation_hits = _flatten_claim_evidence(
+                    claim_evidence,
+                    limit=citation_limit,
+                )
+                # Legacy/general documents may not carry model metadata.  In
+                # that case there is no safe identity boundary to enforce;
+                # retain the old selector rather than rejecting otherwise
+                # valid generic answers.  Model-scoped evidence always uses
+                # the stricter claim-level path above.
+                if not citation_hits and not has_model_scoped_evidence:
+                    citation_hits = select_citation_hits(
+                        request.user_text,
+                        draft.content,
+                        context_hits,
+                        limit=citation_limit,
+                    )
+                if not has_model_scoped_evidence:
+                    claim_binding_supported = True
+            if draft.cited_chunk_ids:
+                claim_binding_supported = True
             citations = self._citations.build(
                 citation_hits,
                 selected_chunk_ids=draft.cited_chunk_ids,
@@ -812,7 +845,9 @@ class AgentRuntime:
                     confidence=retrieval.confidence,
                     has_evidence=bool(context_hits),
                     citations_valid=bool(citations) and validation.valid,
-                    evidence_reliable=evidence_assessment.supported,
+                    evidence_reliable=(
+                        evidence_assessment.supported and claim_binding_supported
+                    ),
                     knowledge_boundary_unsupported=(
                         evidence_assessment.knowledge_boundary_unsupported
                     ),
@@ -1177,4 +1212,57 @@ def _with_catalog_evidence(
         strategy=f"{retrieval.strategy}+catalog-mcp",
         degraded_dependencies=retrieval.degraded_dependencies,
         conflicting_sources=retrieval.conflicting_sources,
+    )
+
+
+def _flatten_claim_evidence(
+    claims: Sequence[object],
+    *,
+    limit: int,
+) -> tuple[SearchHit, ...]:
+    """Build a de-duplicated citation candidate list in claim order."""
+
+    selected: list[SearchHit] = []
+    seen: set[str] = set()
+    for claim in claims:
+        for hit in getattr(claim, "hits", ()):
+            if hit.chunk.chunk_id in seen:
+                continue
+            seen.add(hit.chunk.chunk_id)
+            selected.append(hit)
+            if len(selected) >= limit:
+                return tuple(selected)
+    return tuple(selected)
+
+
+def _known_model_in_hit(hit: SearchHit) -> bool:
+    identity = " ".join(
+        (
+            str(hit.chunk.metadata.get("model", "")),
+            str(hit.chunk.metadata.get("product_id", "")),
+            hit.chunk.title,
+            hit.chunk.content,
+        )
+    ).casefold().replace("-", "").replace("_", "")
+    return any(
+        alias.casefold().replace("-", "").replace("_", "") in identity
+        for alias in (
+            "s8-luna",
+            "s8 luna",
+            "皓月",
+            "s8-air",
+            "s8 air",
+            "轻羽",
+            "x9-obsidian",
+            "x9 obsidian",
+            "曜石",
+            "x9-edge",
+            "x9 edge",
+            "m6-terra",
+            "m6 terra",
+            "霞陶",
+            "m6-mini",
+            "m6 mini",
+            "小径",
+        )
     )

@@ -562,6 +562,55 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.status, RunStatus.COMPLETED)
         self.assertEqual(result.citations[0].chunk_id, "battery")
 
+    async def test_final_citations_follow_each_named_model_claim(self) -> None:
+        s8 = Chunk(
+            document_id="00000000-0000-0000-0000-000000000211",
+            document_version="v1",
+            chunk_id="s8-night",
+            title="S8 皓月场景说明",
+            source="kb://s8-luna",
+            content="S8-LUNA 皓月支持自动集尘，适合夜间清洁。",
+            document_type=DocumentType.MARKDOWN,
+            metadata={"model": "S8-LUNA", "product_id": "s8-luna"},
+        )
+        x9 = Chunk(
+            document_id="00000000-0000-0000-0000-000000000212",
+            document_version="v1",
+            chunk_id="x9-home",
+            title="X9 曜石场景说明",
+            source="kb://x9-obsidian",
+            content="X9-OBSIDIAN 曜石支持自动上下水，适合大户型。",
+            document_type=DocumentType.MARKDOWN,
+            metadata={"model": "X9-OBSIDIAN", "product_id": "x9-obsidian"},
+        )
+        engine = FakeReActEngine(
+            default_content=(
+                "S8 皓月支持自动集尘，适合夜间清洁。\n"
+                "X9 曜石支持自动上下水，适合大户型。"
+            )
+        )
+        runtime = AgentRuntime(
+            react_engine=engine,
+            retriever=StubRetriever(
+                RetrievalResult(
+                    hits=(
+                        SearchHit(s8, 0.90, 0.88, 0.89, 0.89),
+                        SearchHit(x9, 0.72, 0.70, 0.71, 0.71),
+                    ),
+                    confidence=0.92,
+                )
+            ),
+        )
+
+        result = await runtime.execute(
+            self._request("S8 皓月和 X9 曜石分别适合什么场景？")
+        )
+
+        self.assertEqual(
+            {citation.chunk_id for citation in result.citations},
+            {"s8-night", "x9-home"},
+        )
+
     async def test_normal_generation_sends_only_four_diverse_chunks_to_model(self) -> None:
         hits = tuple(
             SearchHit(
