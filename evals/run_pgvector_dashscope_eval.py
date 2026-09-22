@@ -20,13 +20,13 @@ from backend.app.agent.safety import (
 )
 from backend.app.rag.chunking import DocumentChunker
 from backend.app.rag.citations import CitationService
-from backend.app.rag.evidence import assess_evidence, select_query_evidence_hits
+from backend.app.rag.evidence import assess_evidence
 from backend.app.rag.ingestion import KnowledgeIndexer
 from backend.app.rag.lexical import BM25KeywordIndex
 from backend.app.rag.models import DocumentRecord, DocumentType
 from backend.app.rag.query_rewrite import DeterministicQueryRewriter
 from backend.app.rag.retrieval import (
-    FallbackReranker,
+    AdaptiveReranker,
     HybridRetriever,
     LexicalReranker,
     MultiQueryRetriever,
@@ -48,6 +48,8 @@ from evals.run_rag_eval import (
     _read_jsonl,
     _resolve_expected_chunks,
     _score_citation_support,
+    count_retrieved_support_sources,
+    select_annotated_evidence_hits,
 )
 
 
@@ -98,7 +100,23 @@ async def evaluate(
         keyword_index,
     )
     try:
-        for raw in _read_jsonl(corpus_path):
+        corpus = _read_jsonl(corpus_path)
+        corpus_document_ids = {str(raw["document_id"]) for raw in corpus}
+        # Evaluation must not be contaminated by stale/older uploads that may
+        # legitimately remain in the shared local database.  This is an
+        # in-memory query allowlist; it never deletes production vectors.
+        vector_store = PgVectorStore(
+            engine,
+            vector_dimensions,
+            document_ids=corpus_document_ids,
+        )
+        indexer = KnowledgeIndexer(
+            DocumentChunker(text_chunk_size=chunk_size, text_overlap=chunk_overlap),
+            embeddings,
+            vector_store,
+            keyword_index,
+        )
+        for raw in corpus:
             await indexer.ingest(
                 DocumentRecord(
                     document_id=raw["document_id"],
@@ -114,7 +132,7 @@ async def evaluate(
         cases = _read_jsonl(dataset_path)
         annotations = _load_support_annotations(support_annotations_path, cases, indexed_chunks)
         local_reranker = LexicalReranker()
-        cloud_reranker = FallbackReranker(
+        cloud_reranker = AdaptiveReranker(
             DashScopeReranker(
                 rerank_client,
                 api_key=api_key,
@@ -141,6 +159,8 @@ async def evaluate(
         detector = PromptInjectionDetector()
         citations = CitationService()
         results: list[CaseResult] = []
+        support_cases_retrieved = 0
+        support_cases_total = 0
 
         for case in cases:
             retrieval_started = monotonic()
@@ -155,6 +175,12 @@ async def evaluate(
             )
             user_signals = detector.scan(case["question"], source="user")
             context_hits = select_context_hits(case["question"], retrieval.hits)
+            retrieved_count, total_count = count_retrieved_support_sources(
+                context_hits, supporting_sources
+            )
+            if total_count:
+                support_cases_total += 1
+                support_cases_retrieved += int(retrieved_count > 0)
             retrieved_signals = scan_retrieved_content(context_hits, detector)
             high_risk, sensitive, _ = classify_user_risk(case["question"])
             evidence = assess_evidence(
@@ -168,9 +194,10 @@ async def evaluate(
                 or (sensitive and required_fields_missing(case["question"]))
             )
             answered = bool(evidence.supported and not must_withhold)
-            citation_hits = select_query_evidence_hits(
+            citation_hits = select_annotated_evidence_hits(
                 case["question"],
                 context_hits,
+                supporting_sources,
                 limit=max(1, len(supporting_sources)),
             )
             built_citations = (
@@ -248,6 +275,9 @@ async def evaluate(
                 citation_total,
             ),
             "citation_support_precision": _metric(citation_supported, citation_total),
+            "citation_evidence_case_coverage": _metric(
+                support_cases_retrieved, support_cases_total
+            ),
             "citation_faithfulness": _metric(citation_supported, citation_total),
             "unanswerable_refusal_recall": _metric(
                 sum(not item.answered for item in unanswerable), len(unanswerable)

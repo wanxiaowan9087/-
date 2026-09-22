@@ -144,6 +144,88 @@ def test_query_evidence_selector_is_available_before_generation() -> None:
     assert selected[0] is battery
 
 
+def test_query_evidence_selector_prefers_intent_section_over_model_overview() -> None:
+    overview = _hit(
+        "S8-LUNA 皓月定位为适合大户型的旗舰型号，具备全面的清洁能力。",
+        fused_score=0.96,
+    )
+    overview = overview.__class__(
+        chunk=overview.chunk.__class__(
+            **{
+                **overview.chunk.__dict__,
+                "metadata": {"model": "S8-LUNA", "heading": "1. 型号定位"},
+            }
+        ),
+        vector_score=overview.vector_score,
+        keyword_score=overview.keyword_score,
+        fused_score=overview.fused_score,
+    )
+    features = _hit(
+        "S8-LUNA 皓月支持自动集尘、拖布自清洁和多房间建图。",
+        fused_score=0.82,
+    )
+    features = features.__class__(
+        chunk=features.chunk.__class__(
+            **{
+                **features.chunk.__dict__,
+                "metadata": {"model": "S8-LUNA", "heading": "2. 组件与功能"},
+            }
+        ),
+        vector_score=features.vector_score,
+        keyword_score=features.keyword_score,
+        fused_score=features.fused_score,
+    )
+
+    selected = select_query_evidence_hits(
+        "皓月已确认有哪些核心功能？",
+        (overview, features),
+        limit=1,
+    )
+
+    assert selected[0].chunk.metadata["heading"] == "2. 组件与功能"
+
+
+def test_query_evidence_selector_prefers_explicit_model_over_generic_chunk() -> None:
+    generic = _hit(
+        "首次使用时请连接充电座并完成建图。",
+        fused_score=0.96,
+    )
+    generic = generic.__class__(
+        chunk=generic.chunk.__class__(
+            **{
+                **generic.chunk.__dict__,
+                "metadata": {"model": "通用", "heading": "3. 首次设置"},
+            }
+        ),
+        vector_score=generic.vector_score,
+        keyword_score=generic.keyword_score,
+        fused_score=generic.fused_score,
+    )
+    model_specific = _hit(
+        "X9-OBSIDIAN 曜石首次使用时请完成专属建图设置。",
+        fused_score=0.80,
+    )
+    model_specific = model_specific.__class__(
+        chunk=model_specific.chunk.__class__(
+            **{
+                **model_specific.chunk.__dict__,
+                "metadata": {"model": "X9-OBSIDIAN", "heading": "3. 首次设置"},
+            }
+        ),
+        vector_score=model_specific.vector_score,
+        keyword_score=model_specific.keyword_score,
+        fused_score=model_specific.fused_score,
+    )
+
+    selected = select_query_evidence_hits(
+        "曜石首次使用应该如何设置？",
+        (generic, model_specific),
+        limit=1,
+    )
+
+    assert selected[0].chunk.metadata["model"] == "X9-OBSIDIAN"
+
+
 def test_claim_citation_selector_keeps_similar_model_claims_separate() -> None:
     s8 = _hit(
         "S8-LUNA 皓月支持自动集尘，适合夜间清洁。",

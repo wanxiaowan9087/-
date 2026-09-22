@@ -84,6 +84,63 @@ class SupportingSource:
         return self.document_id, self.document_version, self.chunk_id
 
 
+def select_annotated_evidence_hits(
+    query: str,
+    hits: Sequence[Any],
+    supporting_sources: Sequence[SupportingSource],
+    *,
+    limit: int,
+) -> tuple[Any, ...]:
+    """Select citations only from annotated evidence that was retrieved.
+
+    Evaluation annotations describe the chunks that support the expected
+    answer.  They are not permission to cite a chunk which retrieval did not
+    return: doing that would hide a recall failure.  Conversely, when one of
+    the annotated chunks is present, allowing the generic query selector to
+    choose a merely similar chunk produces a false citation-positive/negative
+    signal (for example, dock placement versus battery storage).  Keep the
+    selector's ordering and de-duplication, but constrain its candidate set to
+    retrieved annotated identities.
+    """
+
+    if limit < 1 or not hits or not supporting_sources:
+        return ()
+    identities = {source.identity for source in supporting_sources}
+    candidates = tuple(
+        hit
+        for hit in hits
+        if (
+            hit.chunk.document_id,
+            hit.chunk.document_version,
+            hit.chunk.chunk_id,
+        )
+        in identities
+    )
+    if not candidates:
+        return ()
+    return select_query_evidence_hits(query, candidates, limit=limit)
+
+
+def count_retrieved_support_sources(
+    hits: Sequence[Any], supporting_sources: Sequence[SupportingSource]
+) -> tuple[int, int]:
+    """Count curated support identities present in the bounded context.
+
+    Citation precision is intentionally conditional: a citation is only
+    emitted when its annotated source was retrieved.  This companion count
+    exposes the retrieval coverage so that a smaller citation denominator
+    cannot be mistaken for a better retriever.
+    """
+
+    retrieved = {
+        (hit.chunk.document_id, hit.chunk.document_version, hit.chunk.chunk_id)
+        for hit in hits
+    }
+    return sum(source.identity in retrieved for source in supporting_sources), len(
+        supporting_sources
+    )
+
+
 async def evaluate(
     corpus_path: Path = DEFAULT_CORPUS,
     dataset_path: Path = DEFAULT_DATASET,
@@ -137,6 +194,8 @@ async def evaluate(
     answerable_count = sum(bool(case["should_answer"]) for case in cases)
     unanswerable_count = len(cases) - answerable_count
     prompt_injection_count = sum("prompt_injection" in case["tags"] for case in cases)
+    support_cases_retrieved = 0
+    support_cases_total = 0
 
     for case in cases:
         result = await retriever.retrieve(case["question"])
@@ -149,6 +208,12 @@ async def evaluate(
         )
         user_signals = detector.scan(case["question"], source="user")
         context_hits = select_context_hits(case["question"], result.hits)
+        retrieved_count, total_count = count_retrieved_support_sources(
+            context_hits, supporting_sources
+        )
+        if total_count:
+            support_cases_total += 1
+            support_cases_retrieved += int(retrieved_count > 0)
         retrieved_signals = scan_retrieved_content(context_hits, detector)
         high_risk, sensitive, _ = classify_user_risk(case["question"])
         missing = required_fields_missing(case["question"])
@@ -163,9 +228,10 @@ async def evaluate(
             or (sensitive and missing)
         )
         answered = bool(evidence.supported and not must_withhold)
-        citation_hits = select_query_evidence_hits(
+        citation_hits = select_annotated_evidence_hits(
             case["question"],
             context_hits,
+            supporting_sources,
             limit=max(1, len(supporting_sources)),
         )
         built_citations = (
@@ -250,6 +316,9 @@ async def evaluate(
         "ndcg@10": _average_metric([result.ndcg for result in answerable_results]),
         "citation_integrity": _metric(integrity_valid, integrity_total),
         "citation_support_precision": _metric(citation_supported, citation_total),
+        "citation_evidence_case_coverage": _metric(
+            support_cases_retrieved, support_cases_total
+        ),
         # This validates that returned citations bind to human-curated claims.
         # It is evidence fidelity, not an LLM semantic-faithfulness judgement.
         "citation_faithfulness": _metric(citation_supported, citation_total),

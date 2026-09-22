@@ -64,6 +64,22 @@ _COLLOQUIAL_REPLACEMENTS = (
     ("能不能", "是否可以"),
     ("咋", "怎么"),
     ("弄", "处理"),
+    # Narrow spoken-to-manual vocabulary mappings.  Keep these as direct
+    # substitutions so the original query remains an independent retrieval
+    # branch and the canonical branch does not dilute its intent.
+    ("回不去", "无法回充"),
+    ("回不来", "无法回充"),
+    ("找不着充电座", "找不到充电座"),
+    ("刷子全是头发", "主刷毛发缠绕"),
+    ("刷子都是头发", "主刷毛发缠绕"),
+    ("猫毛多", "宠物家庭毛发"),
+    ("地毯多", "地毯清洁"),
+    ("第一趟", "首次使用"),
+    ("别翻车", "首次使用准备"),
+    ("看花眼", "型号对比"),
+    ("电池烫", "电池发热"),
+    ("水印", "拖地水量"),
+    ("好久不用", "长期不用"),
 )
 
 

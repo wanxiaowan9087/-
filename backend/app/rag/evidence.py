@@ -198,6 +198,7 @@ def select_citation_hits(
         return ()
     query_terms = {term for term in tokenize(_normalize(query)) if len(term) > 1}
     answer_terms = {term for term in tokenize(_normalize(answer)) if len(term) > 1}
+    requested_models = set(_models_in_text(query))
     ranked: list[tuple[float, float, int, SearchHit]] = []
     for index, hit in enumerate(hits):
         evidence_terms = {
@@ -222,7 +223,24 @@ def select_citation_hits(
         query_coverage = (
             len(query_terms & evidence_terms) / len(query_terms) if query_terms else 0.0
         )
-        relevance = 0.55 * hit.score + 0.30 * answer_coverage + 0.15 * query_coverage
+        declared_models = set(
+            _models_in_text(str(hit.chunk.metadata.get("model", "")))
+        )
+        model_match = bool(requested_models & declared_models)
+        model_conflict = bool(requested_models and declared_models and not model_match)
+        # Section intent is a stronger signal than generic lexical overlap for
+        # product manuals.  A model's identity/overview chunk often contains
+        # the same words as a feature question, but it must not outrank the
+        # model's feature section merely because its fused score is higher.
+        section_bonus = _section_intent_score(query, hit)
+        relevance = (
+            0.30 * hit.score
+            + 0.20 * answer_coverage
+            + 0.10 * query_coverage
+            + 0.40 * section_bonus
+            + (0.22 if model_match else 0.0)
+            - (0.22 if model_conflict else 0.0)
+        )
         ranked.append((relevance, answer_coverage, index, hit))
     ranked.sort(key=lambda item: (-item[0], -item[1], item[2]))
     top_score = ranked[0][0]
@@ -243,6 +261,44 @@ def select_query_evidence_hits(
     """Select citations before generation when no answer text exists yet."""
 
     return select_citation_hits(query, "", hits, limit=limit)
+
+
+_SECTION_INTENTS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
+    (("功能", "特点", "配置", "具备", "能力"), ("组件与功能", "功能", "特点")),
+    (("电池", "充电", "电量", "续航", "长期不用", "充电异常"), ("电池与充电", "充电")),
+    (("保养", "维护", "清理", "清洗", "耗材", "更换"), ("维护建议", "保养", "耗材")),
+    (("安全", "风险", "注意", "禁止", "发热", "漏水"), ("安全使用", "安全", "风险")),
+    (("故障", "报错", "异常", "无法", "怎么办"), ("常见问题", "故障", "排除")),
+    (("首次", "设置", "安装", "建图", "启动"), ("首次使用", "推荐使用方式", "设置")),
+    (("适合", "场景", "家庭", "定位", "擅长"), ("型号定位", "适用场景", "定位")),
+)
+
+
+def _section_intent_score(query: str, hit: SearchHit) -> float:
+    """Return a bounded section-match score for citation selection.
+
+    This remains deterministic and local.  It only boosts a heading that
+    explicitly matches the user's intent; it never makes an unrelated chunk
+    eligible on its own.
+    """
+
+    normalized = _normalize(query)
+    identity = _normalize(
+        " ".join(
+            (
+                str(hit.chunk.metadata.get("heading", "")),
+                hit.chunk.location.section or "",
+            )
+        )
+    )
+    if not identity:
+        return 0.0
+    for markers, sections in _SECTION_INTENTS:
+        if any(marker in normalized for marker in markers):
+            if any(section in identity for section in sections):
+                return 1.0
+            return 0.0
+    return 0.0
 
 
 def select_claim_evidence(

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from typing import Any
 
 from sqlalchemy import text
@@ -15,11 +15,18 @@ from backend.app.rag.ports import EmbeddingVector
 class PgVectorStore:
     """Async pgvector adapter for durable production knowledge retrieval."""
 
-    def __init__(self, engine: AsyncEngine, dimensions: int) -> None:
+    def __init__(
+        self,
+        engine: AsyncEngine,
+        dimensions: int,
+        *,
+        document_ids: Collection[str] | None = None,
+    ) -> None:
         if dimensions <= 0:
             raise ValueError("pgvector dimensions must be positive")
         self._engine = engine
         self._dimensions = dimensions
+        self._document_ids = frozenset(document_ids) if document_ids is not None else None
 
     async def replace_document(
         self,
@@ -57,12 +64,15 @@ class PgVectorStore:
             return ()
         vector = self._vector_literal(query_vector)
         async with self._engine.connect() as connection:
-            rows = (
-                await connection.execute(
-                    _SEARCH_CHUNKS,
-                    {"query_vector": vector, "limit": limit},
-                )
-            ).mappings().all()
+            statement = (
+                _SEARCH_CHUNKS_FILTERED
+                if self._document_ids is not None
+                else _SEARCH_CHUNKS
+            )
+            parameters: dict[str, Any] = {"query_vector": vector, "limit": limit}
+            if self._document_ids is not None:
+                parameters["document_ids"] = list(self._document_ids)
+            rows = (await connection.execute(statement, parameters)).mappings().all()
         return tuple(
             ScoredChunk(
                 chunk=_chunk_from_row(row),
@@ -84,13 +94,26 @@ class PgVectorStore:
     async def delete_document(self, document_id: str) -> None:
         async with self._engine.begin() as connection:
             await connection.execute(
-                text("DELETE FROM knowledge_vectors WHERE document_id = CAST(:document_id AS uuid)"),
+                text(
+                    "DELETE FROM knowledge_vectors "
+                    "WHERE document_id = CAST(:document_id AS uuid)"
+                ),
                 {"document_id": document_id},
             )
 
     async def load_all_chunks(self) -> tuple[Chunk, ...]:
         async with self._engine.connect() as connection:
-            rows = (await connection.execute(_LOAD_ALL_CHUNKS)).mappings().all()
+            statement = (
+                _LOAD_ALL_CHUNKS_FILTERED
+                if self._document_ids is not None
+                else _LOAD_ALL_CHUNKS
+            )
+            parameters = (
+                {"document_ids": list(self._document_ids)}
+                if self._document_ids is not None
+                else {}
+            )
+            rows = (await connection.execute(statement, parameters)).mappings().all()
         return tuple(_chunk_from_row(row) for row in rows)
 
     async def health(self) -> str:
@@ -150,6 +173,19 @@ _SEARCH_CHUNKS = text(
     """
 )
 
+_SEARCH_CHUNKS_FILTERED = text(
+    f"""
+    SELECT {_SELECT_COLUMNS},
+        LEAST(1.0, GREATEST(
+            0.0, (2.0 - (embedding <=> CAST(:query_vector AS vector))) / 2.0
+        )) AS score
+    FROM knowledge_vectors
+    WHERE document_id = ANY(CAST(:document_ids AS uuid[]))
+    ORDER BY embedding <=> CAST(:query_vector AS vector), chunk_id
+    LIMIT :limit
+    """
+)
+
 _RESOLVE_CHUNKS = text(f"""
     SELECT {_SELECT_COLUMNS}
     FROM knowledge_vectors
@@ -157,6 +193,14 @@ _RESOLVE_CHUNKS = text(f"""
 """)
 
 _LOAD_ALL_CHUNKS = text(f"SELECT {_SELECT_COLUMNS} FROM knowledge_vectors ORDER BY chunk_id")
+_LOAD_ALL_CHUNKS_FILTERED = text(
+    f"""
+    SELECT {_SELECT_COLUMNS}
+    FROM knowledge_vectors
+    WHERE document_id = ANY(CAST(:document_ids AS uuid[]))
+    ORDER BY chunk_id
+    """
+)
 
 
 def _payload(chunk: Chunk, embedding: str) -> dict[str, str]:

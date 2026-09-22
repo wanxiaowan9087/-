@@ -310,6 +310,29 @@ def test_route_candidates_promotes_requested_model_intent_section_before_cutoff(
     assert target.chunk.chunk_id in {hit.chunk.chunk_id for hit in routed[:20]}
 
 
+def test_route_candidates_promotes_generic_intent_section_without_model_name() -> None:
+    distractor = _product_hit(
+        0,
+        model="通用",
+        heading="扫地机器人100问 > 设备常识",
+        content="建图相关常见问答。",
+        score=0.88,
+        source_key="faq-map-distractor",
+    )
+    target = _product_hit(
+        1,
+        model="通用",
+        heading="首次安装与建图指南 > 2. 建图流程",
+        content="首次建图时应先清理路径并保持充电座位置固定。",
+        score=0.70,
+        source_key="map-intent-target",
+    )
+
+    routed = route_candidates("扫地机器人第一次建图要怎么做？", (distractor, target))
+
+    assert routed[0].chunk.metadata["heading"].endswith("2. 建图流程")
+
+
 def test_context_selector_prioritizes_positioning_section_for_scenario_query() -> None:
     candidates = (
         _product_hit(
@@ -333,6 +356,31 @@ def test_context_selector_prioritizes_positioning_section_for_scenario_query() -
     selected = select_context_hits("曜石适合什么场景？", candidates)
 
     assert selected[0].chunk.metadata["heading"] == "1. 型号定位"
+
+
+def test_context_selector_prioritizes_battery_section_for_long_term_storage_query() -> None:
+    candidates = (
+        _product_hit(
+            0,
+            model="S8-LUNA",
+            heading="7. 型号专属安全使用",
+            content="长期不用时应注意安全。",
+            score=0.98,
+            source_key="luna-safety-storage",
+        ),
+        _product_hit(
+            1,
+            model="S8-LUNA",
+            heading="4. 电池与充电",
+            content="长期不用或充电异常时，应关闭设备并按电池规范处理。",
+            score=0.75,
+            source_key="luna-battery-storage",
+        ),
+    )
+
+    selected = select_context_hits("皓月长期不用或充电异常时应注意什么？", candidates)
+
+    assert selected[0].chunk.metadata["heading"] == "4. 电池与充电"
 
 
 def test_post_rerank_cohesion_keeps_requested_model_section_together() -> None:

@@ -68,7 +68,7 @@ _QUERY_ROUTES: tuple[tuple[tuple[str, ...], frozenset[RetrievalCategory]], ...] 
         ),
     ),
     (
-        ("保养", "维护", "清理", "清洗", "滤网", "主刷", "边刷", "拖布", "耗材"),
+        ("保养", "维护", "清理", "清洗", "日常", "滤网", "主刷", "边刷", "拖布", "耗材"),
         frozenset(
             {
                 RetrievalCategory.MAINTENANCE,
@@ -78,7 +78,7 @@ _QUERY_ROUTES: tuple[tuple[tuple[str, ...], frozenset[RetrievalCategory]], ...] 
         ),
     ),
     (
-        ("安全", "冒烟", "焦味", "异味", "发热", "鼓包", "儿童", "宠物"),
+        ("安全", "冒烟", "焦味", "异味", "发热", "鼓包", "停用", "禁止", "儿童", "宠物"),
         frozenset(
             {
                 RetrievalCategory.SAFETY,
@@ -88,7 +88,7 @@ _QUERY_ROUTES: tuple[tuple[tuple[str, ...], frozenset[RetrievalCategory]], ...] 
         ),
     ),
     (
-        ("选购", "推荐", "买哪", "怎么选", "适合", "预算", "品牌", "对比"),
+        ("选购", "推荐", "买哪", "怎么选", "适合", "面积", "地毯", "预算", "品牌", "对比"),
         frozenset(
             {
                 RetrievalCategory.PRODUCT,
@@ -98,18 +98,35 @@ _QUERY_ROUTES: tuple[tuple[tuple[str, ...], frozenset[RetrievalCategory]], ...] 
         ),
     ),
     (
-        ("原理", "什么是", "术语", "lds", "slam", "tof", "为什么"),
+        ("原理", "怎么知道", "在哪儿", "定位", "什么是", "术语", "lds", "slam", "tof", "为什么"),
         frozenset({RetrievalCategory.TECHNICAL, RetrievalCategory.FAQ}),
     ),
 )
 
 _QUERY_SECTION_MARKERS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
-    (("适合", "场景", "家庭", "定位", "擅长"), ("型号定位",)),
+    (
+        ("适合", "场景", "家庭", "定位", "擅长", "面积", "地毯", "宠物"),
+        ("型号定位", "配置原则", "推荐决策"),
+    ),
     (("功能", "特点", "配置", "具备"), ("型号定位", "组件与功能", "功能")),
-    (("保养", "维护", "清理", "清洗", "耗材"), ("维护建议", "常见问题", "保养")),
-    (("安全", "风险", "注意", "发热", "漏水"), ("安全使用", "安全", "常见问题")),
+    (("电池", "充电", "电量", "续航", "长期不用", "充电异常"), ("电池与充电", "充电")),
+    (
+        ("保养", "维护", "清理", "清洗", "日常", "耗材"),
+        ("维护建议", "通用维护节奏", "常见问题", "保养"),
+    ),
+    (
+        ("安全", "风险", "注意", "发热", "漏水", "停用", "禁止"),
+        ("安全使用", "安全", "必须立即停用", "常见问题"),
+    ),
     (("故障", "报错", "异常", "无法", "怎么办"), ("常见问题", "故障", "排除")),
-    (("首次", "建图", "设置", "安装"), ("首次", "推荐使用方式", "设置")),
+    (
+        ("首次", "第一次", "建图", "设置", "安装", "初始化"),
+        ("首次", "推荐使用方式", "设置", "安装前检查", "建图流程"),
+    ),
+    (
+        ("排查", "停用", "停止", "工单", "诊断"),
+        ("通用决策路径", "标准排查表", "关闭工单条件", "必须立即停用"),
+    ),
 )
 
 
@@ -157,7 +174,15 @@ def _document_category(hit: SearchHit) -> RetrievalCategory:
         return RetrievalCategory.MAINTENANCE
     if any(marker in identity for marker in ("工作原理", "技术解析", "核心术语")):
         return RetrievalCategory.TECHNICAL
-    if any(marker in identity for marker in ("选购", "主流品牌", "家庭场景", "功能与组件")):
+    if any(
+        marker in identity
+        for marker in (
+            "选购",
+            "主流品牌",
+            "家庭场景",
+            "功能与组件",
+        )
+    ):
         return RetrievalCategory.SELECTION
     model = str(hit.chunk.metadata.get("model", "")).strip().casefold()
     if model and model not in {"通用", "通用型号", "unknown", "all"}:
@@ -189,13 +214,15 @@ def route_candidates(query: str, hits: Sequence[SearchHit]) -> tuple[SearchHit, 
     categories = _query_categories(query)
     compact = re.sub(r"\s+", "", query).casefold()
     requested_models = _requested_models(query)
-    preferred_sections = tuple(
-        section
+    matching_section_groups = [
+        sections
         for markers, sections in _QUERY_SECTION_MARKERS
         if any(marker in compact for marker in markers)
-        for section in sections
+    ]
+    preferred_sections = tuple(
+        section for sections in matching_section_groups for section in sections
     )
-    if not categories and not requested_models:
+    if not categories and not requested_models and not matching_section_groups:
         return tuple(hits)
     routed: list[SearchHit] = []
     for hit in hits:
@@ -213,6 +240,8 @@ def route_candidates(query: str, hits: Sequence[SearchHit]) -> tuple[SearchHit, 
         )
         model_match = bool(requested_models and model in requested_models)
         boost = 0.08 if category in categories else 0.0
+        if section_match:
+            boost += 0.25
         adjusted_score = min(1.0, hit.fused_score + boost)
         if model_match and section_match:
             # This is a coverage guarantee, not a relevance claim: a clearly
@@ -237,12 +266,15 @@ def cohere_reranked_hits(query: str, hits: Sequence[SearchHit]) -> tuple[SearchH
         return tuple(hits)
     compact = re.sub(r"\s+", "", query).casefold()
     requested_model = None if is_collection_query(query) else _requested_model(query)
-    preferred_sections = tuple(
-        section
+    matching_section_groups = [
+        sections
         for markers, sections in _QUERY_SECTION_MARKERS
         if any(marker in compact for marker in markers)
-        for section in sections
+    ]
+    preferred_sections = tuple(
+        section for sections in matching_section_groups for section in sections
     )
+    primary_sections = matching_section_groups[0] if matching_section_groups else ()
     query_terms = set(tokenize(query))
 
     def score(item: tuple[int, SearchHit]) -> tuple[float, int]:
@@ -264,6 +296,10 @@ def cohere_reranked_hits(query: str, hits: Sequence[SearchHit]) -> tuple[SearchH
             preferred_sections
             and any(marker.casefold() in heading.casefold() for marker in preferred_sections)
         )
+        primary_section_match = bool(
+            primary_sections
+            and any(marker.casefold() in heading.casefold() for marker in primary_sections)
+        )
         model_match = requested_model is not None and _hit_model(hit) == requested_model
         other_model = requested_model is not None and _hit_model(hit) not in {
             None,
@@ -272,7 +308,7 @@ def cohere_reranked_hits(query: str, hits: Sequence[SearchHit]) -> tuple[SearchH
         adjusted = (
             0.78 * hit.score
             + 0.12 * coverage
-            + (0.08 if section_match else 0.0)
+            + (0.16 if primary_section_match else (0.04 if section_match else 0.0))
             + (0.12 if model_match else 0.0)
             - (0.12 if other_model else 0.0)
         )
@@ -475,19 +511,29 @@ def _context_relevance(query: str, hit: SearchHit) -> float:
     evidence_coverage = len(query_terms & evidence_terms) / len(query_terms)
     heading_coverage = len(query_terms & heading_terms) / len(query_terms)
     compact = re.sub(r"\s+", "", query).casefold()
-    preferred_sections = tuple(
-        section
+    matching_section_groups = [
+        sections
         for markers, sections in _QUERY_SECTION_MARKERS
         if any(marker in compact for marker in markers)
-        for section in sections
+    ]
+    preferred_sections = tuple(
+        section for sections in matching_section_groups for section in sections
     )
+    primary_sections = matching_section_groups[0] if matching_section_groups else ()
     section_match = bool(
         preferred_sections
         and any(marker.casefold() in heading.casefold() for marker in preferred_sections)
+    )
+    primary_section_match = bool(
+        primary_sections
+        and any(marker.casefold() in heading.casefold() for marker in primary_sections)
     )
     return (
         0.62 * hit.score
         + 0.18 * evidence_coverage
         + 0.08 * heading_coverage
-        + (0.18 if section_match else 0.0)
+        # A matching manual section must beat a high-scoring generic model
+        # chunk; otherwise the bounded context can discard the only usable
+        # evidence before citation selection sees it.
+        + (0.75 if primary_section_match else (0.10 if section_match else 0.0))
     )
