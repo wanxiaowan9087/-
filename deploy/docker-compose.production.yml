@@ -112,6 +112,7 @@ services:
       APP_CORS_ORIGINS: ${APP_CORS_ORIGINS:?Set APP_CORS_ORIGINS in deploy/production.env}
       APP_ADMIN_USERNAME: ${APP_ADMIN_USERNAME:?Set APP_ADMIN_USERNAME in deploy/production.env}
       APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD:?Set APP_ADMIN_PASSWORD in deploy/production.env}
+      APP_ADMIN_PHONE: ${APP_ADMIN_PHONE:?Set APP_ADMIN_PHONE in deploy/production.env}
       APP_ADMIN_NICKNAME: ${APP_ADMIN_NICKNAME:-Administrator}
       APP_CURSOR_SIGNING_SECRET: ${APP_CURSOR_SIGNING_SECRET:?Set APP_CURSOR_SIGNING_SECRET in deploy/production.env}
       APP_PHONE_ENCRYPTION_KEY: ${APP_PHONE_ENCRYPTION_KEY:?Set APP_PHONE_ENCRYPTION_KEY in deploy/production.env}
