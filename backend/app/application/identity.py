@@ -59,6 +59,16 @@ class IdentityStore(Protocol):
         self, user_id: UUID, password_hash: str, *, tokens_revoked_after: datetime
     ) -> IdentityUser | None: ...
 
+    async def update_phone_identity(
+        self,
+        user_id: UUID,
+        *,
+        phone_ciphertext: str,
+        phone_lookup_digest: str,
+        phone_key_version: str,
+        phone_verified_at: datetime,
+    ) -> IdentityUser | None: ...
+
     async def save_token(
         self, user_id: UUID, token_digest: str, created_at: datetime, expires_at: datetime
     ) -> None: ...
@@ -148,9 +158,34 @@ class IdentityService:
         )
         return await self._issue(await self._store.create_user(user), now)
 
-    async def ensure_admin(self, *, username: str, password: str, nickname: str) -> IdentityUser:
+    async def ensure_admin(
+        self,
+        *,
+        username: str,
+        password: str,
+        nickname: str,
+        phone: str | None = None,
+        phone_protector=None,
+    ) -> IdentityUser:
         _validate_password(password)
         normalized_username = username.strip().lower()
+        phone_fields: dict[str, object] = {}
+        if phone is not None:
+            if phone_protector is None:
+                raise ValueError("phone_protector is required when binding an admin phone")
+            digest = phone_protector.lookup_digest(phone)
+            phone_owner = await self._store.find_user_by_phone_digest(digest)
+            if phone_owner is not None:
+                existing_username = await self._store.find_user_by_username(normalized_username)
+                if phone_owner.id != (existing_username.id if existing_username else None):
+                    raise conflict("admin phone is already registered")
+            now = self._clock()
+            phone_fields = {
+                "phone_ciphertext": phone_protector.encrypt(phone),
+                "phone_lookup_digest": digest,
+                "phone_key_version": phone_protector.key_version,
+                "phone_verified_at": now,
+            }
         existing = await self._store.find_user_by_username(normalized_username)
         if existing is None:
             return await self._store.create_user(
@@ -162,10 +197,13 @@ class IdentityService:
                     password_hash=self._hasher.hash(password),
                     role="admin",
                     created_at=self._clock(),
+                    **phone_fields,
                 )
             )
         if existing.role != "admin":
             await self._store.set_role(existing.id, "admin")
+        if phone_fields and existing.phone_lookup_digest != phone_fields["phone_lookup_digest"]:
+            await self._store.update_phone_identity(existing.id, **phone_fields)
         if not self._hasher.verify(password, existing.password_hash):
             await self._store.update_phone_password(
                 existing.id,

@@ -124,6 +124,29 @@ class SqlIdentityStore(IdentityStore):
             await session.flush()
             return _user(row)
 
+    async def update_phone_identity(
+        self,
+        user_id: UUID,
+        *,
+        phone_ciphertext: str,
+        phone_lookup_digest: str,
+        phone_key_version: str,
+        phone_verified_at: datetime,
+    ) -> IdentityUser | None:
+        try:
+            async with self._session_factory.begin() as session:
+                row = await session.get(UserModel, user_id, with_for_update=True)
+                if row is None:
+                    return None
+                row.phone_ciphertext = phone_ciphertext
+                row.phone_lookup_digest = phone_lookup_digest
+                row.phone_key_version = phone_key_version
+                row.phone_verified_at = phone_verified_at
+                await session.flush()
+                return _user(row)
+        except IntegrityError as error:
+            raise conflict("phone is already registered") from error
+
     async def save_token(
         self, user_id: UUID, token_digest: str, created_at: datetime, expires_at: datetime
     ) -> None:

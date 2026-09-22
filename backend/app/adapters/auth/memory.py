@@ -77,6 +77,41 @@ class MemoryIdentityStore(IdentityStore):
         self._users[user_id] = updated
         return updated
 
+    async def update_phone_identity(
+        self,
+        user_id: UUID,
+        *,
+        phone_ciphertext: str,
+        phone_lookup_digest: str,
+        phone_key_version: str,
+        phone_verified_at: datetime,
+    ) -> IdentityUser | None:
+        user = self._users.get(user_id)
+        if user is None:
+            return None
+        owner = self._phones.get(phone_lookup_digest)
+        if owner is not None and owner != user_id:
+            raise conflict("phone is already registered")
+        if user.phone_lookup_digest:
+            self._phones.pop(user.phone_lookup_digest, None)
+        self._phones[phone_lookup_digest] = user_id
+        updated = IdentityUser(
+            id=user.id,
+            username=user.username,
+            nickname=user.nickname,
+            avatar_url=user.avatar_url,
+            password_hash=user.password_hash,
+            role=user.role,
+            created_at=user.created_at,
+            phone_ciphertext=phone_ciphertext,
+            phone_lookup_digest=phone_lookup_digest,
+            phone_key_version=phone_key_version,
+            phone_verified_at=phone_verified_at,
+            tokens_revoked_after=user.tokens_revoked_after,
+        )
+        self._users[user_id] = updated
+        return updated
+
     async def update_password(self, user_id: UUID, password_hash: str) -> IdentityUser | None:
         user = self._users.get(user_id)
         if user is None:

@@ -152,10 +152,16 @@ def create_app(
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         admin_user = None
         if settings.admin_username and settings.admin_password:
+            if not settings.admin_phone:
+                raise ValueError(
+                    "APP_ADMIN_PHONE is required when bootstrapping the phone-authenticated admin"
+                )
             admin_user = await resolved_identity_service.ensure_admin(
                 username=settings.admin_username,
                 password=settings.admin_password,
                 nickname=settings.admin_nickname,
+                phone=settings.admin_phone,
+                phone_protector=phone_protector,
             )
             # The bundled records are synthetic demo data. Seed only the
             # configured admin mapping so the report flow works out of the

@@ -43,7 +43,9 @@ chmod 600 deploy/production.env
 ```
 
 Edit `deploy/production.env` with the real domain, DashScope key, database password,
-administrator password, cursor-signing secret, and both phone protection keys.
+administrator password and mobile number, cursor-signing secret, and both phone
+protection keys. The administrator uses the same phone/password login flow as normal
+users; `APP_ADMIN_PHONE` is bound to the `APP_ADMIN_USERNAME` account at startup.
 The phone encryption key must be a Base64 value representing 16, 24, or 32 bytes;
 the phone lookup HMAC key must contain at least 32 bytes. Generate each value on the
 server with:

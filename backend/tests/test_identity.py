@@ -8,6 +8,7 @@ from httpx import AsyncClient
 from backend.app.adapters.auth.memory import MemoryIdentityStore
 from backend.app.application.identity import IdentityService
 from backend.app.application.legal import CURRENT_LEGAL_DOCUMENTS
+from backend.app.application.phone_crypto import PhoneProtector
 from backend.app.core.errors import AppError
 
 
@@ -172,3 +173,49 @@ async def test_ensure_admin_synchronizes_bootstrap_password() -> None:
     with pytest.raises(AppError) as error:
         await service.authenticate(old_session.access_token)
     assert error.value.code == "UNAUTHORIZED"
+
+
+@pytest.mark.asyncio
+async def test_ensure_admin_binds_phone_for_phone_login() -> None:
+    store = MemoryIdentityStore()
+    service = IdentityService(store, token_ttl_seconds=3600)
+    protector = PhoneProtector(
+        "12345678901234567890123456789012", "123456789012345678901234567890123456"
+    )
+
+    await service.ensure_admin(
+        username="xiaow",
+        password="Safe@123",
+        nickname="Admin",
+        phone="15800158000",
+        phone_protector=protector,
+    )
+
+    session = await service.login_phone(
+        phone="15800158000", phone_protector=protector, password="Safe@123"
+    )
+    assert session.user.username == "xiaow"
+    assert session.user.role == "admin"
+
+
+@pytest.mark.asyncio
+async def test_ensure_admin_repairs_existing_admin_without_phone() -> None:
+    store = MemoryIdentityStore()
+    service = IdentityService(store, token_ttl_seconds=3600)
+    protector = PhoneProtector(
+        "12345678901234567890123456789012", "123456789012345678901234567890123456"
+    )
+
+    await service.ensure_admin(username="xiaow", password="Safe@123", nickname="Admin")
+    await service.ensure_admin(
+        username="xiaow",
+        password="Safe@123",
+        nickname="Admin",
+        phone="15800158000",
+        phone_protector=protector,
+    )
+
+    session = await service.login_phone(
+        phone="15800158000", phone_protector=protector, password="Safe@123"
+    )
+    assert session.user.username == "xiaow"

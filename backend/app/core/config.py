@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     auth_token_ttl_seconds: int = Field(default=604_800, ge=300, le=2_592_000)
     admin_username: str | None = None
     admin_password: str | None = None
+    admin_phone: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("APP_ADMIN_PHONE", "ADMIN_PHONE"),
+    )
     admin_nickname: str = "系统管理员"
     phone_encryption_key: str | None = Field(
         default=None,
