@@ -167,6 +167,11 @@ class RuntimeRunExecutor:
                 "checking_policy",
             ):
                 yield "status", {"phase": phase, "detail": None}
+            # Runtime tokens are model drafts.  Citation and policy checks run
+            # after generation, so exposing them before the final decision can
+            # briefly show an answer that is later replaced by a refusal. Keep
+            # consuming the queue to preserve cancellation/backpressure, but
+            # only emit the authoritative public_content below.
             streamed_parts: list[str] = []
             if bool(getattr(self._runtime, "supports_token_streaming", False)):
                 token_queue: asyncio.Queue[str] = asyncio.Queue()
@@ -177,30 +182,11 @@ class RuntimeRunExecutor:
                         on_token=token_queue.put,
                     )
                 )
-                pending = ""
-                delta_index = 0
                 while not result_task.done() or not token_queue.empty():
-                    timed_out = False
                     try:
-                        pending += await asyncio.wait_for(token_queue.get(), timeout=0.04)
+                        await asyncio.wait_for(token_queue.get(), timeout=0.04)
                     except TimeoutError:
-                        timed_out = True
-                    while len(pending) >= 12:
-                        content, pending = pending[:12], pending[12:]
-                        if not streamed_parts:
-                            await asyncio.sleep(_ANSWER_REVEAL_DELAY_SECONDS)
-                        streamed_parts.append(content)
-                        yield "delta", {"index": delta_index, "content": content}
-                        delta_index += 1
-                    if pending and (
-                        timed_out or (result_task.done() and token_queue.empty())
-                    ):
-                        if not streamed_parts:
-                            await asyncio.sleep(_ANSWER_REVEAL_DELAY_SECONDS)
-                        streamed_parts.append(pending)
-                        yield "delta", {"index": delta_index, "content": pending}
-                        delta_index += 1
-                        pending = ""
+                        pass
                 result = await result_task
             else:
                 result = await self._runtime.execute(request, cancellation=token)

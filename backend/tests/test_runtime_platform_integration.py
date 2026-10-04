@@ -73,6 +73,38 @@ class StreamingRuntime(FixedRuntime):
         return self.result
 
 
+@pytest.mark.asyncio
+async def test_runtime_executor_never_publishes_unvalidated_draft_tokens() -> None:
+    _, execution = await _prepared_run()
+    runtime = StreamingRuntime(
+        AgentRunResult(
+            run_id=str(execution.run_id),
+            status=RunStatus.COMPLETED,
+            public_content="现有资料不足以支持可靠结论。",
+            candidate_content=None,
+            citations=(),
+            trace=_trace(),
+            confidence=0.2,
+            confidence_threshold=0.65,
+        )
+    )
+    stream = RuntimeRunExecutor(runtime).stream(execution)
+    events = []
+
+    async def consume() -> None:
+        async for event in stream:
+            events.append(event)
+
+    task = asyncio.create_task(consume())
+    await asyncio.sleep(0)
+    runtime.release.set()
+    await task
+
+    deltas = "".join(payload["content"] for event_type, payload in events if event_type == "delta")
+    assert deltas == "现有资料不足以支持可靠结论。"
+    assert "首字" not in deltas
+
+
 async def _prepared_run() -> tuple[MemoryPlatformRepository, RunExecution]:
     repository = MemoryPlatformRepository()
     now = datetime.now(UTC)
@@ -203,7 +235,7 @@ async def test_done_is_committed_before_post_terminal_summary_work(monkeypatch) 
 
 
 @pytest.mark.asyncio
-async def test_runtime_executor_forwards_model_tokens_before_generation_finishes() -> None:
+async def test_runtime_executor_emits_authoritative_answer_after_generation_finishes() -> None:
     _, execution = await _prepared_run()
     runtime = StreamingRuntime(
         AgentRunResult(
@@ -222,14 +254,11 @@ async def test_runtime_executor_forwards_model_tokens_before_generation_finishes
     for _ in range(6):
         event_type, _ = await anext(stream)
         assert event_type == "status"
-    event_type, payload = await anext(stream)
-
-    assert event_type == "delta"
-    assert payload["content"] == "首字"
-    assert runtime.completed is False
-
     runtime.release.set()
     remaining = [event async for event in stream]
+    deltas = "".join(payload["content"] for event_type, payload in remaining if event_type == "delta")
+    assert deltas == "首字完成"
+    assert runtime.completed is True
     assert remaining[-1][0] == "done"
 
 
@@ -263,13 +292,9 @@ async def test_runtime_executor_waits_once_before_revealing_streamed_answer(
 
     for _ in range(6):
         await anext(stream)
-    event_type, _ = await anext(stream)
-
-    assert event_type == "delta"
-    assert sleep_calls == [1.0]
-
     runtime.release.set()
     remaining = [event async for event in stream]
+    assert any(event_type == "delta" for event_type, _ in remaining)
     assert remaining[-1][0] == "done"
     assert sleep_calls == [1.0]
 
