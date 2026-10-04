@@ -28,6 +28,7 @@ from backend.app.agent.runtime import (
     answer_greeting_intent,
     answer_identity_intent,
     classify_meaningless_input,
+    is_catalog_inventory_intent,
 )
 from backend.app.agent.tooling import CancellationToken
 from backend.app.core.config import Settings
@@ -277,6 +278,15 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn(name, result.public_content)
         self.assertEqual(retriever.calls, 0)
         self.assertEqual(engine.requests, [])
+
+    def test_catalog_inventory_recognizes_natural_count_phrasing(self) -> None:
+        for question in (
+            "一共多少产品",
+            "一共有多少扫地机器人",
+            "共有多少款产品",
+            "总共有多少种型号",
+        ):
+            self.assertTrue(is_catalog_inventory_intent(question), question)
 
     async def test_mcp_recommendations_are_grounded_before_policy_even_when_rag_is_empty(
         self,

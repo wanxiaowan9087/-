@@ -59,6 +59,15 @@ describe('redactLocalSourcePaths', () => {
     ])
   })
 
+  it('keeps single-newline numbered catalog items on separate lines', () => {
+    expect(toAssistantParagraphs('目前目录中共有 6 款扫地机器人：\n1. M6 Mini\n2. S8 Air\n3. M6 霞陶')).toEqual([
+      '目前目录中共有 6 款扫地机器人：',
+      '1. M6 Mini',
+      '2. S8 Air',
+      '3. M6 霞陶',
+    ])
+  })
+
   it('keeps top-level bullet numbering continuous across explanatory prose', () => {
     expect(toAssistantParagraphs('- 第一项\n\n• 第二项\n\n说明结束。\n\n* 新的一项')).toEqual([
       '1. 第一项',

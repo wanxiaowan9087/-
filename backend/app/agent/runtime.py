@@ -157,6 +157,13 @@ def is_catalog_inventory_intent(text: str) -> bool:
     compact = re.sub(r"\s+", "", text).casefold()
     inventory_markers = (
         "有多少",
+        "一共多少",
+        "一共有多少",
+        "共有多少",
+        "总共有多少",
+        "多少产品",
+        "多少种",
+        "几种",
         "多少款",
         "多少个",
         "几款",

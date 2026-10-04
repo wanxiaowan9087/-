@@ -50,6 +50,10 @@ export function formatAssistantContent(content: string): string {
   const withoutEmphasis = redactLocalSourcePaths(content).replace(/\*\*(.+?)\*\*/g, '$1')
   return renumberRepeatedOrderedMarkers(withoutEmphasis)
     .replace(/[ \t]+-[ \t]+(?=(?:\*\*)?[A-Z][A-Z0-9-]{1,})/g, '\n\n- ')
+    // Deterministic catalog answers use one newline between numbered items.
+    // Turn that semantic list boundary into a paragraph boundary before the
+    // renderer collapses wrapped prose inside each item.
+    .replace(/\n(?=\s*(?:\d+[.、)]|[-*•])\s+)/g, '\n\n')
     .replace(/(?<=[。！？!?])(?=[^\n])/g, '\n\n')
     .replace(/\n{3,}/g, '\n\n')
     .replace(/[ \t]{2,}/g, ' ')
