@@ -118,6 +118,7 @@ if ([string]::IsNullOrWhiteSpace($adminUsername)) {
 }
 $env:APP_ADMIN_USERNAME = if ([string]::IsNullOrWhiteSpace($adminUsername)) { 'xiaow' } else { $adminUsername }
 $null = Require-EnvironmentValue 'APP_ADMIN_PASSWORD' '请输入 APP_ADMIN_PASSWORD（不会写入文件）'
+$null = Require-EnvironmentValue 'APP_ADMIN_PHONE' '请输入 APP_ADMIN_PHONE（不会写入文件）'
 
 # 在真正启动容器前先让 Compose 展开并校验变量。这样缺少配置时会
 # 立即失败，不会留下只启动了一半的数据库或后端容器。

@@ -102,6 +102,7 @@ services:
       APP_AGENT_REPORT_DEFAULT_EXTERNAL_USER_ID: "1001"
       APP_ADMIN_USERNAME: ${APP_ADMIN_USERNAME:?Set APP_ADMIN_USERNAME in the shell before starting Docker Compose}
       APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD:?Set APP_ADMIN_PASSWORD in the shell before starting Docker Compose}
+      APP_ADMIN_PHONE: ${APP_ADMIN_PHONE:?Set APP_ADMIN_PHONE in the shell before starting Docker Compose}
     ports:
       - "${AGENT_BACKEND_PORT:-8001}:8000"
     volumes:
