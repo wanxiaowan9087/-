@@ -395,6 +395,21 @@ def classify_meaningless_input(text: str) -> bool:
     return compact in {"嗯", "嗯嗯", "好的", "好", "ok", "okay", "收到", "谢谢"}
 
 
+def answer_greeting_intent(user_text: str) -> str | None:
+    """Answer a standalone greeting before it can enter knowledge retrieval."""
+
+    compact = re.sub(r"[\s，。！？!?、,.~～]+", "", user_text).casefold()
+    if not compact or len(compact) > 12:
+        return None
+    if not re.fullmatch(
+        r"(?:你好|您好|嗨|嗨喽|哈喽|hello|hi|早上好|上午好|下午好|晚上好|在吗|在不在)"
+        r"(?:呀|啊|喽|哦|呢)?",
+        compact,
+    ):
+        return None
+    return "你好，我是小智。你可以直接告诉我扫地机器人的型号、使用场景或想解决的问题。"
+
+
 def answer_profile_intent(user_text: str, context: MemoryContext) -> str | None:
     compact = re.sub(r"\s+", "", user_text)
     if not any(pattern in compact for pattern in PROFILE_INTENT_PATTERNS):
@@ -591,6 +606,33 @@ class AgentRuntime:
                     memory_warning=memory_warning,
                     model_name="deterministic-identity",
                     retrieval_strategy="identity-intent",
+                )
+            greeting_answer = answer_greeting_intent(request.user_text)
+            if greeting_answer is not None:
+                step = trace.start(
+                    StepType.POLICY,
+                    "answering standalone greeting before retrieval",
+                )
+                state.transition(RunStatus.COMPLETED)
+                trace.finish(
+                    step,
+                    StepStatus.SUCCEEDED,
+                    "deterministic greeting answer selected before retrieval",
+                )
+                memory_warning = await self._extract_memory(request)
+                return AgentRunResult(
+                    run_id=run_id,
+                    status=state.status,
+                    public_content=greeting_answer,
+                    candidate_content=None,
+                    citations=(),
+                    trace=trace.snapshot(),
+                    confidence=1.0,
+                    confidence_threshold=self._config.confidence_threshold,
+                    degraded_dependencies=(),
+                    memory_warning=memory_warning,
+                    model_name="deterministic-greeting",
+                    retrieval_strategy="greeting-intent",
                 )
             calendar_answer = answer_calendar_intent(request.user_text)
             if calendar_answer is not None:

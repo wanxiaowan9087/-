@@ -25,6 +25,7 @@ from backend.app.agent.memory import (
 from backend.app.agent.ports import ModelTimeout, ModelUnavailable
 from backend.app.agent.runtime import (
     AgentRuntime,
+    answer_greeting_intent,
     answer_identity_intent,
     classify_meaningless_input,
 )
@@ -200,6 +201,20 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("现有资料不足以支持", result.public_content)
         self.assertEqual(retriever.calls, 0)
         self.assertEqual(engine.requests, [])
+
+    async def test_standalone_greeting_does_not_enter_retrieval_route(self) -> None:
+        engine = FakeReActEngine()
+        retriever = CountingRetriever(self._retrieval())
+        runtime = AgentRuntime(react_engine=engine, retriever=retriever)
+
+        result = await runtime.execute(self._request("你好呀"))
+
+        self.assertEqual(result.status, RunStatus.COMPLETED)
+        self.assertEqual(result.retrieval_strategy, "greeting-intent")
+        self.assertIn("我是小智", result.public_content)
+        self.assertEqual(retriever.calls, 0)
+        self.assertEqual(engine.requests, [])
+        self.assertEqual(answer_greeting_intent("你好，介绍一下 S8 Air"), None)
 
     async def test_meaningless_input_is_blocked_before_retrieval_or_model(self) -> None:
         class FailingRetriever:
