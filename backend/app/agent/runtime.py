@@ -176,6 +176,50 @@ def is_catalog_inventory_intent(text: str) -> bool:
     )
 
 
+def is_catalog_recommendation_intent(text: str) -> bool:
+    """Recognize product-selection requests that can use curated catalog data.
+
+    This deliberately stays narrower than a general ``推荐`` detector.  The
+    runtime should only take the catalog fallback when the user is selecting a
+    robot/product, and inventory questions are handled by the complete-catalog
+    branch above.
+    """
+
+    compact = re.sub(r"\s+", "", text).casefold()
+    if is_catalog_inventory_intent(compact):
+        return False
+    robot_subject = any(
+        term in compact
+        for term in (
+            "机器人",
+            "扫地机",
+            "扫拖机",
+            "扫拖机器人",
+            "型号",
+            "机型",
+            "产品",
+        )
+    )
+    selection_marker = any(
+        term in compact
+        for term in (
+            "推荐",
+            "建议买",
+            "选购",
+            "买什么",
+            "买哪款",
+            "哪一款",
+            "哪款",
+            "哪个型号",
+            "什么型号",
+            "帮我选",
+            "适合我",
+            "最适合",
+        )
+    )
+    return robot_subject and selection_marker
+
+
 def format_catalog_inventory(products: Sequence[CatalogProduct]) -> str:
     """Render the complete curated catalog without relying on top-k retrieval."""
     unique: dict[str, CatalogProduct] = {}
@@ -190,6 +234,37 @@ def format_catalog_inventory(products: Sequence[CatalogProduct]) -> str:
         price = f"，参考价 {product.price} 元" if product.price > 0 else ""
         lines.append(f"{index}. {product.name}（{product.model}）{price}")
     lines.append("如果你想知道哪一款适合你的家庭，请告诉我房屋面积、地面材质和预算。")
+    return "\n".join(lines)
+
+
+def format_catalog_recommendations(products: Sequence[CatalogProduct]) -> str:
+    """Render a safe recommendation from the same records used for cards.
+
+    This is a fallback only for a successful MCP lookup whose model draft
+    cannot be bound to a product claim.  It keeps the final text and product
+    cards on one source of truth instead of publishing a refusal beside cards.
+    """
+
+    unique: dict[str, CatalogProduct] = {}
+    for product in products:
+        if product.product_id and product.product_id not in unique:
+            unique[product.product_id] = product
+    items = tuple(unique.values())[:3]
+    if not items:
+        return "当前没有可用的产品目录资料。"
+
+    lines = ["我根据当前产品目录，先给你推荐以下型号："]
+    for index, product in enumerate(items, 1):
+        details: list[str] = []
+        if product.highlights:
+            details.append(f"特点：{'、'.join(product.highlights)}")
+        if product.recommended_for:
+            details.append(f"适合：{'、'.join(product.recommended_for)}")
+        if product.price > 0:
+            details.append(f"参考价：{product.price} 元")
+        suffix = f"，{'；'.join(details)}" if details else ""
+        lines.append(f"{index}. {product.name}（{product.model}）{suffix}")
+    lines.append("如果你告诉我房屋面积、地面材质和预算，我可以继续帮你缩小范围。")
     return "\n".join(lines)
 
 
@@ -796,6 +871,10 @@ class AgentRuntime:
                 ),
             )
             self._record_tool_steps(trace, draft)
+            catalog_recommendation = bool(
+                request.catalog_products
+                and is_catalog_recommendation_intent(request.user_text)
+            )
             if draft.cited_chunk_ids:
                 citation_hits = context_hits
             else:
@@ -861,6 +940,54 @@ class AgentRuntime:
                     tool_executions=draft.tool_executions,
                 )
             )
+            # A successful catalog MCP lookup is authoritative for product
+            # selection.  A model may answer this intent in natural language
+            # without repeating a SKU, which makes ordinary claim-level RAG
+            # binding produce an empty citation set and a false refusal.  In
+            # that narrow case, fall back to a deterministic answer generated
+            # from the same records used for the product cards.  Other intents
+            # keep the strict evidence gate unchanged.
+            catalog_hits = tuple(
+                hit
+                for hit in context_hits
+                if str(hit.chunk.metadata.get("product_id", "")).strip()
+            )
+            if (
+                catalog_recommendation
+                and catalog_hits
+                and final_decision.action is PolicyAction.REFUSE
+                and all(reason.value == "low_confidence" for reason in final_decision.reasons)
+            ):
+                draft = replace(
+                    draft,
+                    content=format_catalog_recommendations(request.catalog_products),
+                )
+                citation_hits = catalog_hits[:citation_limit]
+                citations = self._citations.build(
+                    citation_hits,
+                    limit=citation_limit,
+                )
+                validation = self._citations.validate(
+                    citations,
+                    [hit.chunk for hit in context_hits],
+                )
+                final_decision = self._policy.decide(
+                    PolicyInput(
+                        confidence=max(retrieval.confidence, 0.98),
+                        has_evidence=True,
+                        citations_valid=bool(citations) and validation.valid,
+                        evidence_reliable=True,
+                        knowledge_boundary_unsupported=False,
+                        high_risk=high_risk,
+                        safety_or_repair_claim=sensitive_claim,
+                        warranty_claim=warranty_claim,
+                        missing_required_fields=missing_required_fields,
+                        conflicting_sources=retrieval.conflicting_sources,
+                        prompt_injection=False,
+                        user_requested_human=request.user_requested_human,
+                        tool_executions=draft.tool_executions,
+                    )
+                )
             release = self._draft_gate.release(draft.content, final_decision)
             if final_decision.action is PolicyAction.WITHHOLD_FOR_REVIEW:
                 state.transition(RunStatus.NEEDS_REVIEW)

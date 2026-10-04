@@ -300,6 +300,49 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("S8 Air", engine.requests[0].rendered_context)
         self.assertIn("小户型", engine.requests[0].rendered_context)
 
+    async def test_generic_catalog_recommendation_is_not_replaced_by_refusal(self) -> None:
+        """MCP cards and the final answer must share the same catalog evidence.
+
+        A natural-language recommendation can omit the exact SKU name.  The
+        catalog lookup is still authoritative in that case; ordinary
+        claim-level RAG gating must not turn the completed answer into a
+        refusal while product cards are emitted.
+        """
+        engine = FakeReActEngine(
+            default_content="可以根据你的需求选择合适的产品。"
+        )
+        runtime = AgentRuntime(
+            react_engine=engine,
+            retriever=CountingRetriever(
+                RetrievalResult(hits=(), confidence=0.0, strategy="empty")
+            ),
+        )
+        product = CatalogProduct(
+            product_id="s8-air",
+            model="S8-AIR",
+            name="S8 Air",
+            price=1999,
+            highlights=("轻薄机身", "基础扫拖"),
+            recommended_for=("小户型",),
+            colors=("云白",),
+        )
+
+        result = await runtime.execute(
+            AgentRequest(
+                request_id="request-generic-recommendation",
+                session_id="session-1",
+                subject_id="subject-1",
+                user_message_id="message-generic-recommendation",
+                user_text="给我随便推荐一款扫地机器人",
+                catalog_products=(product,),
+            )
+        )
+
+        self.assertEqual(result.status, RunStatus.COMPLETED)
+        self.assertNotIn("现有资料不足", result.public_content)
+        self.assertIn("S8 Air", result.public_content)
+        self.assertTrue(result.citations)
+
     async def test_profile_intent_uses_current_user_memory_without_retrieval(self) -> None:
         class Memory:
             async def build_context(self, session_id: str, subject_id: str) -> MemoryContext:
